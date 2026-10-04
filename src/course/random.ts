@@ -9,7 +9,7 @@ import { createRng } from '../util/rng';
 const ADJECTIVES = ['Neon', 'Molten', 'Frozen', 'Hollow', 'Velvet', 'Silent', 'Crimson', 'Electric', 'Drifting', 'Shattered', 'Golden', 'Midnight'];
 const NOUNS = ['Rapids', 'Spiral', 'Canyon', 'Descent', 'Ribbon', 'Cascade', 'Gauntlet', 'Slipstream', 'Abyss', 'Highway', 'Chasm', 'Run'];
 
-const ANGLES: Record<Difficulty, [number, number]> = { easy: [48, 58], medium: [55, 65], hard: [62, 70] };
+const ANGLES: Record<Difficulty, [number, number]> = { easy: [46, 52], medium: [50, 56], hard: [54, 60] };
 const MAX_CURVE: Record<Difficulty, number> = { easy: 15, medium: 30, hard: 45 };
 
 export interface RandomCourseOptions {

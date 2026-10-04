@@ -15,13 +15,14 @@ import {
   planCourse,
   rightOf,
   type BoosterPiece,
+  type GatePiece,
   type PadPiece,
   type Piece,
   type RampPiece,
   type SpawnPoint,
 } from './layout';
 
-export type { BoosterPiece, PadPiece, Piece, RampPiece, RidePoint, SpawnPoint } from './layout';
+export type { BoosterPiece, GatePiece, PadPiece, Piece, RampPiece, RidePoint, SpawnPoint } from './layout';
 
 export type TriggerKind = 'start' | 'checkpoint' | 'booster' | 'finish';
 
@@ -209,6 +210,20 @@ function gateGeometry(pad: PadPiece): BufferGeometry[] {
   return parts;
 }
 
+/** Checkpoint arch: two tall posts and a crossbar, framing the flight into the next ramp. */
+function checkpointArchGeometry(g: GatePiece): BufferGeometry[] {
+  const r = rightOf(g.heading);
+  const post = 64;
+  const parts: BufferGeometry[] = [];
+  for (const side of [-1, 1]) {
+    parts.push(orientedBox(post, g.height, post, g.center.clone().addScaledVector(r, (side * g.width) / 2), g.heading));
+  }
+  const top = g.center.clone();
+  top.y += g.height / 2;
+  parts.push(orientedBox(g.width + post, post, post, top, g.heading));
+  return parts;
+}
+
 /** Frame around the booster gate plus three forward-pointing chevrons. */
 function boosterGeometry(b: BoosterPiece): BufferGeometry[] {
   const r = rightOf(b.heading);
@@ -256,7 +271,6 @@ export function buildCourse(input: unknown): BuiltCourse {
   const gates: BufferGeometry[] = [];
   const boosters: BufferGeometry[] = [];
   const triggers: Trigger[] = [];
-  let checkpointNo = 0;
   let boosterNo = 0;
 
   for (const piece of layout.pieces) {
@@ -275,6 +289,17 @@ export function buildCourse(input: unknown): BuiltCourse {
           strength: piece.strength,
         });
         break;
+      case 'gate':
+        gates.push(...checkpointArchGeometry(piece));
+        triggers.push({
+          kind: 'checkpoint',
+          index: piece.index,
+          center: piece.center.clone(),
+          heading: piece.heading,
+          half: new Vector3(piece.width / 2, piece.height / 2, piece.depth / 2),
+          strength: 0,
+        });
+        break;
       case 'pad': {
         if (piece.role === 'finish') {
           finish.push(padGeometry(piece), finishWallGeometry(piece));
@@ -282,17 +307,16 @@ export function buildCourse(input: unknown): BuiltCourse {
           pads.push(padGeometry(piece));
         }
         gates.push(...gateGeometry(piece));
-        const index = piece.role === 'checkpoint' ? ++checkpointNo : 0;
-        // Tall enough that flying clean over a pad still counts.
+        // The finish volume is tall, so flying clean over the pad still counts.
+        const isFinish = piece.role === 'finish';
         const bottom = piece.center.y - 150;
         const top = piece.center.y + TRIGGER_HEADROOM;
-        const extra = piece.role === 'start' ? 0 : 300;
         triggers.push({
           kind: piece.role,
-          index,
+          index: 0,
           center: piece.center.clone().setY((top + bottom) / 2),
           heading: piece.heading,
-          half: new Vector3(piece.width / 2 + extra, (top - bottom) / 2, piece.length / 2 + (piece.role === 'start' ? 0 : 100)),
+          half: new Vector3(piece.width / 2 + (isFinish ? 300 : 0), (top - bottom) / 2, piece.length / 2 + (isFinish ? 100 : 0)),
           strength: 0,
         });
         break;

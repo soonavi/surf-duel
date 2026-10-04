@@ -23,10 +23,10 @@ export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyParams>> = {
 };
 
 /**
- * Riders are modelled as a speed range: `lo` is a cautious rider who stalls on
- * every checkpoint pad and never strafes; `hi` is a strong rider who bunny-hops
- * through pads and strafes for extra speed. Every transition is laid out so
- * both make it.
+ * Riders are modelled as a speed range: `lo` is a cautious rider who never
+ * strafes and converts gravity poorly; `hi` is a strong rider who strafes for
+ * extra speed. Every transition is laid out so both make it. Respawning at a
+ * checkpoint puts you back at `lo`, so every checkpoint is a fair restart.
  */
 export interface SpeedRange {
   lo: number;
@@ -57,10 +57,6 @@ export function afterFall(speed: SpeedRange, height: number): SpeedRange {
 export function afterBooster(speed: SpeedRange, strength: number): SpeedRange {
   const max = DEFAULT_PHYSICS.maxVelocity;
   return { lo: Math.min(speed.lo + strength * 0.8, max), hi: Math.min(speed.hi + strength, max) };
-}
-
-export function afterPad(speed: SpeedRange): SpeedRange {
-  return { lo: WALK_SPEED, hi: speed.hi };
 }
 
 /** Longest gap a cautious rider can cross without falling more than MAX_GAP_FALL. */

@@ -27,11 +27,19 @@ describe('shipped courses', () => {
         expect(result).toMatchObject({ finished: true, deaths: 0 });
       });
     }
+
+    it(`${shipped.id} can be finished from every checkpoint respawn`, () => {
+      const built = buildCourse(shipped.spec);
+      for (let cp = 1; cp < built.checkpoints.length; cp++) {
+        const result = simulateRun(built, { hop: false }, 180, cp);
+        expect({ cp, ...result }).toMatchObject({ cp, finished: true, deaths: 0 });
+      }
+    });
   }
 });
 
 describe('random courses', () => {
-  it('every seed builds a course both bots finish without dying', () => {
+  it('every seed builds a course both bots finish without dying, from the start and every checkpoint', () => {
     const failures: string[] = [];
     for (let seed = 1; seed <= 40; seed++) {
       const built = buildCourse(randomCourse(seed));
@@ -39,7 +47,11 @@ describe('random courses', () => {
         const r = simulateRun(built, { hop: style.hop }, 180);
         if (!r.finished || r.deaths > 0) failures.push(`seed ${seed} ${style.name}: finished=${r.finished} deaths=${r.deaths}`);
       }
+      for (let cp = 1; cp < built.checkpoints.length; cp++) {
+        const r = simulateRun(built, { hop: false }, 180, cp);
+        if (!r.finished || r.deaths > 0) failures.push(`seed ${seed} from cp ${cp}: finished=${r.finished} deaths=${r.deaths}`);
+      }
     }
     expect(failures).toEqual([]);
-  }, 120_000);
+  }, 180_000);
 });

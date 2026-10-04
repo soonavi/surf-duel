@@ -3,18 +3,18 @@
   "theme": "lava",
   "difficulty": "hard",
   "segments": [
-    { "type": "ramp", "length": 6000, "angle": 64, "side": "left", "curve": 20 },
+    { "type": "ramp", "length": 6000, "angle": 56, "side": "left", "curve": 20 },
     { "type": "drop", "height": 1500 },
-    { "type": "ramp", "length": 7000, "angle": 66, "side": "right", "curve": -35 },
+    { "type": "ramp", "length": 7000, "angle": 58, "side": "right", "curve": -35 },
     { "type": "booster", "strength": 500 },
-    { "type": "ramp", "length": 7000, "angle": 68, "side": "left", "curve": 30 },
+    { "type": "ramp", "length": 7000, "angle": 59, "side": "left", "curve": 30 },
     { "type": "checkpoint" },
-    { "type": "ramp", "length": 6500, "angle": 65, "side": "both", "curve": 0 },
+    { "type": "ramp", "length": 6500, "angle": 57, "side": "both", "curve": 0 },
     { "type": "gap", "length": 800 },
-    { "type": "ramp", "length": 8000, "angle": 70, "side": "right", "curve": -45 },
+    { "type": "ramp", "length": 8000, "angle": 60, "side": "right", "curve": -45 },
     { "type": "drop", "height": 2000 },
-    { "type": "ramp", "length": 8000, "angle": 68, "side": "left", "curve": 40 },
+    { "type": "ramp", "length": 8000, "angle": 59, "side": "left", "curve": 40 },
     { "type": "booster", "strength": 600 },
-    { "type": "ramp", "length": 9000, "angle": 70, "side": "right", "curve": -20 }
+    { "type": "ramp", "length": 9000, "angle": 60, "side": "right", "curve": -20 }
   ]
 }

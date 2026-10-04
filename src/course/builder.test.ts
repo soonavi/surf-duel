@@ -75,6 +75,37 @@ describe('buildCourse', () => {
     expect(built.checkpoints).toHaveLength(3); // start + two checkpoints
   });
 
+  it('makes checkpoints fly-through gates, not landing pads', () => {
+    const built = buildCourse(mixed);
+    const pads = built.pieces.filter((p) => p.kind === 'pad').map((p) => (p.kind === 'pad' ? p.role : ''));
+    expect(pads).toEqual(['start', 'finish']);
+    const gates = built.pieces.filter((p) => p.kind === 'gate');
+    expect(gates).toHaveLength(built.segments.filter((s) => s.type === 'checkpoint').length);
+  });
+
+  it('respawns you at a checkpoint on the next ramp face, already moving', () => {
+    const withBoth = spec([
+      ramp(),
+      ramp({ side: 'left' }),
+      { type: 'checkpoint' },
+      ramp({ side: 'both' }),
+      { type: 'checkpoint' },
+      ramp({ side: 'left', angle: 50 }),
+    ]);
+    for (const built of [buildCourse(mixed), buildCourse(withBoth)]) {
+      const world = new BvhWorld(built.collision);
+      expect(built.checkpoints[0]!.speed).toBe(0);
+      for (const cp of built.checkpoints.slice(1)) {
+        expect(cp.speed).toBeGreaterThan(DEFAULT_PHYSICS.maxSpeed);
+        const feet = cp.pos.clone().add(new Vector3(0, -2, 0));
+        const contacts = new ContactList();
+        expect(world.resolveCapsule(feet, contacts)).toBeGreaterThan(0);
+        // On a surfable face — never balanced on a ridge.
+        expect(contacts.normals[0]!.y).toBeLessThan(FLOOR_NORMAL_Y);
+      }
+    }
+  });
+
   it('never builds a ramp shorter than the spec asks for', () => {
     const built = buildCourse(mixed);
     const specRamps = built.segments.filter((s) => s.type === 'ramp');

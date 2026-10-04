@@ -34,7 +34,8 @@ export const THEME_DEFS: Readonly<Record<ThemeName, Theme>> = {
     rampLeft: { base: '#16285a', line: '#3ee6ff' },
     pad: { base: '#1d1840', line: '#a78bfa' },
     finish: { base: '#3a2a10', line: '#ffd27a' },
-    accent: '#3ee6ff',
+    // Not cyan: that colour already means "ramp on your left, hold A".
+    accent: '#f3f0ff',
     booster: '#ffd27a',
     ground: { base: '#0d0a24', line: '#5a3bb0' },
     swatch: ['#ff4fd8', '#3ee6ff'],

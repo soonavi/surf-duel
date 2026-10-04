@@ -27,6 +27,14 @@ export function triggerContains(t: Trigger, p: Vector3): boolean {
   return Math.abs(lateral) <= t.half.x && Math.abs(p.y - t.center.y) <= t.half.y && Math.abs(along) <= t.half.z;
 }
 
+/** Put a player at a spawn point, moving at its speed along its heading. */
+export function placeAtSpawn(state: PlayerState, spawn: SpawnPoint): void {
+  state.pos.copy(spawn.pos);
+  forwardOf(spawn.heading, state.vel).multiplyScalar(spawn.speed);
+  state.onGround = false;
+  state.surfing = false;
+}
+
 const boostDir = new Vector3();
 
 /**
@@ -59,9 +67,14 @@ export class CourseRuntime {
 
   /** Back to the start line with nothing reached. */
   reset(): void {
-    this.lastCheckpoint = 0;
+    this.startFrom(0);
+  }
+
+  /** Begin a run as if checkpoint `index` had just been reached (0 = the start). */
+  startFrom(index: number): void {
+    this.lastCheckpoint = Math.max(0, Math.min(index, this.built.checkpoints.length - 1));
     this.finished = false;
-    this.started = false;
+    this.started = this.lastCheckpoint > 0;
     this.progress = 0;
     this.hint = 0;
     this.inside.clear();

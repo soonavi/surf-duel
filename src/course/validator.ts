@@ -15,7 +15,7 @@ import {
   type Segment,
   type ThemeName,
 } from './schema';
-import { START_SPEED, afterBooster, afterFall, afterPad, afterRamp, maxGapLength, type SpeedRange } from './tuning';
+import { START_SPEED, afterBooster, afterFall, afterRamp, maxGapLength, type SpeedRange } from './tuning';
 
 export interface ValidationResult {
   course: Course;
@@ -243,8 +243,7 @@ function limitGaps(segments: Segment[], difficulty: Difficulty, r: Repairer): vo
         speed = afterBooster(speed, s.strength);
         break;
       case 'checkpoint':
-        speed = afterPad(speed);
-        break;
+        break; // fly-through gate: no effect on speed
       case 'gap': {
         const max = Math.max(LIMITS.gapLength.min, Math.floor(maxGapLength(speed)));
         if (s.length > max) {

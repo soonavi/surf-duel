@@ -11,7 +11,7 @@ import { SceneView } from '../render/scene';
 import { CourseView } from '../render/courseView';
 import { THEME_DEFS } from '../render/themes';
 import { buildCourse, type BuiltCourse, type SpawnPoint } from '../course/builder';
-import { CourseRuntime, type CourseEvent } from '../course/runtime';
+import { CourseRuntime, placeAtSpawn, type CourseEvent } from '../course/runtime';
 import { SurfBot } from '../course/bot';
 import type { ThemeName } from '../course/schema';
 import { validateCourse } from '../course/validator';
@@ -184,9 +184,7 @@ export class App {
   }
 
   private respawnAt(point: SpawnPoint): void {
-    this.player.pos.copy(point.pos);
-    this.player.vel.set(0, 0, 0);
-    this.player.onGround = false;
+    placeAtSpawn(this.player, point);
     this.prevPos.copy(this.player.pos);
     this.angles = { yaw: point.heading, pitch: THREE.MathUtils.degToRad(-10) };
     this.yawFrom = this.angles.yaw;

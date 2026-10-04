@@ -20,8 +20,10 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Every spec goes through `validateCourse` (repairs, never throws) before `planCourse`/`buildCourse`.
 - A cautious rider (speed model `lo`) must arrive above the next ramp's **ridge** + clearance; alternating-side transitions add `SLIDE_TOLERANCE·(tanθprev + tanθnext)` because sliding down one face moves you toward the next ridge.
 - Ramps after pads tuck under the pad (no gap to fall through). Ramps stay straight through the fast rider's landing zone, then curve.
+- Checkpoints are fly-through gates (user decision, Oct 4 2026 — no landing pads). Respawns put you on the next ramp's face at the cautious speed `lo`; tests restart from every checkpoint.
+- Ramp angles are capped at 60° (user: hard-mode 64–70° ramps were "much too steep"); difficulty comes from speed, curves, drops and narrower faces instead.
 - Ramp colour is semantic: `rampRight` = ramp on your right (hold D), `rampLeft` = hold A.
-- The bot (`course/bot.ts`) faces the *local* track heading; looking ahead on curves makes its strafe brake.
+- The bot (`course/bot.ts`) faces the *local* track heading (looking ahead on curves makes its strafe brake) and surfs whichever face it's actually on.
 
 ## Notes for upcoming phases
 - Tutorial on-screen prompts (keyed to segment index, detect success) are a Phase 7 polish item; the tutorial course layout ships now.

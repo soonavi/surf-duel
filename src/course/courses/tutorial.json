@@ -3,12 +3,12 @@
   "theme": "neon",
   "difficulty": "easy",
   "segments": [
-    { "type": "ramp", "length": 5000, "angle": 50, "side": "right", "curve": 0 },
+    { "type": "ramp", "length": 5000, "angle": 48, "side": "right", "curve": 0 },
     { "type": "checkpoint" },
-    { "type": "ramp", "length": 5000, "angle": 50, "side": "left", "curve": 0 },
+    { "type": "ramp", "length": 5000, "angle": 48, "side": "left", "curve": 0 },
     { "type": "checkpoint" },
-    { "type": "ramp", "length": 6000, "angle": 52, "side": "right", "curve": 25 },
+    { "type": "ramp", "length": 6000, "angle": 50, "side": "right", "curve": 25 },
     { "type": "booster", "strength": 300 },
-    { "type": "ramp", "length": 6000, "angle": 52, "side": "left", "curve": -25 }
+    { "type": "ramp", "length": 6000, "angle": 50, "side": "left", "curve": -25 }
   ]
 }

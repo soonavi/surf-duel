@@ -7,7 +7,7 @@ import { DEFAULT_PHYSICS, TICK_DT, TICK_RATE } from '../physics/constants';
 import { createPlayer, stepPlayer } from '../physics/player';
 import type { BuiltCourse } from './builder';
 import { SurfBot, type BotStyle } from './bot';
-import { CourseRuntime } from './runtime';
+import { CourseRuntime, placeAtSpawn } from './runtime';
 
 export interface RunResult {
   finished: boolean;
@@ -20,11 +20,17 @@ export interface RunResult {
   checkpoints: number;
 }
 
-export function simulateRun(built: BuiltCourse, style: BotStyle, maxSeconds = 180): RunResult {
+/**
+ * Run `built` with a bot. `fromCheckpoint` starts the run from that
+ * checkpoint's respawn (0 = the start line), exactly as pressing R would.
+ */
+export function simulateRun(built: BuiltCourse, style: BotStyle, maxSeconds = 180, fromCheckpoint = 0): RunResult {
   const world = new BvhWorld(built.collision);
   const runtime = new CourseRuntime(built);
   const bot = new SurfBot(built, style);
-  const player = createPlayer(built.spawn.pos);
+  const player = createPlayer();
+  runtime.startFrom(fromCheckpoint);
+  placeAtSpawn(player, runtime.respawnPoint());
   bot.resync(player);
   runtime.afterRespawn(player);
 
@@ -50,10 +56,7 @@ export function simulateRun(built: BuiltCourse, style: BotStyle, maxSeconds = 18
       }
       if (e.type === 'kill') {
         deathsAt.push(runtime.lastCheckpoint);
-        const spawn = runtime.respawnPoint();
-        player.pos.copy(spawn.pos);
-        player.vel.set(0, 0, 0);
-        player.onGround = false;
+        placeAtSpawn(player, runtime.respawnPoint());
         runtime.afterRespawn(player);
         bot.resync(player);
       }

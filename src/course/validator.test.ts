@@ -40,6 +40,11 @@ describe('validateCourse', () => {
     expect(repairs.length).toBeGreaterThan(0);
   });
 
+  it('caps ramp steepness at 60° so steep ramps stay holdable', () => {
+    const { course } = validateCourse({ ...valid(), segments: [ramp({ angle: 70 }), ramp({ angle: 64, side: 'left' })] });
+    expect(rampsOf(course).map((r) => r.angle)).toEqual([60, 60]);
+  });
+
   it('coerces numeric strings and replaces non-numbers with defaults', () => {
     const { course } = validateCourse({
       ...valid(),

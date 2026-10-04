@@ -16,13 +16,17 @@ export type RampSide = (typeof RAMP_SIDES)[number];
 
 /**
  * Safe ranges, shared by the schema, the validator and (later) the AI system
- * prompt. Ramp angles start at 46°, not 45°: a 45° surface has normal.y ≈
- * 0.707, which the physics treats as walkable floor rather than surf.
+ * prompt.
+ *
+ * Ramp angles run 46–60°. Not 45: a 45° surface has normal.y ≈ 0.707, which
+ * the physics treats as walkable floor rather than surf. Not above 60 (the
+ * original spec allowed 70): playtesting found steeper ramps barely holdable —
+ * at 70° strafing into the ramp only just out-pulls gravity's slide.
  */
 export const LIMITS = {
   name: { max: 40 },
   rampLength: { min: 1500, max: 9000 },
-  rampAngle: { min: 46, max: 70 },
+  rampAngle: { min: 46, max: 60 },
   rampCurve: { min: -45, max: 45 },
   dropHeight: { min: 200, max: 2500 },
   gapLength: { min: 100, max: 3000 },

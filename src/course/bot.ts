@@ -55,10 +55,13 @@ export class SurfBot {
 
     if (piece?.kind !== 'ramp') return { forward: 0, side: 0, jump: false, yaw };
 
-    // +1 when the ridge is to our right.
-    const ridgeDir = piece.side === 'right' ? 1 : piece.side === 'left' ? -1 : hit.lateral < 0 ? 1 : -1;
+    // Surf whichever face we're actually on — like a person who lands just
+    // past the ridge. `fromRidge` < 0 means the ridge is to our right.
+    const fromRidge = hit.lateral - piece.centerOffset;
+    const ridgeDir = fromRidge < 0 ? 1 : -1;
+    const targetRide = piece.side === 'both' ? BOTH_RIDE_OFFSET : piece.ride;
     // How much further from the ridge we are than we want to be.
-    const outward = piece.side === 'both' ? Math.abs(hit.lateral) - BOTH_RIDE_OFFSET : -hit.lateral * ridgeDir;
+    const outward = Math.abs(fromRidge) - targetRide;
     const side = outward > -RIDE_TOLERANCE ? ridgeDir : 0;
     return { forward: 0, side, jump: false, yaw };
   }

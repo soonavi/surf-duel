@@ -21,7 +21,6 @@ import {
   WALK_SPEED,
   afterBooster,
   afterFall,
-  afterPad,
   afterRamp,
   type SpeedRange,
 } from './tuning';
@@ -56,7 +55,7 @@ export interface RampPiece {
 
 export interface PadPiece {
   kind: 'pad';
-  role: 'start' | 'checkpoint' | 'finish';
+  role: 'start' | 'finish';
   /** Centre of the top surface. */
   center: Vector3;
   heading: number;
@@ -74,11 +73,25 @@ export interface BoosterPiece {
   strength: number;
 }
 
-export type Piece = RampPiece | PadPiece | BoosterPiece;
+/** A fly-through checkpoint arch spanning the flight into the next ramp. */
+export interface GatePiece {
+  kind: 'gate';
+  /** Checkpoint number, 1-based (the start is 0). */
+  index: number;
+  center: Vector3;
+  heading: number;
+  width: number;
+  height: number;
+  depth: number;
+}
+
+export type Piece = RampPiece | PadPiece | BoosterPiece | GatePiece;
 
 export interface SpawnPoint {
   pos: Vector3;
   heading: number;
+  /** Horizontal speed along `heading` on (re)spawning; 0 at the start. */
+  speed: number;
 }
 
 export interface CourseLayout {
@@ -87,15 +100,18 @@ export interface CourseLayout {
   pieces: Piece[];
   path: TrackPath;
   spawn: SpawnPoint;
-  /** Respawn points: [0] is the start, then one per checkpoint pad. */
+  /** Respawn points: [0] is the start, then one per checkpoint gate. */
   checkpoints: SpawnPoint[];
 }
 
 export const PAD_THICKNESS = 64;
 export const START_PAD = { width: 1000, length: 700 } as const;
-export const CHECKPOINT_PAD = { width: 1300, length: 1000 } as const;
 export const FINISH_PAD = { width: 1800, length: 2600, wallHeight: 900 } as const;
 export const BOOSTER = { width: 1000, depth: 300, offset: 200, length: 500, margin: 350 } as const;
+/** Checkpoint arches: wide and tall enough that nobody on a sane line misses one. */
+export const GATE = { width: 2600, above: 900, below: 600, depth: 400 } as const;
+/** Respawns land you this far down the ramp after a checkpoint. */
+const RESPAWN_ALONG = 250;
 
 /** Fall from a pad edge onto the next piece (walking off, like the start). */
 const DROP_FROM_PAD = 380;
@@ -119,8 +135,6 @@ const PAD_LEAD_IN = 300;
 const PAD_UNDER_CLEARANCE = 40;
 /** How far past the previous exit the next piece begins. */
 const LEAD_FROM_RAMP = 120;
-/** Fast riders can fly clean over a checkpoint pad; they fall this much further. */
-const PAD_OVERSHOOT_DROP = 400;
 /** Ramp left to ride after a fast rider's landing point. */
 const MIN_RIDE = 1500;
 /**
@@ -163,8 +177,6 @@ interface Cursor {
   from: 'pad' | 'ramp';
   /** The ramp just left (null after a pad): which way its ridge was, and tan of its angle. */
   prevRamp: { side: RampSide; tanTheta: number } | null;
-  /** True when leaving a checkpoint pad (fast riders may have flown over it). */
-  afterCheckpoint: boolean;
   speed: SpeedRange;
   floorY: number;
 }
@@ -190,7 +202,7 @@ export function planCourse(course: Course): CourseLayout {
     length: START_PAD.length,
   };
   pieces.push(start);
-  const spawn: SpawnPoint = { pos: new Vector3(0, 0, START_PAD.length * 0.6), heading: 0 };
+  const spawn: SpawnPoint = { pos: new Vector3(0, 0, START_PAD.length * 0.6), heading: 0, speed: 0 };
   checkpoints.push(spawn);
   for (let z = START_PAD.length; z > 0; z -= PATH_SPACING) path.add(new Vector3(0, 0, z), 0, 0, -PAD_THICKNESS);
 
@@ -199,12 +211,13 @@ export function planCourse(course: Course): CourseLayout {
     heading: 0,
     from: 'pad',
     prevRamp: null,
-    afterCheckpoint: false,
     speed: { ...START_SPEED },
     floorY: -PAD_THICKNESS,
   };
   let pendingGap = 0;
   let pendingDrop = 0;
+  /** A checkpoint is waiting for the next ramp: its gate spans the flight into it. */
+  let pendingCheckpoint = false;
   let rampsSinceCheckpoint = 0;
 
   /**
@@ -223,8 +236,7 @@ export function planCourse(course: Course): CourseLayout {
     const front = pendingGap + (fromPad ? 0 : LEAD_FROM_RAMP);
     const vHi = Math.max(cursor.speed.hi, vLo);
     const vyHi = fromPad ? 0 : vHi * Math.sin(pitch);
-    const fastDrop = drop + (cursor.afterCheckpoint ? PAD_OVERSHOOT_DROP : 0);
-    const t = (-vyHi + Math.sqrt(vyHi * vyHi + 2 * PLAN_GRAVITY * fastDrop)) / PLAN_GRAVITY;
+    const t = (-vyHi + Math.sqrt(vyHi * vyHi + 2 * PLAN_GRAVITY * drop)) / PLAN_GRAVITY;
     pendingGap = 0;
     pendingDrop = 0;
     cursor.speed = afterFall(cursor.speed, drop);
@@ -265,11 +277,35 @@ export function planCourse(course: Course): CourseLayout {
     const minDrop = fromPad
       ? peakAboveRide + leadIn * tanPitch + PAD_THICKNESS + PAD_UNDER_CLEARANCE
       : peakAboveRide + RIDGE_CLEARANCE + slideDrop;
+    const entrySpeed = cursor.speed.lo;
     const { drop, front, fastLanding } = transition(minDrop);
     const length = Math.min(MAX_RAMP_LENGTH, Math.max(seg.length, fastLanding - front + MIN_RIDE));
 
     const entry = cursor.pos.clone().addScaledVector(forwardOf(cursor.heading, f), front);
     entry.y = cursor.pos.y - drop;
+
+    let respawnIndex = -1;
+    if (pendingCheckpoint) {
+      // The gate hangs across the flight into this ramp, spanning everyone
+      // from a rider leaving the last ridge to one diving onto this ramp.
+      const top = cursor.pos.y + GATE.above;
+      const bottom = entry.y - GATE.below;
+      const center = cursor.pos.clone().addScaledVector(forwardOf(cursor.heading, f), front / 2);
+      center.y = (top + bottom) / 2;
+      pieces.push({
+        kind: 'gate',
+        index: checkpoints.length,
+        center,
+        heading: cursor.heading,
+        width: GATE.width,
+        height: top - bottom,
+        depth: GATE.depth,
+      });
+      segments.push({ type: 'checkpoint' });
+      respawnIndex = checkpoints.length;
+      checkpoints.push(spawn); // placeholder, replaced once the ramp exists
+      pendingCheckpoint = false;
+    }
     const curveRad = MathUtils.degToRad(seg.curve);
     const straight = Math.min(length * MAX_STRAIGHT_FRACTION, Math.max(0, fastLanding - front + LANDING_STRAIGHT_MARGIN));
     const headingAt = (s: number): number =>
@@ -318,44 +354,45 @@ export function planCourse(course: Course): CourseLayout {
     addFlightPath(entry, pieceIndex, floorAt(ridden[0]!));
     for (const pt of ridden) path.add(pt.pos, pt.heading, pieceIndex, floorAt(pt));
 
+    if (respawnIndex >= 0) {
+      // Respawn on this ramp's face, already moving at the speed a cautious
+      // rider would have here, so the rest of the course stays beatable.
+      const at = ridden.find((pt) => pt.s >= RESPAWN_ALONG) ?? ridden[0]!;
+      const pos = at.pos.clone();
+      if (seg.side === 'both') {
+        // The riding line is the ridge; put the rider on the right-hand face instead.
+        const d = RIDE_FRACTION * faceWidth;
+        pos.addScaledVector(rightOf(at.heading, f), d);
+        pos.y -= r * (1 - Math.cos(theta)) + (d - r * Math.sin(theta)) * Math.tan(theta);
+      }
+      checkpoints[respawnIndex] = { pos, heading: at.heading, speed: entrySpeed };
+    }
+
     const last = points[points.length - 1]!;
     cursor.pos.copy(last.pos);
     cursor.heading += curveRad;
     cursor.from = 'ramp';
     cursor.prevRamp = { side: seg.side, tanTheta: Math.tan(theta) };
-    cursor.afterCheckpoint = false;
     cursor.speed = afterRamp(cursor.speed, length, course.difficulty);
     cursor.floorY = floorAt(last);
   };
 
-  const placePad = (role: 'checkpoint' | 'finish'): void => {
-    const dims = role === 'finish' ? FINISH_PAD : CHECKPOINT_PAD;
+  const placeFinish = (): void => {
     // A rider who slid down the last ramp arrives low; keep the pad's front edge under them.
     const prev = cursor.prevRamp;
     const { drop, front } = transition(prev ? SLIDE_TOLERANCE * prev.tanTheta + RIDGE_CLEARANCE : 0);
     const fwd = forwardOf(cursor.heading);
     const frontEdge = cursor.pos.clone().addScaledVector(fwd, front);
     frontEdge.y = cursor.pos.y - drop;
-    const center = frontEdge.clone().addScaledVector(fwd, dims.length / 2);
+    const center = frontEdge.clone().addScaledVector(fwd, FINISH_PAD.length / 2);
     const pieceIndex = pieces.length;
-    pieces.push({ kind: 'pad', role, center, heading: cursor.heading, width: dims.width, length: dims.length });
-    if (role === 'checkpoint') {
-      segments.push({ type: 'checkpoint' });
-      checkpoints.push({ pos: frontEdge.clone().addScaledVector(fwd, dims.length * 0.45), heading: cursor.heading });
-    }
+    pieces.push({ kind: 'pad', role: 'finish', center, heading: cursor.heading, width: FINISH_PAD.width, length: FINISH_PAD.length });
 
     const floorY = frontEdge.y - PAD_THICKNESS;
     addFlightPath(frontEdge, pieceIndex, floorY);
-    for (let d = 0; d <= dims.length; d += PATH_SPACING) {
+    for (let d = 0; d <= FINISH_PAD.length; d += PATH_SPACING) {
       path.add(frontEdge.clone().addScaledVector(fwd, d), cursor.heading, pieceIndex, floorY);
     }
-
-    cursor.pos.copy(frontEdge).addScaledVector(fwd, dims.length);
-    cursor.from = 'pad';
-    cursor.prevRamp = null;
-    cursor.afterCheckpoint = role === 'checkpoint';
-    cursor.speed = afterPad(cursor.speed);
-    cursor.floorY = floorY;
   };
 
   const placeBooster = (strength: number): void => {
@@ -396,20 +433,19 @@ export function planCourse(course: Course): CourseLayout {
         segments.push(seg);
         break;
       case 'checkpoint':
-        placePad('checkpoint');
-        rampsSinceCheckpoint = 0;
+        // Becomes a gate over the flight into the next ramp. A checkpoint with
+        // no ramp after it would guard nothing, so it's simply never placed.
+        pendingCheckpoint = true;
         break;
       case 'ramp':
-        if (rampsSinceCheckpoint >= RAMPS_PER_CHECKPOINT) {
-          placePad('checkpoint');
-          rampsSinceCheckpoint = 0;
-        }
+        if (rampsSinceCheckpoint >= RAMPS_PER_CHECKPOINT) pendingCheckpoint = true;
+        if (pendingCheckpoint) rampsSinceCheckpoint = 0;
         placeRamp(seg);
         rampsSinceCheckpoint++;
         break;
     }
   }
-  placePad('finish');
+  placeFinish();
   path.finish(KILL_WINDOW, KILL_MARGIN);
 
   return { segments, pieces, path, spawn, checkpoints };
