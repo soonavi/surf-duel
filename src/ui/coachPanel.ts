@@ -8,64 +8,78 @@ const KEYS: readonly { key: CoachKey; label: string }[] = [
   { key: 'space', label: 'Space' },
 ];
 
+const HINT_ICON: Record<CoachPrompt['tone'], string> = { good: '✓', warn: '!', info: '→' };
+
 /**
- * The Tutorial coach on the HUD: a live W A S D / Space display (keys you
- * should hold pulse, keys you should let go of turn orange while held), the
- * current lesson, and a note line for things that just happened.
+ * The Tutorial coach on the HUD: a live W A S D / Space display (keys to
+ * hold pulse, keys to let go of turn orange while held), the lesson (with a
+ * step counter; it fades in when it changes), a one-line live hint about
+ * your keys, and a note line for things that just happened.
  */
 export class CoachPanel {
   private readonly root: HTMLElement;
   private readonly lessonEl: HTMLElement;
   private readonly lessonTitle: HTMLElement;
+  private readonly lessonStep: HTMLElement;
   private readonly lessonText: HTMLElement;
+  private readonly hintEl: HTMLElement;
+  private readonly hintIcon: HTMLElement;
+  private readonly hintText: HTMLElement;
   private readonly noteEl: HTMLElement;
   private readonly noteTitle: HTMLElement;
   private readonly noteText: HTMLElement;
   private readonly keyEls = new Map<CoachKey, HTMLElement>();
   private lesson: CoachPrompt | null = null;
+  private hint: CoachPrompt | null = null;
   private note: CoachPrompt | null = null;
+  private stepText = '';
   private keyState = '';
   private rampColors = { right: '#ff4fd8', left: '#3ee6ff' };
 
   constructor(parent: HTMLElement) {
-    this.root = document.createElement('div');
-    this.root.className = 'coach';
+    const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string): HTMLElementTagNameMap[K] => {
+      const e = document.createElement(tag);
+      e.className = className;
+      return e;
+    };
+    this.root = el('div', 'coach');
     this.root.hidden = true;
 
-    const keys = document.createElement('div');
-    keys.className = 'coach__keys';
+    const keys = el('div', 'coach__keys');
     keys.setAttribute('aria-hidden', 'true');
     for (const { key, label } of KEYS) {
-      const el = document.createElement('span');
-      el.className = `coach__key coach__key--${key}`;
-      el.textContent = label;
-      keys.append(el);
-      this.keyEls.set(key, el);
+      const k = el('span', `coach__key coach__key--${key}`);
+      k.textContent = label;
+      keys.append(k);
+      this.keyEls.set(key, k);
     }
 
-    const body = document.createElement('div');
-    body.className = 'coach__body';
-    this.lessonEl = document.createElement('div');
-    this.lessonEl.className = 'coach__lesson';
+    const body = el('div', 'coach__body');
+    this.lessonEl = el('div', 'coach__lesson');
     this.lessonEl.setAttribute('role', 'status');
     this.lessonEl.setAttribute('aria-live', 'polite');
-    this.lessonTitle = document.createElement('div');
-    this.lessonTitle.className = 'coach__title';
-    this.lessonText = document.createElement('p');
-    this.lessonText.className = 'coach__text';
-    this.lessonEl.append(this.lessonTitle, this.lessonText);
+    const head = el('div', 'coach__head');
+    this.lessonTitle = el('span', 'coach__title');
+    this.lessonStep = el('span', 'coach__step');
+    head.append(this.lessonTitle, this.lessonStep);
+    this.lessonText = el('p', 'coach__text');
+    this.lessonEl.append(head, this.lessonText);
 
-    this.noteEl = document.createElement('div');
-    this.noteEl.className = 'coach__note';
+    this.hintEl = el('div', 'coach__hint');
+    this.hintEl.hidden = true;
+    this.hintIcon = el('span', 'coach__hint-icon');
+    this.hintIcon.setAttribute('aria-hidden', 'true');
+    this.hintText = el('span', 'coach__hint-text');
+    this.hintEl.append(this.hintIcon, this.hintText);
+
+    this.noteEl = el('div', 'coach__note');
     this.noteEl.setAttribute('role', 'status');
     this.noteEl.hidden = true;
-    this.noteTitle = document.createElement('span');
-    this.noteTitle.className = 'coach__note-title';
-    this.noteText = document.createElement('span');
-    this.noteText.className = 'coach__note-text';
+    this.noteTitle = el('span', 'coach__note-title');
+    this.noteText = el('span', 'coach__note-text');
     this.noteEl.append(this.noteTitle, this.noteText);
 
-    body.append(this.lessonEl, this.noteEl);
+    body.append(this.lessonEl, this.hintEl, this.noteEl);
     this.root.append(keys, body);
     parent.append(this.root);
   }
@@ -78,11 +92,12 @@ export class CoachPanel {
   setRampColors(right: string, left: string): void {
     this.rampColors = { right, left };
     if (this.lesson) this.fill(this.lessonText, this.lesson.text);
+    if (this.hint) this.fill(this.hintText, this.hint.text);
     if (this.note) this.fill(this.noteText, this.note.text);
   }
 
   /** Call every frame; only touches the DOM when something changed. */
-  render(lesson: CoachPrompt | null, note: CoachPrompt | null, keys: CoachKeys): void {
+  render(lesson: CoachPrompt | null, hint: CoachPrompt | null, note: CoachPrompt | null, step: { index: number; total: number } | null, keys: CoachKeys): void {
     if (lesson !== this.lesson) {
       this.lesson = lesson;
       this.lessonEl.hidden = lesson === null;
@@ -90,6 +105,21 @@ export class CoachPanel {
         this.lessonEl.dataset.tone = lesson.tone;
         this.lessonTitle.textContent = lesson.title;
         this.fill(this.lessonText, lesson.text);
+        this.replay(this.lessonEl, 'coach__lesson--in');
+      }
+    }
+    const stepText = step && lesson ? `Step ${step.index} of ${step.total}` : '';
+    if (stepText !== this.stepText) {
+      this.stepText = stepText;
+      this.lessonStep.textContent = stepText;
+    }
+    if (hint !== this.hint) {
+      this.hint = hint;
+      this.hintEl.hidden = hint === null;
+      if (hint) {
+        this.hintEl.dataset.tone = hint.tone;
+        this.hintIcon.textContent = HINT_ICON[hint.tone];
+        this.fill(this.hintText, hint.text);
       }
     }
     if (note !== this.note) {
@@ -99,29 +129,36 @@ export class CoachPanel {
         this.noteEl.dataset.tone = note.tone;
         this.noteTitle.textContent = note.title;
         this.fill(this.noteText, note.text);
-        this.noteEl.classList.remove('coach__note--in');
-        void this.noteEl.offsetWidth; // restart the animation
-        this.noteEl.classList.add('coach__note--in');
+        this.replay(this.noteEl, 'coach__note--in');
       }
     }
-    this.root.classList.toggle('coach--empty', lesson === null && note === null);
+    this.root.classList.toggle('coach--empty', lesson === null && hint === null && note === null);
 
-    const hold = lesson?.hold ?? [];
-    const avoid = lesson?.avoid ?? [];
+    // The key display follows the live hint (what to press right now), else the lesson.
+    const guide = hint ?? lesson;
+    const hold = guide?.hold ?? [];
+    const avoid = guide?.avoid ?? [];
     const state = KEYS.map(({ key }) => `${keys[key] ? 1 : 0}${hold.includes(key) ? 1 : 0}${avoid.includes(key) ? 1 : 0}`).join();
     if (state === this.keyState) return;
     this.keyState = state;
     for (const { key } of KEYS) {
-      const el = this.keyEls.get(key)!;
+      const k = this.keyEls.get(key)!;
       const down = keys[key];
-      el.classList.toggle('is-down', down);
-      el.classList.toggle('is-target', hold.includes(key));
-      el.classList.toggle('is-wrong', down && avoid.includes(key));
+      k.classList.toggle('is-down', down);
+      k.classList.toggle('is-target', hold.includes(key));
+      k.classList.toggle('is-wrong', down && avoid.includes(key));
     }
   }
 
-  private fill(el: HTMLElement, text: string): void {
-    el.replaceChildren(
+  /** Restart a CSS entrance animation. */
+  private replay(element: HTMLElement, className: string): void {
+    element.classList.remove(className);
+    void element.offsetWidth;
+    element.classList.add(className);
+  }
+
+  private fill(element: HTMLElement, text: string): void {
+    element.replaceChildren(
       ...parseCoachText(text).map((part) => {
         if (part.kind === 'text') return document.createTextNode(part.value);
         if (part.kind === 'key') {

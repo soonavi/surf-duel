@@ -1110,10 +1110,73 @@ kbd {
   content: '! ';
 }
 
+.coach__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.coach__step {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
 .coach__text {
   margin: 4px 0 0;
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1.45;
+}
+
+/* A new lesson eases in, so the change is noticed but not jarring. */
+.coach__lesson--in {
+  animation: coach-lesson-in 0.5s ease-out;
+}
+
+@keyframes coach-lesson-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* The live hint: one short line about your keys right now. */
+.coach__hint {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: fit-content;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 15px;
+}
+
+.coach__hint[hidden] {
+  display: none;
+}
+
+.coach__hint-icon {
+  font-weight: 900;
+}
+
+.coach__hint[data-tone='good'] {
+  background: rgba(92, 200, 255, 0.14);
+}
+
+.coach__hint[data-tone='good'] .coach__hint-icon {
+  color: #5cc8ff;
+}
+
+.coach__hint[data-tone='warn'] {
+  background: rgba(255, 162, 77, 0.18);
+}
+
+.coach__hint[data-tone='warn'] .coach__hint-icon {
+  color: #ffa24d;
 }
 
 .coach kbd {
@@ -1167,6 +1230,7 @@ kbd {
 @media (prefers-reduced-motion: reduce) {
   .hud__countdown--pop,
   .coach__key.is-target,
+  .coach__lesson--in,
   .coach__note--in,
   .toast--in,
   .spinner {

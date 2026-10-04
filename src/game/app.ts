@@ -449,7 +449,7 @@ export class App {
     this.coachEvents = [];
     this.coachKeys = NO_KEYS;
     this.hud.coach.setVisible(this.coach !== null);
-    this.hud.coach.render(null, null, NO_KEYS);
+    this.hud.coach.render(null, null, null, null, NO_KEYS);
   }
 
   /** Restart the current run (Shift+R), if one is under way. */
@@ -1431,7 +1431,7 @@ export class App {
       this.updateRoomStandings(false);
     }
 
-    if (this.coach) this.hud.coach.render(this.coach.current, this.coach.note, this.coachKeys);
+    if (this.coach) this.hud.coach.render(this.coach.current, this.coach.hint, this.coach.note, this.coach.step, this.coachKeys);
     if (session.phase !== 'finished') this.hud.setTimer(session.elapsedMs);
     this.hud.setSpeed(Math.hypot(this.player.vel.x, this.player.vel.z));
     this.hud.setProgress(this.runtime.progress / Math.max(1, path.length), markers);

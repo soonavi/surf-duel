@@ -1,15 +1,23 @@
 /**
- * The Tutorial's on-screen coach: a lesson chosen from what the rider is doing
- * this tick (which ramp, which keys), plus short notes about what just
- * happened (checkpoint, fall, finish). Pure and tick-driven, so it's
- * deterministic and unit-tested; the HUD only draws what it returns.
+ * The Tutorial's on-screen coach, paced for someone who has never surfed.
+ *
+ * Three slots, each changing at its own speed:
+ *  - the lesson: about one per ramp. It only changes at a calm moment (you've
+ *    settled on a new ramp with the right key) and never before you've had
+ *    time to read it (`readingTicks`). Each lesson also previews the next ramp,
+ *    so you read what's coming before you need it.
+ *  - the hint: one live line about your keys right now ("Holding D",
+ *    "Let go of W"). Tapping a key doesn't touch the lesson.
+ *  - the note: a few seconds about something that just happened (checkpoint,
+ *    booster, falling off).
+ *
+ * Pure and tick-driven (100 Hz), so it's deterministic and unit-tested.
  *
  * The advice matches the movement model (src/physics): on a ramp, the strafe
  * key toward the ramp pushes you into it at up to the air wish-speed cap, and
  * the face turns that push into "up the slope". Holding W as well makes the
  * wish direction diagonal, so its projection on your velocity is already past
- * the cap and the push vanishes: you slide off. Turning away from the ramp
- * does the same; turning into it adds a backward component that brakes you.
+ * the cap and the push vanishes: you slide off.
  */
 import type { Piece } from '../course/layout';
 import type { CourseEvent } from '../course/runtime';
@@ -27,7 +35,7 @@ export interface CoachPrompt {
   text: string;
   /** Keys the rider should be holding (highlighted on the key display). */
   hold: CoachKey[];
-  /** Keys the rider should let go of (shown red while held). */
+  /** Keys the rider should let go of (shown orange while held). */
   avoid: CoachKey[];
 }
 
@@ -38,6 +46,8 @@ export interface CoachRamp {
   ridge: number;
   /** Which way the ramp bends, if it does. */
   curve: 'left' | 'right' | null;
+  /** A booster sits between this ramp and the next. */
+  boosterAfter: boolean;
 }
 
 export interface CoachCourse {
@@ -60,28 +70,26 @@ export interface CoachInput {
   events: readonly CoachEvent[];
 }
 
-/** A new lesson must be wanted for this many ticks before it replaces the current one (no flicker from tapped keys). */
-const STABLE_TICKS = 12;
-/** Ticks (in total) of holding the right key on a ramp before it counts as "doing it". */
-const SURF_CONFIRM = 40;
-/** After that, ticks of "you're surfing!" before the mouse-aim lesson. */
-const SURFING_SHOW = 150;
-/** Ticks of the aim lesson before it counts as learned. */
-const AIM_LEARN = 250;
-/** Ticks the "other side" lesson stays up once you're doing it. */
-const SIDE_SHOW = 100;
-/**
- * Letting go of the key for a moment is fine (riding high, you don't need the
- * push); only remind after this many ticks without it.
- */
-const RELEASE_GRACE = 50;
-/** A ramp turning less than this (radians) counts as straight. */
-const STRAIGHT_TURN = 0.05;
+const MIN_LESSON_TICKS = 350;
+const MAX_LESSON_TICKS = 650;
 
-const NOTE_TICKS = { checkpoint: 300, boost: 220, fell: 340, respawn: 180, finished: 1000 } as const;
+/** How long a lesson stays up at least: about 4.5 words a second plus a moment to look, 3.5–6.5 s. */
+export function readingTicks(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return Math.max(MIN_LESSON_TICKS, Math.min(MAX_LESSON_TICKS, 150 + words * 22));
+}
 
-type RampLesson = 'surf' | 'side' | 'curve' | 'aim' | 'last' | 'none';
-type FlightLesson = 'drop' | 'switch' | 'airstrafe' | 'quiet';
+/** Settled on a ramp: this long on it without a wrong key... */
+const SETTLE_CLEAN_TICKS = 80;
+/** ...having held the right key for at least this long. */
+const SETTLE_HOLD_TICKS = 30;
+/** A new hint must be wanted this long before it shows (tapped keys don't flicker it). */
+const HINT_STABLE_TICKS = 20;
+/** Letting go of the key for a moment is fine (riding high, you don't need the push). */
+const RELEASE_GRACE_TICKS = 40;
+
+const NOTE_TICKS = { firstCheckpoint: 500, secondCheckpoint: 400, checkpoint: 250, boost: 300, fell: 400, respawn: 300 } as const;
+
 type Side = 'left' | 'right';
 
 const keyOf = (side: Side): CoachKey => (side === 'right' ? 'd' : 'a');
@@ -101,45 +109,53 @@ function sideOnRamp(ramp: CoachRamp, lateral: number): Side {
   return lateral - ramp.ridge < 0 ? 'right' : 'left';
 }
 
-/** Which side a ramp you're flying toward will be on: as designed, unless it's two-sided. */
+/** Which side a ramp will be on: as designed, unless it's two-sided. */
 function sideAhead(ramp: CoachRamp, lateral: number): Side {
   return ramp.side === 'both' ? sideOnRamp(ramp, lateral) : ramp.side;
 }
 
-/**
- * Two slots: `current` is the lesson for where you are (debounced so tapped
- * keys don't make it flicker), and `note` is a short-lived message about
- * something that just happened. Notes never replace the lesson: checkpoint
- * gates hang right where you need to switch keys for the next ramp.
- */
 export class TutorialCoach {
-  private steady: CoachPrompt | null = null;
-  private pendingKey = '';
-  private pendingTicks = 0;
+  /** The lesson script for this course: basics, walk, one per ramp but the last, finish. */
+  private readonly lessons: Map<string, CoachPrompt>;
+  private readonly order: string[];
+
+  private lesson: CoachPrompt | null = null;
+  private lessonTicks = 0;
+  /** After a respawn the lesson may change at once: it's about a new spot. */
+  private forceNext = false;
+  private lastStep = 1;
+
+  private hintShown: CoachPrompt | null = null;
+  private hintPending = '';
+  private hintPendingTicks = 0;
+
   private flash: { prompt: CoachPrompt; ticksLeft: number } | null = null;
 
-  /** The ramp being ridden (or last ridden) and the lesson chosen for it. */
-  private ramp: CoachRamp | null = null;
-  private rampLesson: RampLesson = 'none';
-  private rampSide: Side = 'right';
+  /** Ramp being ridden, and how well. */
+  private rampPiece = -1;
+  private cleanTicks = 0;
   private holdTicks = 0;
   private releaseTicks = 0;
-  /** Ticks on this ramp since holding the key counted as "doing it"; -1 until then. */
-  private sinceConfirm = -1;
-  /** Piece of the flight's target, and the lesson chosen for that flight. */
-  private flightTarget = -1;
-  private flightLesson: FlightLesson = 'quiet';
-
-  private readonly learned = new Set<string>();
-  private readonly sidesSeen = new Set<Side>();
+  /** Highest ramp (1-based) the rider has settled on. */
+  private settled = 0;
+  private retrying = false;
+  private finished = false;
   private checkpointsSeen = 0;
   private boostsSeen = 0;
 
-  constructor(private readonly course: CoachCourse) {}
+  constructor(private readonly course: CoachCourse) {
+    this.lessons = buildLessons(course);
+    this.order = [...this.lessons.keys()].filter((id) => id !== 'retry');
+  }
 
-  /** The lesson for where the rider is now. */
+  /** The lesson on screen. */
   get current(): CoachPrompt | null {
-    return this.steady;
+    return this.lesson;
+  }
+
+  /** The live line about your keys right now. */
+  get hint(): CoachPrompt | null {
+    return this.hintShown;
   }
 
   /** A short message about something that just happened, if any. */
@@ -147,66 +163,66 @@ export class TutorialCoach {
     return this.flash?.prompt ?? null;
   }
 
-  /** Call once per simulation tick. Returns the current lesson. */
-  update(input: CoachInput): CoachPrompt | null {
+  /** "Step 3 of 6". A retry keeps the step you were on. */
+  get step(): { index: number; total: number } {
+    const i = this.lesson ? this.order.indexOf(this.lesson.id) : -1;
+    if (i >= 0) this.lastStep = i + 1;
+    return { index: this.lastStep, total: this.order.length };
+  }
+
+  /** Call once per simulation tick. */
+  update(input: CoachInput): void {
     if (this.flash && --this.flash.ticksLeft <= 0) this.flash = null;
-    for (const e of input.events) this.onEvent(e);
-    this.settle(this.want(input));
-    return this.steady;
+    for (const e of input.events) this.onEvent(e, input);
+    this.track(input);
+    this.lessonTicks++;
+    const want = this.wantLesson(input);
+    if (want && want !== this.lesson) {
+      const readEnough = this.lesson === null || this.lessonTicks >= readingTicks(this.lesson.text);
+      if (readEnough || this.forceNext || want.id === 'finish') this.showLesson(want);
+    }
+    this.settleHint(this.wantHint(input));
   }
 
-  private settle(next: CoachPrompt | null): void {
-    const key = promptKey(next);
-    if (key === promptKey(this.steady)) {
-      this.steady = next; // same lesson; refresh its wording
-      this.pendingKey = key;
-      this.pendingTicks = 0;
-      return;
-    }
-    if (key !== this.pendingKey) {
-      this.pendingKey = key;
-      this.pendingTicks = 0;
-    }
-    if (++this.pendingTicks >= STABLE_TICKS) this.steady = next;
+  private showLesson(p: CoachPrompt): void {
+    this.lesson = p;
+    this.lessonTicks = 0;
+    this.forceNext = false;
   }
 
-  private onEvent(e: CoachEvent): void {
+  // --- events ------------------------------------------------------------------------
+
+  private onEvent(e: CoachEvent, input: CoachInput): void {
     switch (e.type) {
       case 'checkpoint': {
         this.checkpointsSeen++;
-        const p =
-          this.checkpointsSeen === 1
-            ? prompt('checkpoint', 'good', 'Checkpoint!', 'Fall off from here on and you restart at this gate. {R} brings you back to it any time.')
-            : this.checkpointsSeen === 2
-              ? prompt('checkpoint', 'good', `Checkpoint ${e.index}`, '{Shift} + {R} restarts the whole course.')
-              : prompt('checkpoint', 'good', `Checkpoint ${e.index}`, 'Progress saved.');
-        this.showNote(p, NOTE_TICKS.checkpoint);
+        if (this.checkpointsSeen === 1) {
+          this.showNote(
+            prompt('checkpoint', 'good', 'Checkpoint!', 'Fall off from here on and you restart at this gate. {R} brings you back to it any time.'),
+            NOTE_TICKS.firstCheckpoint,
+          );
+        } else if (this.checkpointsSeen === 2) {
+          this.showNote(prompt('checkpoint', 'good', `Checkpoint ${e.index}`, '{Shift} + {R} restarts the whole course.'), NOTE_TICKS.secondCheckpoint);
+        } else {
+          this.showNote(prompt('checkpoint', 'good', `Checkpoint ${e.index}`, 'Saved.'), NOTE_TICKS.checkpoint);
+        }
         break;
       }
       case 'booster':
         if (this.boostsSeen++ === 0) {
-          this.showNote(prompt('boost', 'good', 'Booster', "Boosters add speed in the direction you're already moving."), NOTE_TICKS.boost);
+          this.showNote(prompt('boost', 'good', 'Booster!', "It adds speed in the direction you're moving."), NOTE_TICKS.boost);
         }
         break;
-      case 'kill': {
-        const ramp = this.ramp ?? this.rampAtOrAfter(this.flightTarget);
-        const back = this.checkpointsSeen > 0 ? 'Back to the last checkpoint.' : 'Back to the start.';
-        const text = ramp
-          ? `${back} On a ramp, hold ${capOf(this.ramp ? this.rampSide : sideAhead(ramp, 0))} the whole way, keep off {W}, and look along the ramp.`
-          : `${back} Walk straight off the front of the pad.`;
-        this.showNote(prompt('fell', 'warn', 'Fell off', text), NOTE_TICKS.fell);
-        this.forgetPosition();
+      case 'kill':
+        this.showNote(prompt('fell', 'warn', 'Fell off', this.checkpointsSeen > 0 ? 'Back to the last checkpoint.' : 'Back to the start.'), NOTE_TICKS.fell);
+        this.afterRespawn(input);
         break;
-      }
       case 'respawn':
         this.showNote(prompt('respawn', 'info', 'Back to the checkpoint', '{Shift} + {R} restarts the whole course.'), NOTE_TICKS.respawn);
-        this.forgetPosition();
+        this.afterRespawn(input);
         break;
       case 'finish':
-        this.showNote(
-          prompt('finished', 'good', 'Finished!', "That's surfing. Try Easy Cruise next, or create a room and race a friend."),
-          NOTE_TICKS.finished,
-        );
+        this.finished = true;
         break;
       case 'start':
         break;
@@ -217,195 +233,137 @@ export class TutorialCoach {
     this.flash = { prompt: p, ticksLeft: ticks };
   }
 
-  /** After a respawn the rider is somewhere new: choose fresh lessons for what comes next. */
-  private forgetPosition(): void {
-    this.ramp = null;
-    this.flightTarget = -1;
-    // Whatever was on screen was about the old spot.
-    this.steady = null;
-    this.pendingKey = '';
-    this.pendingTicks = 0;
+  /** You're somewhere new: re-teach what's in front of you, straight away. */
+  private afterRespawn(input: CoachInput): void {
+    this.rampPiece = -1;
+    this.retrying = true;
+    this.forceNext = true;
+    this.hintShown = null;
+    this.hintPending = '';
+    this.hintPendingTicks = 0;
+    const ramp = input.piece === 0 ? null : this.rampAtOrAfter(input.piece);
+    if (ramp) {
+      const side = sideOnRamp(ramp, input.lateral);
+      this.lessons.set(
+        'retry',
+        prompt('retry', 'info', 'Try again', `This ramp is on your ${side}: hold ${capOf(side)} the whole way, keep off {W}, and look along the ramp.`, [keyOf(side)], ['w']),
+      );
+    }
   }
 
-  // --- the lesson for where you are ------------------------------------------------
+  // --- progress on ramps -------------------------------------------------------------
 
-  private want(input: CoachInput): CoachPrompt | null {
-    if (input.phase === 'countdown') {
-      return prompt('look', 'info', 'Get ready', 'Move the mouse to look around. At GO, hold {W} to walk off the pad. {Esc} pauses.');
+  private track(input: CoachInput): void {
+    if (input.phase !== 'racing') return;
+    const onRamp = input.surfing || (this.rampPiece >= 0 && input.piece === this.rampPiece);
+    const ramp = onRamp ? this.rampAtOrAfter(input.piece) : null;
+    if (!ramp) {
+      this.releaseTicks = 0;
+      return;
     }
-    if (input.phase === 'finished') return null;
-    // Still on (or just bounced off) the ramp we were riding.
-    const onRamp = input.surfing || (this.ramp !== null && input.piece === this.ramp.piece);
-    if (onRamp) {
-      const ramp = this.rampAtOrAfter(input.piece);
-      if (ramp) return this.onRamp(ramp, input);
+    if (ramp.piece !== this.rampPiece) {
+      this.rampPiece = ramp.piece;
+      this.cleanTicks = 0;
+      this.holdTicks = 0;
+      this.releaseTicks = 0;
     }
-    if (input.onGround) {
-      // Only pads are walkable; before the first ramp that's the start pad.
-      return this.ramp === null && input.piece !== this.course.finishPiece
-        ? prompt('walk', 'info', 'Walk off the pad', 'Hold {W} to walk forward and drop onto the ramp below. {Space} jumps.', ['w'])
-        : null;
-    }
-    if (input.piece === 0) return this.steady; // a jump on the start pad: keep saying the same thing
-    return this.inFlight(input);
-  }
-
-  private onRamp(ramp: CoachRamp, input: CoachInput): CoachPrompt | null {
-    if (ramp.piece !== this.ramp?.piece) this.enterRamp(ramp);
     const side = sideOnRamp(ramp, input.lateral);
-    this.rampSide = side;
-    const k = keyOf(side);
-    const other = keyOf(otherSide(side));
-    const cap = capOf(side);
-    const where = `on your ${side}`;
-
-    if (input.keys.w) {
-      return prompt('no-w', 'warn', 'Let go of W', `{W} cancels the push from ${cap}, so you slide off. Surf with ${cap} only.`, [k], ['w']);
+    const wrong = input.keys.w || input.keys[keyOf(otherSide(side))];
+    if (wrong) {
+      this.cleanTicks = 0;
+      return;
     }
-    if (input.keys[other]) {
-      return prompt('wrong-key', 'warn', 'Wrong key', `The ramp is ${where}, so hold ${cap}. ${capOf(otherSide(side))} pushes you away from it.`, [k], [other]);
-    }
-
-    const holding = input.keys[k];
-    if (holding) {
+    this.cleanTicks++;
+    if (input.keys[keyOf(side)]) {
       this.holdTicks++;
       this.releaseTicks = 0;
     } else {
       this.releaseTicks++;
     }
-    if (this.sinceConfirm < 0 && this.holdTicks >= SURF_CONFIRM) {
-      this.sinceConfirm = 0;
-      this.learned.add('surf');
-      this.sidesSeen.add(side);
+    if (this.cleanTicks >= SETTLE_CLEAN_TICKS && this.holdTicks >= SETTLE_HOLD_TICKS) {
+      const index = this.course.ramps.indexOf(ramp) + 1;
+      this.settled = Math.max(this.settled, index);
+      this.retrying = false;
     }
-    const confirmed = this.sinceConfirm >= 0;
-    if (confirmed) this.sinceConfirm++;
+  }
 
-    const reminder = (): CoachPrompt => prompt('hold', 'info', `Ramp ${where}`, `Hold ${cap} to stay on it.`, [k], ['w']);
-    const letGo = this.releaseTicks > RELEASE_GRACE;
-    switch (this.rampLesson) {
-      case 'surf':
-        if (!confirmed) {
-          return prompt(
-            'hold',
-            'info',
-            'Surf the ramp',
-            `The ramp is ${where}: hold ${cap} to push into it. That keeps you up while gravity speeds you along.`,
-            [k],
-            ['w'],
-          );
-        }
-        if (letGo) return reminder();
-        if (this.sinceConfirm < SURFING_SHOW) {
-          return prompt('surfing', 'good', "You're surfing!", `Keep ${cap} held. The ramp holds you up, and going downhill builds speed.`, [k], ['w']);
-        }
-        if (this.sinceConfirm >= SURFING_SHOW + AIM_LEARN) this.learned.add('aim');
-        return this.aimPrompt(k);
-      case 'side':
-        if (confirmed && this.sinceConfirm >= SIDE_SHOW) return letGo ? reminder() : null;
-        return prompt(
-          'side',
-          confirmed ? 'good' : 'info',
-          `Ramp on your ${side}`,
-          `Now hold ${cap}. Ramp colour tells you the key: {ramp-right} hold {D}, {ramp-left} hold {A}.`,
-          [k],
-          ['w'],
-        );
-      case 'curve': {
-        const bend = ramp.curve ?? 'with it';
-        return prompt('curve', 'info', 'Curved ramp', `This ramp bends ${bend}. Keep ${cap} held and turn the mouse ${bend} to follow it.`, [k], ['w']);
+  // --- which lesson -------------------------------------------------------------------
+
+  private wantLesson(input: CoachInput): CoachPrompt | null {
+    const get = (id: string): CoachPrompt | null => this.lessons.get(id) ?? null;
+    if (this.finished) return get('finish');
+    if (input.phase === 'countdown') return get('basics');
+    const onPad = input.piece === 0;
+    if (this.retrying) return onPad ? get('walk') : (get('retry') ?? this.lesson);
+    if (this.settled > 0) {
+      // The last ramp has no lesson of its own (it goes by too fast to read one): the one before previews it.
+      const k = Math.min(this.settled, Math.max(1, this.course.ramps.length - 1));
+      return get(`ramp-${k}`) ?? this.lesson;
+    }
+    if (onPad) return this.lesson?.id === 'basics' || this.lesson === null ? get('walk') : this.lesson;
+    return this.lesson ?? get('basics');
+  }
+
+  // --- the live hint ------------------------------------------------------------------
+
+  private wantHint(input: CoachInput): CoachPrompt | null {
+    if (input.phase !== 'racing' || this.finished) return null;
+    const onRamp = input.surfing || (this.rampPiece >= 0 && input.piece === this.rampPiece);
+    const ramp = this.rampAtOrAfter(input.piece);
+
+    if (onRamp && ramp) {
+      const side = sideOnRamp(ramp, input.lateral);
+      const k = keyOf(side);
+      const other = keyOf(otherSide(side));
+      const cap = capOf(side);
+      if (input.keys.w) return prompt('no-w', 'warn', 'Let go of W', `Let go of {W}: it cancels the push from ${cap}.`, [k], ['w']);
+      if (input.keys[other]) return prompt('wrong-key', 'warn', 'Wrong key', `Wrong key: this ramp needs ${cap}.`, [k], [other]);
+      if (input.keys[k]) return prompt('holding', 'good', 'Holding', `Holding ${cap}. Nice!`, [k], ['w']);
+      if (this.releaseTicks > RELEASE_GRACE_TICKS || this.holdTicks === 0) return prompt('hold', 'info', 'Hold', `Hold ${cap} to stay on the ramp.`, [k], ['w']);
+      return this.hintShown; // let go for a moment: say nothing new
+    }
+
+    // Standing on the start pad (including its front lip, where the path already says "ramp 1").
+    const firstRamp = this.course.ramps[0];
+    if (input.onGround && input.piece !== this.course.finishPiece && (!firstRamp || input.piece <= firstRamp.piece)) {
+      if (input.keys.a || input.keys.d) {
+        // On the ground A/D strafe: pressed now, they walk you off the side of the pad and past the ramp.
+        const cap = input.keys.d ? '{D}' : '{A}';
+        return prompt('not-yet', 'warn', 'Not yet', `Walk off with {W} first: on the pad, ${cap} just walks you sideways.`, ['w'], ['d', 'a']);
       }
-      case 'aim':
-        if (letGo) return reminder();
-        if (this.sinceConfirm >= AIM_LEARN) this.learned.add('aim');
-        return this.aimPrompt(k);
-      case 'last':
-        return prompt('last', 'info', 'Last ramp', `Hold ${cap} and ride it to the end: the finish pad is next.`, [k], ['w']);
-      case 'none':
-        return letGo ? reminder() : null;
+      if (this.lesson?.id !== 'walk') return null; // still reading the basics
+      return input.keys.w
+        ? prompt('walking', 'good', 'Walking', 'Walking. Keep going off the edge.', ['w'])
+        : prompt('press-w', 'info', 'Walk', 'Hold {W} to walk forward.', ['w']);
     }
-  }
+    if (input.piece === 0) return null; // a jump on the pad
 
-  private aimPrompt(k: CoachKey): CoachPrompt {
-    return prompt(
-      'aim',
-      'info',
-      'Steer with the mouse',
-      "Look along the ramp, the way you're moving. Turn away from it and you slide off; turn into it and you slow down.",
-      [k],
-      ['w'],
-    );
-  }
-
-  private enterRamp(ramp: CoachRamp): void {
-    this.ramp = ramp;
-    this.holdTicks = 0;
-    this.releaseTicks = 0;
-    this.sinceConfirm = -1;
-    this.flightTarget = -1;
-    const side = sideAhead(ramp, 0);
-    const isLast = this.course.ramps[this.course.ramps.length - 1]?.piece === ramp.piece;
-    if (!this.learned.has('surf')) this.rampLesson = 'surf';
-    else if (ramp.side !== 'both' && !this.sidesSeen.has(side)) this.rampLesson = 'side';
-    else if (ramp.curve && !this.learned.has('curve')) {
-      this.rampLesson = 'curve';
-      this.learned.add('curve');
-    } else if (!this.learned.has('aim')) this.rampLesson = 'aim';
-    else if (isLast) this.rampLesson = 'last';
-    else this.rampLesson = 'none';
-  }
-
-  private inFlight(input: CoachInput): CoachPrompt | null {
-    if (input.piece === this.course.finishPiece) {
-      return this.ramp ? prompt('finish-ahead', 'info', 'Finish ahead', 'Land on the finish pad to stop the clock.') : null;
+    if (!input.onGround && ramp && input.piece !== this.course.finishPiece) {
+      const side = sideAhead(ramp, input.lateral);
+      const k = keyOf(side);
+      const other = keyOf(otherSide(side));
+      const cap = capOf(side);
+      const ready = input.keys[k] && !input.keys[other] && !input.keys.w;
+      return ready
+        ? prompt('ready', 'good', 'Ready', `Ready: ${cap} held for the ${side} ramp.`, [k], [other, 'w'])
+        : prompt('switch', 'info', 'Switch', `Switch to ${cap} for the ${side} ramp.`, [k], [other, 'w']);
     }
-    const target = this.rampAtOrAfter(input.piece);
-    if (!target) return null;
-    if (target.piece !== this.flightTarget) this.enterFlight(target);
-
-    const side = sideAhead(target, input.lateral);
-    const k = keyOf(side);
-    const other = keyOf(otherSide(side));
-    const cap = capOf(side);
-    const ready = input.keys[k] && !input.keys[other] && !input.keys.w;
-
-    switch (this.flightLesson) {
-      case 'drop':
-        return ready
-          ? prompt('drop', 'good', 'Get ready to surf', `Good: keep ${cap} held as you land.`, [k], ['w', other])
-          : prompt('drop', 'info', 'Get ready to surf', `Ramp below, on your ${side}: let go of {W} and hold ${cap} as you land.`, [k], ['w', other]);
-      case 'switch':
-        return ready
-          ? prompt('switch', 'good', 'Ready', `${cap} is held for the ${side} ramp. Nice.`, [k], [other])
-          : prompt('switch', 'info', 'Switch sides', `Next ramp is on your ${side}: let go of ${capOf(otherSide(side))} and hold ${cap} before you land.`, [k], [other]);
-      case 'airstrafe':
-        return prompt(
-          'airstrafe',
-          'info',
-          'Air-strafe',
-          `Hold ${cap} and sweep the mouse ${side} at the same time. Matching key and mouse steers you in the air and adds speed.`,
-          [k],
-          [other],
-        );
-      case 'quiet':
-        if (ready) return null;
-        return this.rampSide === side
-          ? prompt('keep', 'info', 'Same side again', `Next ramp is on your ${side} too: keep holding ${cap}.`, [k], [other])
-          : prompt('switch', 'info', 'Switch sides', `Next ramp is on your ${side}: hold ${cap} before you land.`, [k], [other]);
-    }
+    return null;
   }
 
-  private enterFlight(target: CoachRamp): void {
-    this.flightTarget = target.piece;
-    const side = sideAhead(target, 0);
-    if (!this.ramp) this.flightLesson = 'drop';
-    else if (target.side !== 'both' && side !== this.rampSide && !this.learned.has('switch')) {
-      this.flightLesson = 'switch';
-      this.learned.add('switch');
-    } else if (this.learned.has('switch') && !this.learned.has('airstrafe')) {
-      this.flightLesson = 'airstrafe';
-      this.learned.add('airstrafe');
-    } else this.flightLesson = 'quiet';
+  private settleHint(next: CoachPrompt | null): void {
+    const key = promptKey(next);
+    if (key === promptKey(this.hintShown)) {
+      this.hintPending = key;
+      this.hintPendingTicks = 0;
+      if (next) this.hintShown = next;
+      return;
+    }
+    if (key !== this.hintPending) {
+      this.hintPending = key;
+      this.hintPendingTicks = 0;
+    }
+    if (++this.hintPendingTicks >= HINT_STABLE_TICKS) this.hintShown = next;
   }
 
   private rampAtOrAfter(piece: number): CoachRamp | null {
@@ -413,7 +371,76 @@ export class TutorialCoach {
   }
 }
 
-/** Ramp sides and bends from a built course's pieces. */
+/** The lesson script, written for the ramps this course actually has. */
+function buildLessons(course: CoachCourse): Map<string, CoachPrompt> {
+  const lessons = new Map<string, CoachPrompt>();
+  const ramps = course.ramps;
+  const first = ramps[0];
+  const firstSide: Side = first ? sideAhead(first, 0) : 'right';
+
+  lessons.set(
+    'basics',
+    prompt('basics', 'info', 'Welcome to surfing', 'Surf a ramp by holding the key toward it: {D} for a ramp on your right, {A} for one on your left. Never {W} on a ramp.'),
+  );
+  lessons.set(
+    'walk',
+    prompt(
+      'walk',
+      'info',
+      'Walk off the pad',
+      `Hold {W} to walk off the front of the pad. Once you're falling, let go of {W} and hold ${capOf(firstSide)}: the first ramp is on your ${firstSide}.`,
+      ['w'],
+    ),
+  );
+
+  // One lesson per ramp but the last: what's new on this ramp, then what's next.
+  const seenSides = new Set<Side>([firstSide]);
+  let curveTaught = false;
+  for (let i = 0; i < ramps.length - 1; i++) {
+    const ramp = ramps[i]!;
+    const next = ramps[i + 1]!;
+    const side = sideAhead(ramp, 0);
+    const cap = capOf(side);
+    let title: string;
+    let intro: string;
+    if (i === 0) {
+      title = "You're surfing!";
+      intro = `Keep ${cap} held and look along the ramp with your mouse.`;
+    } else if (ramp.side === 'both') {
+      title = 'Two-sided ramp';
+      intro = 'Ride whichever side you land on: hold the key toward the ridge.';
+    } else if (!seenSides.has(side)) {
+      title = 'Ramp colours';
+      intro = '{ramp-left} means hold {A}, {ramp-right} means hold {D}.';
+    } else if (ramp.curve && !curveTaught) {
+      title = 'Curved ramp';
+      intro = `Keep ${cap} held and turn the mouse ${ramp.curve} with the bend.`;
+      curveTaught = true;
+    } else {
+      title = 'Nice riding';
+      intro = `Keep ${cap} held.`;
+    }
+    if (ramp.side !== 'both') seenSides.add(side);
+
+    const nextSide = sideAhead(next, 0);
+    const nextCap = capOf(nextSide);
+    const isLast = i + 1 === ramps.length - 1;
+    const target = isLast ? 'the last ramp' : 'the next ramp';
+    const bend = !isLast && next.curve ? ` and bends ${next.curve}` : '';
+    let core: string;
+    if (next.side === 'both') core = `${target} is two-sided: hold the key toward its ridge.`;
+    else if (nextSide !== side) core = `${target} is on your ${nextSide}${bend}: switch to ${nextCap}${isLast ? '' : ' when you fly off'}.`;
+    else core = `${target} is on your ${nextSide} too${bend}: keep holding ${nextCap}.`;
+    const outro = ramp.boosterAfter ? `After the booster, ${core}` : core.charAt(0).toUpperCase() + core.slice(1);
+
+    lessons.set(`ramp-${i + 1}`, prompt(`ramp-${i + 1}`, 'good', title, `${intro} ${outro}`, [keyOf(side)], ['w']));
+  }
+
+  lessons.set('finish', prompt('finish', 'good', 'Finished!', "That's surfing! Try Easy Cruise next, or create a room and race a friend."));
+  return lessons;
+}
+
+/** Ramp sides, bends and boosters from a built course's pieces. */
 export function coachCourseFrom(pieces: readonly Piece[]): CoachCourse {
   const ramps: CoachRamp[] = [];
   let finishPiece = pieces.length - 1;
@@ -423,8 +450,11 @@ export function coachCourseFrom(pieces: readonly Piece[]): CoachCourse {
       const last = p.points[p.points.length - 1];
       const turn = first && last ? last.heading - first.heading : 0;
       // Positive yaw turns left (see course/layout.ts forwardOf).
-      const curve = Math.abs(turn) < STRAIGHT_TURN ? null : turn > 0 ? 'left' : 'right';
-      ramps.push({ piece: i, side: p.side, ridge: p.centerOffset, curve });
+      const curve = Math.abs(turn) < 0.05 ? null : turn > 0 ? 'left' : 'right';
+      ramps.push({ piece: i, side: p.side, ridge: p.centerOffset, curve, boosterAfter: false });
+    } else if (p.kind === 'booster') {
+      const prev = ramps[ramps.length - 1];
+      if (prev) prev.boosterAfter = true;
     } else if (p.kind === 'pad' && p.role === 'finish') {
       finishPiece = i;
     }

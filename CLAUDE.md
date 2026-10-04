@@ -49,7 +49,7 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - The `courses` table holds a test row `TESTQA` for checking share links without OpenAI; delete it before submission.
 
 ## Notes for upcoming phases
-- Tutorial coach (`game/tutorialCoach.ts`, pulled forward from Phase 7 at the user's request): lessons keyed to layout pieces + held keys, notes for events. Notes never replace the lesson (checkpoint gates sit where you switch keys). Its side logic must match the bot's (whichever face you're on) — the bot-run test asserts no warnings and every lesson in order.
+- Tutorial coach (`game/tutorialCoach.ts`): user feedback Oct 4 2026 — prompts switched "too fast"; must be "much slower and digestible". So: one lesson per ramp, changed only once settled on a new ramp and after `readingTicks(text)`; live key feedback goes in the hint line, never the lesson; events are notes. Keep lessons short. Tests: every lesson ≥ 3.5 s in a bot run, and a student pressing only what the coach shows must finish with no falls. The Tutorial's last two ramps are 9000 long (booster 200) to give the last lesson reading time.
 - `randomCourse(seed)` is the Phase 5 fallback when AI generation fails; `SurfBot` can drive the Phase 7 attract-mode camera.
 
 ## Phase status

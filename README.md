@@ -44,14 +44,15 @@ Press <kbd>`</kbd> (backtick) to toggle it. It's on in `npm run dev`, and in any
 
 ## Tutorial coach
 
-The **Tutorial** course has an on-screen coach (`src/game/tutorialCoach.ts`). A card above the speedometer shows a live W A S D / Space display: the key you should hold pulses blue, and a key you should let go of turns orange while it's held. Next to it is one lesson at a time, chosen from what you're actually doing:
+The **Tutorial** course has an on-screen coach (`src/game/tutorialCoach.ts`), paced for someone who has never surfed. A card above the speedometer has three parts that change at different speeds:
 
-- walk off the start pad with W, then let go of W and hold the key toward the ramp as you land;
-- hold D on a ramp to your right, A on a ramp to your left, never W (it cancels the push into the ramp, so you slide off), and look along the ramp;
-- switch keys in the air before an opposite-side ramp; air-strafe by sweeping the mouse with the strafe key; follow curved ramps with the mouse;
-- ramp colour tells you the key (swatches of the theme's two ramp colours).
+- **The lesson** (with "Step 3 of 6"): about one per ramp. It only changes at a calm moment (you've settled on a new ramp with the right key) and never before you've had time to read it (3.5–6.5 s, by length). Each lesson previews the next ramp ("The next ramp is on your left: switch to A when you fly off"), so you read what's coming before you need it. Steps: the basics (hold the key toward the ramp, never W) → walk off the pad (let go of W and hold D once you're falling) → you're surfing (look along the ramp) → ramp colours tell you the key → curves, the booster and the last ramp → finished.
+- **The live hint**, one short line about your keys right now: "✓ Holding D", "! Let go of W", "! Wrong key", "→ Switch to A", and on the pad "! Walk off with W first" (A/D on the ground walks you sideways off the pad). Tapping keys never changes the lesson.
+- **Notes** for a few seconds after a checkpoint (what R and Shift+R do), the first booster, or a fall (and after a fall the lesson re-teaches the ramp you're back on, straight away).
 
-Checkpoints, boosters, falls and the finish add a short note underneath (R / Shift+R, why you fell) without hiding the lesson. Lessons you've done don't repeat, so later ramps stay quiet unless you're doing something wrong. The coach is pure and tick-driven; its tests include a bot run through the real Tutorial that must see every lesson in order and never get a warning.
+Next to it, a live W A S D / Space display: keys to hold pulse blue, keys to let go of turn orange while held.
+
+Tests check the pacing (every lesson stays up long enough to read, in a bot run through the real Tutorial) and the advice itself: a simulated beginner who presses exactly the keys the coach shows, and nothing else, finishes the Tutorial without falling off.
 
 ## Racing
 
