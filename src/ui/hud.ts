@@ -13,6 +13,18 @@ export interface HudSplit {
   deltaMs: number | null;
 }
 
+export interface HudStanding {
+  place: number;
+  name: string;
+  color: string;
+  isMe: boolean;
+  /** Finish time or a short status ("racing"). */
+  text: string;
+}
+
+const FEED_MAX = 4;
+const FEED_MS = 5000;
+
 /**
  * In-race heads-up display: run timer, checkpoint count, course progress bar
  * (with ghost markers), split pop-ups, countdown and speedometer. Splits show
@@ -30,6 +42,10 @@ export class Hud {
   private readonly split: HTMLElement;
   private readonly countdown: HTMLElement;
   private readonly speedValue: HTMLElement;
+  private readonly position: HTMLElement;
+  private readonly standings: HTMLElement;
+  private readonly feed: HTMLElement;
+  private standingsKey = '';
   private readonly markerEls: HTMLElement[] = [];
   private splitTimer = 0;
   private lastTimerText = '';
@@ -42,6 +58,7 @@ export class Hud {
     this.root.innerHTML = `
       <div class="hud__top">
         <div class="hud__timer" aria-label="Run time">0:00.00</div>
+        <div class="hud__position" hidden></div>
         <div class="hud__cps"></div>
         <div class="hud__bar" aria-hidden="true">
           <div class="hud__fill"></div>
@@ -52,6 +69,8 @@ export class Hud {
         <div class="hud__split" role="status" aria-live="polite" hidden></div>
       </div>
       <div class="hud__countdown" aria-live="assertive" hidden></div>
+      <ol class="hud__standings" aria-label="Live standings" hidden></ol>
+      <ul class="hud__feed" aria-live="polite"></ul>
       <div class="hud__speedo" aria-hidden="true"><span class="hud__speed">0</span><span class="hud__unit">u/s</span></div>
     `;
     parent.appendChild(this.root);
@@ -70,6 +89,54 @@ export class Hud {
     this.split = q('.hud__split');
     this.countdown = q('.hud__countdown');
     this.speedValue = q('.hud__speed');
+    this.position = q('.hud__position');
+    this.standings = q('.hud__standings');
+    this.feed = q('.hud__feed');
+  }
+
+  /** "P2 / 4" in multiplayer; null hides it. */
+  setPosition(text: string | null): void {
+    this.position.hidden = text === null;
+    if (text !== null && this.position.textContent !== text) this.position.textContent = text;
+  }
+
+  /** Live multiplayer standings; null hides the panel. */
+  setStandings(rows: readonly HudStanding[] | null): void {
+    if (rows === null) {
+      this.standings.hidden = true;
+      return;
+    }
+    this.standings.hidden = false;
+    const key = rows.map((r) => `${r.place}|${r.name}|${r.color}|${r.isMe}|${r.text}`).join(';');
+    if (key === this.standingsKey) return;
+    this.standingsKey = key;
+    this.standings.replaceChildren(
+      ...rows.map((r) => {
+        const li = document.createElement('li');
+        if (r.isMe) li.className = 'is-me';
+        const place = document.createElement('span');
+        place.textContent = String(r.place);
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.style.background = r.color;
+        const name = document.createElement('span');
+        name.textContent = r.isMe ? 'You' : r.name;
+        const time = document.createElement('span');
+        time.className = 'time';
+        time.textContent = r.text;
+        li.append(place, dot, name, time);
+        return li;
+      }),
+    );
+  }
+
+  /** A line in the event feed ("Alex finished — 1:02.48"); fades after a few seconds. */
+  pushFeed(text: string): void {
+    const li = document.createElement('li');
+    li.textContent = text;
+    this.feed.append(li);
+    while (this.feed.children.length > FEED_MAX) this.feed.firstElementChild?.remove();
+    window.setTimeout(() => li.remove(), FEED_MS);
   }
 
   setVisible(visible: boolean): void {

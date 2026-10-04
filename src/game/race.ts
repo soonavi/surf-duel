@@ -35,6 +35,8 @@ export class RaceSession {
 
   private countdownLeft: number;
   private raceTicks = 0;
+  /** Real time the race clock must include but the simulation didn't run (multiplayer). */
+  private lostMs = 0;
   private readonly splits: (number | null)[];
   private topSpeed = 0;
   private result: RaceResult | null = null;
@@ -52,7 +54,24 @@ export class RaceSession {
   }
 
   get elapsedMs(): number {
-    return this.raceTicks * MS_PER_TICK;
+    return this.raceTicks * MS_PER_TICK + this.lostMs;
+  }
+
+  /**
+   * Go now, regardless of the countdown — for a multiplayer GO driven by the
+   * shared wall clock. `lateMs` is how far past the shared GO we already are.
+   */
+  startRacing(lateMs = 0): RaceEvent[] {
+    if (this.phase !== 'countdown') return [];
+    this.phase = 'racing';
+    this.raceTicks = 1;
+    this.lostMs = Math.max(0, lateMs);
+    return [{ type: 'go' }];
+  }
+
+  /** Add real time that passed without simulation (e.g. a backgrounded tab) while racing. */
+  addLostTime(ms: number): void {
+    if (this.phase === 'racing' && ms > 0) this.lostMs += ms;
   }
 
   /** Call once per simulation tick, before moving the player. */

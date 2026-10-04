@@ -34,6 +34,13 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Bump `LAYOUT_VERSION` in `course/courseKey.ts` whenever the layout/builder changes the geometry a spec produces; that retires stale PBs and dev ghosts.
 - `vite.config.ts` is excluded from `tsc` (it needs Node types; `@types/node` isn't approved yet — ask before adding it for the Phase 5 `/api` functions).
 
+## Multiplayer
+- Supabase project: the user chose to reuse an existing project, "soonavi's Project" (`vsnkrwunsbjkohfsxmpx`, org "listenwell", Pro plan). Realtime only so far — confirm with the user before adding tables/migrations there (Phases 5–6).
+- Realtime quotas count every delivered copy (Pro: 500 msg/s, 50 presence msg/s per project). Keep `batchInterval` budgeting; never send per-tick.
+- Supabase delivers a joiner's own presence ~1 s before existing members: `Room.connect` waits (`joinSettleMs`) before deciding "not found", picking a colour or stamping `joinedAt`. `MemoryHub(existingMembersDelayMs)` reproduces this in tests.
+- Shared races never pause: the loop keeps simulating with the mouse released; `FixedStepLoop.droppedTime` (hidden tab) is charged to the race clock.
+- Test multiplayer alone in the browser pane with an iframe of `/?room=CODE` (a separate app instance) and drive both apps' `loop.frame(performance.now())`.
+
 ## Notes for upcoming phases
 - Tutorial on-screen prompts (keyed to segment index, detect success) are a Phase 7 polish item; the tutorial course layout ships now.
 - `randomCourse(seed)` is the Phase 5 fallback when AI generation fails; `SurfBot` can drive the Phase 7 attract-mode camera.
@@ -42,8 +49,8 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - [x] Phase 0 — scaffold, fixed-timestep loop, pointer lock, dev tuning panel
 - [x] Phase 1 — movement physics + tests on a test ramp (user: "this feels like surf")
 - [x] Phase 2 — course schema, builder, validator, 3 courses, themes
-- [~] Phase 3 — single-player race loop (built; awaiting playtest + the user's dev ghost recordings)
-- [ ] Phase 4 — multiplayer rooms
+- [x] Phase 3 — single-player race loop (dev ghost files: user reported saving them but none reached src/course/ghosts/ — re-check)
+- [~] Phase 4 — multiplayer rooms (built; awaiting playtest)
 - [ ] Phase 5 — AI course generator
 - [ ] Phase 6 — leaderboards
 - [ ] Phase 7 — polish

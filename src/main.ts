@@ -8,6 +8,8 @@ const params = new URLSearchParams(window.location.search);
 const devMode = import.meta.env.DEV || params.has('dev');
 const app = new App(root, devMode, params.get('course') ?? undefined);
 app.start();
+const roomCode = params.get('room');
+if (roomCode) app.joinRoomFromUrl(roomCode);
 
 if (devMode) {
   // Console handle for debugging, e.g. `__surf.respawn()`.

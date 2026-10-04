@@ -58,6 +58,26 @@ describe('RaceSession', () => {
     expect(s.elapsedMs).toBe(21_000); // clock stops
   });
 
+  it('can be started by an external clock (multiplayer GO), charging lateness', () => {
+    const s = new RaceSession({ countdownSeconds: 999, checkpoints: 0 });
+    run(s, 20);
+    expect(s.phase).toBe('countdown');
+    expect(s.startRacing(35)).toEqual([{ type: 'go' }]);
+    expect(s.phase).toBe('racing');
+    expect(s.elapsedMs).toBe(45); // first raced tick + 35 ms late
+    expect(s.startRacing(0)).toEqual([]); // only once
+  });
+
+  it('charges time the simulation could not run (backgrounded tab) to the race clock', () => {
+    const s = new RaceSession({ countdownSeconds: 0, checkpoints: 0 });
+    run(s, 100);
+    s.addLostTime(2500);
+    expect(s.elapsedMs).toBe(3500);
+    s.finish();
+    s.addLostTime(1000);
+    expect(s.elapsedMs).toBe(3500); // clock stopped
+  });
+
   it('ignores checkpoints during the countdown and repeated checkpoints', () => {
     const s = new RaceSession({ countdownSeconds: 1, checkpoints: 1 });
     run(s, 10);

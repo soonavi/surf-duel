@@ -11,6 +11,8 @@ export interface StepPlan {
   accumulator: number;
   /** Interpolation factor in [0, 1) between the previous and current tick. */
   alpha: number;
+  /** Seconds of frame time that were thrown away rather than simulated (hitch guard). */
+  dropped: number;
 }
 
 /**
@@ -18,18 +20,21 @@ export interface StepPlan {
  * tested without a browser.
  */
 export function planSteps(accumulator: number, frameDt: number, stepDt: number, maxSteps: number): StepPlan {
-  const dt = Math.min(Math.max(frameDt, 0), MAX_FRAME_DT);
+  const raw = Math.max(frameDt, 0);
+  const dt = Math.min(raw, MAX_FRAME_DT);
+  let dropped = raw - dt;
   let acc = accumulator + dt;
   // The epsilon keeps float drift (e.g. 0.00999999) from swallowing a tick.
   let steps = Math.floor(acc / stepDt + 1e-9);
   if (steps > maxSteps) {
     // Spiral-of-death guard: run what we can and drop whole ticks we can't afford.
     acc -= (steps - maxSteps) * stepDt;
+    dropped += (steps - maxSteps) * stepDt;
     steps = maxSteps;
   }
   acc = Math.max(0, acc - steps * stepDt);
   const alpha = Math.min(acc / stepDt, 1 - 1e-9);
-  return { steps, accumulator: acc, alpha };
+  return { steps, accumulator: acc, alpha, dropped };
 }
 
 export interface LoopCallbacks {
@@ -44,6 +49,8 @@ export interface LoopCallbacks {
 export class FixedStepLoop {
   /** When false, ticks stop (paused) but frames keep rendering. */
   simulating = true;
+  /** Seconds of real time not simulated while `simulating` (hitches, a backgrounded tab). Read and reset by the game. */
+  droppedTime = 0;
 
   private accumulator = 0;
   private last = 0;
@@ -81,6 +88,7 @@ export class FixedStepLoop {
     }
 
     const plan = planSteps(this.accumulator, frameDt, this.stepDt, this.maxSteps);
+    this.droppedTime += plan.dropped;
     this.callbacks.beginFrame?.(plan.steps);
     for (let i = 0; i < plan.steps; i++) this.callbacks.tick(this.stepDt);
     this.accumulator = plan.accumulator;

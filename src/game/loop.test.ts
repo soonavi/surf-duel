@@ -43,6 +43,13 @@ describe('planSteps (fixed timestep)', () => {
     expect(plan.accumulator).toBeLessThan(TICK_DT);
   });
 
+  it('reports the time it dropped during a hitch', () => {
+    const plan = planSteps(0.004, 3, TICK_DT, MAX_STEPS_PER_FRAME);
+    const simulated = plan.steps * TICK_DT;
+    expect(plan.dropped).toBeCloseTo(0.004 + 3 - simulated - plan.accumulator, 9);
+    expect(planSteps(0, 1 / 60, TICK_DT, MAX_STEPS_PER_FRAME).dropped).toBeCloseTo(0, 9);
+  });
+
   it('ignores zero and negative frame times', () => {
     expect(planSteps(0, 0, TICK_DT, MAX_STEPS_PER_FRAME).steps).toBe(0);
     expect(planSteps(0, -1, TICK_DT, MAX_STEPS_PER_FRAME).steps).toBe(0);
