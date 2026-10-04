@@ -90,6 +90,7 @@ export function createDevPanel(app: App): GUI {
 
   const debug = gui.addFolder('Debug');
   debug.add(app.debug, 'showHud').name('debug readout').onChange(() => app.applyDebug());
+  debug.add(app.debug, 'noclip').name('noclip (N)').listen();
   debug.add(app.debug, 'flySpeed', 100, 5000, 50).name('noclip speed');
   debug.add({ respawn: () => app.respawn() }, 'respawn').name('Respawn (R)');
 

@@ -33,6 +33,8 @@ export function planSteps(accumulator: number, frameDt: number, stepDt: number, 
 }
 
 export interface LoopCallbacks {
+  /** Called once per simulated frame, before its ticks, with how many ticks are about to run. */
+  beginFrame?(steps: number): void;
   /** Advance the simulation by exactly `dt` seconds. */
   tick(dt: number): void;
   /** Draw a frame, blending the last two ticks by `alpha`. */
@@ -79,6 +81,7 @@ export class FixedStepLoop {
     }
 
     const plan = planSteps(this.accumulator, frameDt, this.stepDt, this.maxSteps);
+    this.callbacks.beginFrame?.(plan.steps);
     for (let i = 0; i < plan.steps; i++) this.callbacks.tick(this.stepDt);
     this.accumulator = plan.accumulator;
     this.callbacks.render(plan.alpha, frameDt);

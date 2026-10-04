@@ -13,10 +13,16 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Sim runs at 100 Hz fixed timestep (`src/game/loop.ts`); render interpolates. Mouse look is applied per frame.
 - Keys tracked by `KeyboardEvent.code`.
 - localStorage is always wrapped in try/catch; stored data is validated with zod.
+- Player `pos` is the capsule's bottom (feet); camera = feet + `EYE_HEIGHT`.
+- Collision resolves the deepest contact first (prevents seam "rampbug"); keep it that way when touching `collision.ts`.
+
+## Notes for upcoming phases
+- Ramp angle 45° gives normal.y ≈ 0.707 ≥ 0.7 → walkable, not surfable. The Phase 2 validator should clamp ramp angles to ≥ 46°.
+- On pitched ramps the world-space grid shader draws diagonal lines; Phase 2 ramp material should use ramp-local UVs so lines run along/across the ramp.
 
 ## Phase status
 - [x] Phase 0 — scaffold, fixed-timestep loop, pointer lock, dev tuning panel
-- [ ] Phase 1 — movement physics + tests on a test ramp
+- [~] Phase 1 — movement physics + tests on a test ramp (built; awaiting the user's "feels like surf" sign-off)
 - [ ] Phase 2 — course schema, builder, validator, 3 courses, themes
 - [ ] Phase 3 — single-player race loop
 - [ ] Phase 4 — multiplayer rooms
