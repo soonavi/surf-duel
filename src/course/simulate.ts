@@ -4,14 +4,14 @@
  */
 import { BvhWorld } from '../physics/collision';
 import { DEFAULT_PHYSICS, TICK_DT, TICK_RATE } from '../physics/constants';
-import { createPlayer, stepPlayer } from '../physics/player';
+import { createPlayer, stepPlayer, type MoveCmd, type PlayerState } from '../physics/player';
 import type { BuiltCourse } from './builder';
 import { SurfBot, type BotStyle } from './bot';
-import { CourseRuntime, placeAtSpawn } from './runtime';
+import { CourseRuntime, placeAtSpawn, type CourseEvent } from './runtime';
 
 export interface RunResult {
   finished: boolean;
-  /** Seconds from leaving the start zone to the finish (or until giving up). */
+  /** Seconds from the start of the run (the go signal) to the finish, or until giving up. */
   time: number;
   deaths: number;
   /** Checkpoint number where each death happened (0 = before the first). */
@@ -20,11 +20,23 @@ export interface RunResult {
   checkpoints: number;
 }
 
+export interface RunHooks {
+  /** After each tick's movement; `tick` counts from 1 (ticks raced so far). */
+  onTick?(player: PlayerState, tick: number, cmd: MoveCmd): void;
+  onEvent?(event: CourseEvent, tick: number): void;
+}
+
 /**
  * Run `built` with a bot. `fromCheckpoint` starts the run from that
  * checkpoint's respawn (0 = the start line), exactly as pressing R would.
  */
-export function simulateRun(built: BuiltCourse, style: BotStyle, maxSeconds = 180, fromCheckpoint = 0): RunResult {
+export function simulateRun(
+  built: BuiltCourse,
+  style: BotStyle,
+  maxSeconds = 180,
+  fromCheckpoint = 0,
+  hooks: RunHooks = {},
+): RunResult {
   const world = new BvhWorld(built.collision);
   const runtime = new CourseRuntime(built);
   const bot = new SurfBot(built, style);
@@ -34,20 +46,22 @@ export function simulateRun(built: BuiltCourse, style: BotStyle, maxSeconds = 18
   bot.resync(player);
   runtime.afterRespawn(player);
 
-  let startTick = -1;
   let maxSpeed = 0;
   const deathsAt: number[] = [];
   const maxTicks = maxSeconds * TICK_RATE;
 
-  for (let tick = 0; tick < maxTicks; tick++) {
-    stepPlayer(player, bot.command(player), DEFAULT_PHYSICS, world, TICK_DT);
+  for (let i = 0; i < maxTicks; i++) {
+    const tick = i + 1;
+    const cmd = bot.command(player);
+    stepPlayer(player, cmd, DEFAULT_PHYSICS, world, TICK_DT);
     maxSpeed = Math.max(maxSpeed, Math.hypot(player.vel.x, player.vel.z));
+    hooks.onTick?.(player, tick, cmd);
     for (const e of runtime.update(player)) {
-      if (e.type === 'start' && startTick < 0) startTick = tick;
+      hooks.onEvent?.(e, tick);
       if (e.type === 'finish') {
         return {
           finished: true,
-          time: (tick - Math.max(0, startTick)) / TICK_RATE,
+          time: tick / TICK_RATE,
           deaths: deathsAt.length,
           deathsAt,
           maxSpeed,

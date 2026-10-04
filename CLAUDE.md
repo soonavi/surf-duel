@@ -25,6 +25,12 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Ramp colour is semantic: `rampRight` = ramp on your right (hold D), `rampLeft` = hold A.
 - The bot (`course/bot.ts`) faces the *local* track heading (looking ahead on curves makes its strafe brake) and surfs whichever face it's actually on.
 
+## Race loop
+- App states: menu → loading → countdown → racing → results; `paused` is orthogonal (countdown/racing only). Anything time-based in a race (results delay, GO flash) counts simulation ticks, never wall-clock, so pausing holds it.
+- Race time = racing ticks × 10 ms (`RaceSession`), identical in the game and `simulateRun` — the bot ghost and an identical human run finish on the same tick.
+- Bump `LAYOUT_VERSION` in `course/courseKey.ts` whenever the layout/builder changes the geometry a spec produces; that retires stale PBs and dev ghosts.
+- `vite.config.ts` is excluded from `tsc` (it needs Node types; `@types/node` isn't approved yet — ask before adding it for the Phase 5 `/api` functions).
+
 ## Notes for upcoming phases
 - Tutorial on-screen prompts (keyed to segment index, detect success) are a Phase 7 polish item; the tutorial course layout ships now.
 - `randomCourse(seed)` is the Phase 5 fallback when AI generation fails; `SurfBot` can drive the Phase 7 attract-mode camera.
@@ -32,8 +38,8 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 ## Phase status
 - [x] Phase 0 — scaffold, fixed-timestep loop, pointer lock, dev tuning panel
 - [x] Phase 1 — movement physics + tests on a test ramp (user: "this feels like surf")
-- [~] Phase 2 — course schema, builder, validator, 3 courses, themes (built; awaiting playtest)
-- [ ] Phase 3 — single-player race loop
+- [x] Phase 2 — course schema, builder, validator, 3 courses, themes
+- [~] Phase 3 — single-player race loop (built; awaiting playtest + the user's dev ghost recordings)
 - [ ] Phase 4 — multiplayer rooms
 - [ ] Phase 5 — AI course generator
 - [ ] Phase 6 — leaderboards

@@ -131,7 +131,7 @@ export function createDevPanel(app: App): GUI {
   debug.add(app.debug, 'noclip').name('noclip (N)').listen();
   debug.add(app.debug, 'flySpeed', 100, 5000, 50).name('noclip speed');
   debug.add(app.debug, 'showHud').name('debug readout').onChange(() => app.applyDebug());
-  debug.add({ restart: () => app.restart() }, 'restart').name('Restart course (Shift+R)');
+  debug.add({ restart: () => app.restartRun() }, 'restart').name('Restart run (Shift+R)');
 
   refreshModified();
 
