@@ -1,4 +1,5 @@
 import { formatDelta, formatTime } from '../game/time';
+import { CoachPanel } from './coachPanel';
 
 export interface HudMarker {
   label: string;
@@ -31,6 +32,8 @@ const FEED_MS = 5000;
  * an explicit +/− sign as well as colour, so they read for colour-blind players.
  */
 export class Hud {
+  /** The Tutorial coach (hidden on other courses). */
+  readonly coach: CoachPanel;
   private readonly root: HTMLElement;
   private readonly timer: HTMLElement;
   private readonly cps: HTMLElement;
@@ -92,6 +95,7 @@ export class Hud {
     this.position = q('.hud__position');
     this.standings = q('.hud__standings');
     this.feed = q('.hud__feed');
+    this.coach = new CoachPanel(this.root);
   }
 
   /** "P2 / 4" in multiplayer; null hides it. */

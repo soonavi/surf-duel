@@ -988,8 +988,186 @@ kbd {
   }
 }
 
+/* --- Tutorial coach (HUD) ----------------------------------------------------- */
+
+.coach {
+  position: absolute;
+  left: 50%;
+  bottom: calc(9vh + 72px);
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: max-content;
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(7, 5, 26, 0.88);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  text-shadow: none;
+}
+
+.coach[hidden],
+.coach__lesson[hidden],
+.coach__note[hidden] {
+  display: none;
+}
+
+.coach--empty .coach__body {
+  display: none;
+}
+
+.coach__keys {
+  display: grid;
+  grid-template-columns: repeat(3, 34px);
+  grid-template-areas:
+    '. w .'
+    'a s d'
+    'sp sp sp';
+  gap: 4px;
+  flex: none;
+}
+
+.coach__key {
+  display: grid;
+  place-items: center;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom-width: 3px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  transition: background 0.08s, border-color 0.08s, color 0.08s, transform 0.08s;
+}
+
+.coach__key--w { grid-area: w; }
+.coach__key--a { grid-area: a; }
+.coach__key--s { grid-area: s; }
+.coach__key--d { grid-area: d; }
+.coach__key--space { grid-area: sp; font-size: 11px; letter-spacing: 0.06em; }
+
+/* A key you should hold: blue outline that pulses until you press it. */
+.coach__key.is-target {
+  border-color: #5cc8ff;
+  color: var(--text);
+  animation: coach-pulse 1.1s ease-in-out infinite;
+}
+
+.coach__key.is-down {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
+  background: rgba(255, 255, 255, 0.22);
+  color: var(--text);
+}
+
+.coach__key.is-target.is-down {
+  background: #5cc8ff;
+  color: #07051a;
+  animation: none;
+}
+
+/* A key you should let go of, while it's held: orange (colour-blind-safe pair with the blue). */
+.coach__key.is-wrong {
+  border-color: #ffa24d;
+  background: #ffa24d;
+  color: #1a0e02;
+}
+
+@keyframes coach-pulse {
+  50% {
+    box-shadow: 0 0 0 3px rgba(92, 200, 255, 0.35);
+  }
+}
+
+.coach__body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.coach__title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.coach__lesson[data-tone='good'] .coach__title {
+  color: #5cc8ff;
+}
+
+.coach__lesson[data-tone='warn'] .coach__title {
+  color: #ffa24d;
+}
+
+.coach__lesson[data-tone='warn'] .coach__title::before {
+  content: '! ';
+}
+
+.coach__text {
+  margin: 4px 0 0;
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.coach kbd {
+  font-size: 13px;
+  padding: 0 6px;
+}
+
+.coach__swatch {
+  display: inline-block;
+  width: 1.4em;
+  height: 0.9em;
+  margin: 0 2px;
+  border-radius: 3px;
+  vertical-align: -0.05em;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.coach__note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: baseline;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.coach--empty .coach__note,
+.coach__lesson[hidden] + .coach__note {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.coach__note-title {
+  font-weight: 800;
+}
+
+.coach__note[data-tone='good'] .coach__note-title {
+  color: #5cc8ff;
+}
+
+.coach__note[data-tone='warn'] .coach__note-title {
+  color: #ffa24d;
+}
+
+.coach__note--in {
+  animation: toast-in 0.25s ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hud__countdown--pop,
+  .coach__key.is-target,
+  .coach__note--in,
   .toast--in,
   .spinner {
     animation: none;

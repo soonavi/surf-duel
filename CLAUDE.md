@@ -42,14 +42,14 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Test multiplayer alone in the browser pane with an iframe of `/?room=CODE` (a separate app instance) and drive both apps' `loop.frame(performance.now())`.
 
 ## Notes for upcoming phases
-- Tutorial on-screen prompts (keyed to segment index, detect success) are a Phase 7 polish item; the tutorial course layout ships now.
+- Tutorial coach (`game/tutorialCoach.ts`, pulled forward from Phase 7 at the user's request): lessons keyed to layout pieces + held keys, notes for events. Notes never replace the lesson (checkpoint gates sit where you switch keys). Its side logic must match the bot's (whichever face you're on) — the bot-run test asserts no warnings and every lesson in order.
 - `randomCourse(seed)` is the Phase 5 fallback when AI generation fails; `SurfBot` can drive the Phase 7 attract-mode camera.
 
 ## Phase status
 - [x] Phase 0 — scaffold, fixed-timestep loop, pointer lock, dev tuning panel
 - [x] Phase 1 — movement physics + tests on a test ramp (user: "this feels like surf")
 - [x] Phase 2 — course schema, builder, validator, 3 courses, themes
-- [x] Phase 3 — single-player race loop (dev ghost files: user reported saving them but none reached src/course/ghosts/ — re-check)
+- [x] Phase 3 — single-player race loop (dev ghosts: only speed-demon.json has arrived; tutorial / easy-cruise still use the bot)
 - [~] Phase 4 — multiplayer rooms (built; awaiting playtest)
 - [ ] Phase 5 — AI course generator
 - [ ] Phase 6 — leaderboards

@@ -10,7 +10,7 @@ export interface ShippedCourse {
 }
 
 export const SHIPPED_COURSES: readonly ShippedCourse[] = [
-  { id: 'tutorial', spec: tutorial, blurb: 'Learn to surf in under two minutes.' },
+  { id: 'tutorial', spec: tutorial, blurb: 'Learn to surf in two minutes, with an on-screen coach.' },
   { id: 'easy-cruise', spec: easyCruise, blurb: 'Wide, gentle ramps through the dunes.' },
   { id: 'speed-demon', spec: speedDemon, blurb: 'Steep ramps, huge drops, no mercy.' },
 ];

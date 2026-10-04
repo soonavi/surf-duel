@@ -12,6 +12,7 @@ import type { DevGhostFile } from './devGhostFile';
 import { Profile } from './profile';
 import { RemotePlayers } from './remotePlayers';
 import { formatTime } from './time';
+import { TutorialCoach, coachCourseFrom, type CoachEvent, type CoachKeys } from './tutorialCoach';
 import { EYE_HEIGHT, TICK_RATE, physics } from '../physics/constants';
 import { BvhWorld } from '../physics/collision';
 import { createPlayer, stepPlayer, type MoveCmd, type PlayerState } from '../physics/player';
@@ -75,6 +76,9 @@ const RIVAL_COLOR = '#7cf8c4';
 const ROOM_START_DELAY_MS = 4500;
 /** Samples are taken every 5 ticks = 20 Hz. */
 const SAMPLE_EVERY_TICKS = 5;
+/** The shipped course that gets the on-screen coach. */
+const TUTORIAL_ID = 'tutorial';
+const NO_KEYS: CoachKeys = { w: false, a: false, s: false, d: false, space: false };
 
 export class App {
   readonly settings: Settings = loadSettings();
@@ -117,6 +121,12 @@ export class App {
   /** Results waiting to be shown, and the ghost tick at which to show them. */
   private pendingResults: { view: ResultsView; atTick: number } | null = null;
   private lastFinish: { timeMs: number; splits: (number | null)[]; ghost: GhostData } | null = null;
+  /** On-screen coach, on the Tutorial only. */
+  private coach: TutorialCoach | null = null;
+  /** Keys driving the rider this tick (the bot's, under autopilot), for the coach's key display. */
+  private coachKeys: CoachKeys = NO_KEYS;
+  /** Things the coach should hear about that aren't course events (pressing R). */
+  private coachEvents: CoachEvent[] = [];
 
   // Multiplayer.
   private room: Room | null = null;
@@ -261,6 +271,7 @@ export class App {
     this.courseView = new CourseView(this.built, theme);
     this.view.scene.add(this.courseView.group);
     this.view.applyTheme(theme);
+    this.hud.coach.setRampColors(theme.rampRight.line, theme.rampLeft.line);
   }
 
   private refreshCourseCards(): void {
@@ -386,6 +397,12 @@ export class App {
     this.hud.setCheckpoints(0, this.built.checkpoints.length - 1);
     this.hud.setPosition(null);
     this.hud.setStandings(null);
+
+    this.coach = this.courseId === TUTORIAL_ID ? new TutorialCoach(coachCourseFrom(this.built.pieces)) : null;
+    this.coachEvents = [];
+    this.coachKeys = NO_KEYS;
+    this.hud.coach.setVisible(this.coach !== null);
+    this.hud.coach.render(null, null, NO_KEYS);
   }
 
   /** Restart the current run (Shift+R), if one is under way. */
@@ -777,6 +794,7 @@ export class App {
     this.hud.hideSplit();
     this.hud.setCountdown(null);
     this.hud.setPosition(null);
+    this.hud.coach.setVisible(false);
     room.setStatus('spectating');
     this.spectateTarget = null;
     this.cycleSpectate(1);
@@ -993,6 +1011,7 @@ export class App {
         }
       } else if (session.phase === 'racing') {
         this.respawn();
+        this.coachEvents.push({ type: 'respawn' });
         return;
       }
     }
@@ -1025,10 +1044,15 @@ export class App {
       }
     }
     this.prevPos.copy(this.player.pos);
-    if (session.phase === 'countdown') return; // frozen on the start pad; look around freely
+    if (session.phase === 'countdown') {
+      // Frozen on the start pad; look around freely.
+      this.updateCoach(this.heldKeys(), []);
+      return;
+    }
     this.ghostTicks++;
 
     const key = (code: string): number => (this.input.isDown(code) ? 1 : 0);
+    let keys = this.heldKeys();
     if (this.debug.noclip) {
       noclipStep(
         this.player.pos,
@@ -1054,15 +1078,40 @@ export class App {
         this.yawDelta = 0;
       }
       stepPlayer(this.player, cmd, physics, this.world, dt);
+      keys = { w: cmd.forward > 0, s: cmd.forward < 0, d: cmd.side > 0, a: cmd.side < 0, space: cmd.jump };
     }
 
     session.noteSpeed(Math.hypot(this.player.vel.x, this.player.vel.z));
-    for (const event of this.runtime.update(this.player)) this.handleEvent(event);
+    const courseEvents = this.runtime.update(this.player);
+    for (const event of courseEvents) this.handleEvent(event);
+    this.updateCoach(keys, courseEvents);
     if (session.phase === 'racing') this.recorder?.tick(this.ghostTicks, this.player.pos, this.angles.yaw);
     if (roomRace && this.room && this.roomRaceId && this.ghostTicks % SAMPLE_EVERY_TICKS === 0) {
       this.room.queueSample(this.roomRaceId, this.roomRaceClockMs(), this.player.pos, this.player.vel, this.angles.yaw);
     }
     if (this.pendingResults && this.ghostTicks >= this.pendingResults.atTick) this.showResults(this.pendingResults.view);
+  }
+
+  private heldKeys(): CoachKeys {
+    const down = (code: string): boolean => this.input.isDown(code);
+    return { w: down('KeyW'), a: down('KeyA'), s: down('KeyS'), d: down('KeyD'), space: down('Space') };
+  }
+
+  private updateCoach(keys: CoachKeys, events: readonly CourseEvent[]): void {
+    this.coachKeys = keys;
+    const session = this.session;
+    if (!this.coach || !session) return;
+    const extra = this.coachEvents;
+    this.coachEvents = [];
+    this.coach.update({
+      phase: session.phase,
+      piece: this.runtime.piece,
+      lateral: this.runtime.lateral,
+      surfing: this.player.surfing,
+      onGround: this.player.onGround,
+      keys,
+      events: extra.length > 0 ? [...extra, ...events] : events,
+    });
   }
 
   // --- rendering -------------------------------------------------------------
@@ -1143,6 +1192,7 @@ export class App {
       this.updateRoomStandings(false);
     }
 
+    if (this.coach) this.hud.coach.render(this.coach.current, this.coach.note, this.coachKeys);
     if (session.phase !== 'finished') this.hud.setTimer(session.elapsedMs);
     this.hud.setSpeed(Math.hypot(this.player.vel.x, this.player.vel.z));
     this.hud.setProgress(this.runtime.progress / Math.max(1, path.length), markers);

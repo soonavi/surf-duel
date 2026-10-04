@@ -38,6 +38,17 @@ Press <kbd>`</kbd> (backtick) to toggle it. It's on in `npm run dev`, and in any
 | B | Autopilot: watch the bot surf the course (dev builds) |
 | N | Noclip (dev builds; Space/C up/down, Shift fast) |
 
+## Tutorial coach
+
+The **Tutorial** course has an on-screen coach (`src/game/tutorialCoach.ts`). A card above the speedometer shows a live W A S D / Space display: the key you should hold pulses blue, and a key you should let go of turns orange while it's held. Next to it is one lesson at a time, chosen from what you're actually doing:
+
+- walk off the start pad with W, then let go of W and hold the key toward the ramp as you land;
+- hold D on a ramp to your right, A on a ramp to your left, never W (it cancels the push into the ramp, so you slide off), and look along the ramp;
+- switch keys in the air before an opposite-side ramp; air-strafe by sweeping the mouse with the strafe key; follow curved ramps with the mouse;
+- ramp colour tells you the key (swatches of the theme's two ramp colours).
+
+Checkpoints, boosters, falls and the finish add a short note underneath (R / Shift+R, why you fell) without hiding the lesson. Lessons you've done don't repeat, so later ramps stay quiet unless you're doing something wrong. The coach is pure and tick-driven; its tests include a bot run through the real Tutorial that must see every lesson in order and never get a warning.
+
 ## Racing
 
 Pick a course and press **Play**: a 3-2-1 countdown (you can look around but not move), then the clock runs from GO in exact 10 ms simulation ticks. The HUD shows the run time, checkpoints reached, a progress bar with markers for each ghost, split pop-ups (`+0.42` / `−0.31` against your personal best, in colour-blind-safe blue/orange) and your speed. After the finish you get the results: time, splits, top speed, rank among your local runs, and the rival ghost's time. **R**/Enter races again, **M** goes back to the menu, **Shift+R** restarts mid-run.

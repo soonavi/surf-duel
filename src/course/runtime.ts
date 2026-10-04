@@ -58,6 +58,10 @@ export class CourseRuntime {
   started = false;
   /** Distance along the course of the rider's nearest path point. */
   progress = 0;
+  /** Layout piece the rider is on, or flying toward. */
+  piece = 0;
+  /** Rider's offset from the riding line; positive is to their right. */
+  lateral = 0;
 
   private hint = 0;
   private readonly inside = new Set<Trigger>();
@@ -76,6 +80,8 @@ export class CourseRuntime {
     this.finished = false;
     this.started = this.lastCheckpoint > 0;
     this.progress = 0;
+    this.piece = 0;
+    this.lateral = 0;
     this.hint = 0;
     this.inside.clear();
   }
@@ -87,7 +93,10 @@ export class CourseRuntime {
   /** After a respawn, forget which triggers we were in and resync progress. */
   afterRespawn(state: PlayerState): void {
     this.inside.clear();
-    this.hint = this.built.path.locate(state.pos, 0).index;
+    const hit = this.built.path.locate(state.pos, 0);
+    this.hint = hit.index;
+    this.piece = hit.sample.piece;
+    this.lateral = hit.lateral;
     for (const t of this.built.triggers) {
       if (triggerContains(t, this.centerOf(state))) this.inside.add(t);
     }
@@ -98,6 +107,8 @@ export class CourseRuntime {
     const hit = this.built.path.locate(state.pos, this.hint);
     this.hint = hit.index;
     this.progress = hit.s;
+    this.piece = hit.sample.piece;
+    this.lateral = hit.lateral;
     if (state.pos.y < hit.sample.killY) return [{ type: 'kill' }];
 
     const events: CourseEvent[] = [];
