@@ -2,15 +2,13 @@
  * Seeded procedural courses. The fallback when AI generation fails (Phase 5),
  * and a fuzzer for the builder: every seed must produce a beatable course.
  */
-import { DIFFICULTIES, THEMES, type Course, type Difficulty, type RampSide, type Segment, type ThemeName } from './schema';
+import { DIFFICULTIES, DIFFICULTY_STYLE, THEMES, type Course, type Difficulty, type RampSide, type Segment, type ThemeName } from './schema';
 import { validateCourse } from './validator';
 import { createRng } from '../util/rng';
 
 const ADJECTIVES = ['Neon', 'Molten', 'Frozen', 'Hollow', 'Velvet', 'Silent', 'Crimson', 'Electric', 'Drifting', 'Shattered', 'Golden', 'Midnight'];
 const NOUNS = ['Rapids', 'Spiral', 'Canyon', 'Descent', 'Ribbon', 'Cascade', 'Gauntlet', 'Slipstream', 'Abyss', 'Highway', 'Chasm', 'Run'];
 
-const ANGLES: Record<Difficulty, [number, number]> = { easy: [46, 52], medium: [50, 56], hard: [54, 60] };
-const MAX_CURVE: Record<Difficulty, number> = { easy: 15, medium: 30, hard: 45 };
 
 export interface RandomCourseOptions {
   difficulty?: Difficulty;
@@ -24,7 +22,7 @@ export function randomCourse(seed: number, opts: RandomCourseOptions = {}): Cour
 
   const difficulty = opts.difficulty ?? pick(DIFFICULTIES);
   const theme = opts.theme ?? pick(THEMES);
-  const [angleLo, angleHi] = ANGLES[difficulty];
+  const [angleLo, angleHi] = DIFFICULTY_STYLE[difficulty].angle;
   const segments: Segment[] = [];
   const ramps = between(4, 8);
   let side: RampSide = rng() < 0.5 ? 'left' : 'right';
@@ -44,7 +42,7 @@ export function randomCourse(seed: number, opts: RandomCourseOptions = {}): Cour
       length: between(2500, 6000),
       angle: between(angleLo, angleHi),
       side,
-      curve: rng() < 0.5 ? 0 : between(-MAX_CURVE[difficulty], MAX_CURVE[difficulty]),
+      curve: rng() < 0.5 ? 0 : between(-DIFFICULTY_STYLE[difficulty].maxCurve, DIFFICULTY_STYLE[difficulty].maxCurve),
     });
   }
 

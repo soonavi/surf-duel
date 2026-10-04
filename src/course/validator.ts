@@ -15,6 +15,7 @@ import {
   type Segment,
   type ThemeName,
 } from './schema';
+import { cleanText } from '../util/text';
 import { START_SPEED, afterBooster, afterFall, afterRamp, maxGapLength, type SpeedRange } from './tuning';
 
 export interface ValidationResult {
@@ -67,14 +68,8 @@ function cleanName(value: unknown, r: Repairer): string {
     r.note('name: missing, used a default');
     return DEFAULT_NAME;
   }
-  const cleaned = value
-    .replace(/[\t\n\v\f\r]+/g, ' ') // whitespace controls become spaces
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001f\u007f]/g, '') // other controls are dropped
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, LIMITS.name.max)
-    .trim();
+  // Names are shown to other players (share codes, rooms), so they get the same cleaning as player names.
+  const cleaned = cleanText(value, LIMITS.name.max);
   if (cleaned.length === 0) {
     r.note('name: empty, used a default');
     return DEFAULT_NAME;

@@ -7,7 +7,8 @@ import type { PresenceEntry, RoomTransport, TransportHandlers } from './transpor
 
 let client: SupabaseClient | null = null;
 
-function getClient(): SupabaseClient {
+/** The shared browser client (publishable key). Created on first use. */
+export function supabaseClient(): SupabaseClient {
   if (!client) {
     const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
     const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
@@ -30,7 +31,7 @@ export function supabaseTransport(): RoomTransport {
 
   return {
     connect(topic: string, key: string, handlers: TransportHandlers): Promise<void> {
-      const ch = getClient().channel(topic, {
+      const ch = supabaseClient().channel(topic, {
         config: { presence: { key }, broadcast: { self: false, ack: false } },
       });
       channel = ch;
@@ -83,7 +84,7 @@ export function supabaseTransport(): RoomTransport {
       lastMeta = null;
       if (ch) {
         await ch.untrack().catch(() => undefined);
-        await getClient().removeChannel(ch);
+        await supabaseClient().removeChannel(ch);
       }
     },
   };

@@ -39,6 +39,16 @@ export const LIMITS = {
   maxHeadingDrift: 150,
 } as const;
 
+/**
+ * What each difficulty looks like: ramp angles and the most a single ramp
+ * bends. Used by the random generator and the AI system prompt.
+ */
+export const DIFFICULTY_STYLE: Readonly<Record<Difficulty, { angle: readonly [number, number]; maxCurve: number }>> = {
+  easy: { angle: [46, 52], maxCurve: 15 },
+  medium: { angle: [50, 56], maxCurve: 30 },
+  hard: { angle: [54, 60], maxCurve: 45 },
+};
+
 export const RampSegment = z.object({
   type: z.literal('ramp'),
   length: z.number().min(LIMITS.rampLength.min).max(LIMITS.rampLength.max),

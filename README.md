@@ -8,11 +8,15 @@ Browser multiplayer surf racing, inspired by the "surf" gamemode from Source-eng
 
 ```bash
 npm install
-cp .env.example .env.local   # Supabase URL + publishable key enable multiplayer
+cp .env.example .env.local   # Supabase + OpenAI settings (see below)
 npm run dev                  # http://localhost:5173
 ```
 
-Without Supabase settings the game still runs; the multiplayer buttons are simply hidden.
+Without Supabase settings the game still runs; the multiplayer buttons are simply hidden. Without OpenAI settings the AI generator says it isn't set up and offers a random course instead.
+
+`npm run dev` also runs the serverless functions in `api/` (a small dev-server middleware calls the same handlers Vercel does), so the whole game works locally without the Vercel CLI. Server-only variables from `.env.local` are loaded into the dev server's Node process for those handlers; only `VITE_`-prefixed ones ever reach the browser.
+
+The database schema lives in `supabase/migrations/`.
 
 | Script | What it does |
 |---|---|
@@ -61,6 +65,19 @@ Ghosts are recorded at 20 Hz and stored compactly (constant-velocity prediction 
 Records and ghosts are keyed by a fingerprint of the course spec, the layout version and the default physics (`courseKey.ts`), so a change to the course invalidates them instead of replaying ghosts through moved walls. Runs with autopilot, noclip or modified physics aren't saved.
 
 **Recording a dev ghost:** in `npm run dev`, finish a clean run and click **Save as dev ghost** on the results screen. The dev server writes the file into `src/course/ghosts/`; commit it.
+
+## AI course generator
+
+**Design a course with AI** on the start screen (or **✨ AI course / code…** in a room, for the host) takes a description up to 200 characters, with five example prompts to start from. The OpenAI API designs the course; the game builds it, shows a flyover preview, and gives it a 6-character share code (`/?course=K7M2QX`) so friends can race it. **Regenerate** asks again with the same prompt; the share-code box (or a pasted link) loads anyone's course.
+
+How it works:
+
+- `POST /api/generate-course` (`api/generate-course.ts` → `server/generateCourse.ts`) checks the prompt (≤ 200 chars), rate-limits by IP (6 per 10 minutes, 40 a day, counted in Postgres with the IP stored only as a keyed hash; failed attempts count too), then calls OpenAI with a hard 15 s timeout.
+- The call (`server/openaiDesigner.ts`) uses the Responses API with **Structured Outputs**: a strict JSON schema (`src/course/aiSchema.ts`) built from the same `LIMITS` as the zod schema, plus a system prompt that explains segment types, safe ranges, difficulty styles and theme moods, and fences the player's text off as a description rather than instructions. The model comes from `OPENAI_MODEL`; prompts aren't stored on OpenAI's side (`store: false`).
+- Whatever comes back goes through `validateCourse`, the same repair pass every course gets, so it is always beatable. The playability tests include deliberately extreme AI-style specs (every drop at max, max gaps, every ramp bending the same way, 40 segments) and the bot must finish each one from the start and from every checkpoint.
+- The course is saved in the `courses` table under a fresh code. Anyone can read courses (RLS: select for anon); only the service role in the API can write. If saving fails you still get to race it, just without a code.
+- **Never a dead end:** a timeout, an AI failure, the rate limit, a bad code or no network all show a friendly message with **Race a random course instead**.
+- In a room, AI and shared courses travel as their full spec (plus share code), random ones as their seed, and every client rebuilds the same geometry.
 
 ## Multiplayer
 

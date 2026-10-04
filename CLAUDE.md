@@ -35,11 +35,18 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - `vite.config.ts` is excluded from `tsc` (it needs Node types; `@types/node` isn't approved yet — ask before adding it for the Phase 5 `/api` functions).
 
 ## Multiplayer
-- Supabase project: the user chose to reuse an existing project, "soonavi's Project" (`vsnkrwunsbjkohfsxmpx`, org "listenwell", Pro plan). Realtime only so far — confirm with the user before adding tables/migrations there (Phases 5–6).
+- Supabase project: **surf-duel** (`olpbsvuyawxgybutkswf`, us-east-1, org "listenwell", $10/month, user-approved Oct 4 2026). It replaced "soonavi's Project", which turned out to be a live app with real users: never put game tables or keys there. Migrations live in `supabase/migrations/`; apply new ones to surf-duel only.
 - Realtime quotas count every delivered copy (Pro: 500 msg/s, 50 presence msg/s per project). Keep `batchInterval` budgeting; never send per-tick.
 - Supabase delivers a joiner's own presence ~1 s before existing members: `Room.connect` waits (`joinSettleMs`) before deciding "not found", picking a colour or stamping `joinedAt`. `MemoryHub(existingMembersDelayMs)` reproduces this in tests.
 - Shared races never pause: the loop keeps simulating with the mouse released; `FixedStepLoop.droppedTime` (hidden tab) is charged to the race clock.
 - Test multiplayer alone in the browser pane with an iframe of `/?room=CODE` (a separate app instance) and drive both apps' `loop.frame(performance.now())`.
+
+## Server (Phase 5)
+- `api/*.ts` are Vercel functions with the web signature (`export function POST(request: Request)`); logic lives in `server/` with injected deps so it's unit-tested. `npm run dev` runs them through the `devApi()` middleware in `vite.config.ts`.
+- `tsconfig.node.json` typechecks `api/`, `server/` and `vite.config.ts` with Node types (`@types/node`, approved Oct 4 2026); `npm run typecheck` runs both configs.
+- Server env: `OPENAI_API_KEY`, `OPENAI_MODEL`, `SUPABASE_SERVICE_ROLE_KEY`, plus `VITE_SUPABASE_URL` (public). Never import `server/` from `src/`.
+- Course share codes: 6 chars `[A-HJ-NP-Z2-9]` (`course/shareCode.ts`, enforced by a DB check). Room codes stay 4 letters.
+- The `courses` table holds a test row `TESTQA` for checking share links without OpenAI; delete it before submission.
 
 ## Notes for upcoming phases
 - Tutorial coach (`game/tutorialCoach.ts`, pulled forward from Phase 7 at the user's request): lessons keyed to layout pieces + held keys, notes for events. Notes never replace the lesson (checkpoint gates sit where you switch keys). Its side logic must match the bot's (whichever face you're on) — the bot-run test asserts no warnings and every lesson in order.
@@ -50,8 +57,8 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - [x] Phase 1 — movement physics + tests on a test ramp (user: "this feels like surf")
 - [x] Phase 2 — course schema, builder, validator, 3 courses, themes
 - [x] Phase 3 — single-player race loop (dev ghosts: only speed-demon.json has arrived; tutorial / easy-cruise still use the bot)
-- [~] Phase 4 — multiplayer rooms (built; awaiting playtest)
-- [ ] Phase 5 — AI course generator
+- [x] Phase 4 — multiplayer rooms (user: "the 2 player works")
+- [~] Phase 5 — AI course generator (built; live OpenAI call untested until the user adds OPENAI_API_KEY / OPENAI_MODEL / SUPABASE_SERVICE_ROLE_KEY to .env.local)
 - [ ] Phase 6 — leaderboards
 - [ ] Phase 7 — polish
 - [ ] Phase 8 — deploy + submission assets

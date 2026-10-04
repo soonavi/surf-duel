@@ -12,6 +12,21 @@ function lPath(): TrackPath {
 }
 
 describe('TrackPath', () => {
+  it('interpolates a point at any distance along the path', () => {
+    const path = lPath();
+    const out = new Vector3();
+    expect(path.pointAt(1050, out)).toBe(0); // heading on the first leg
+    expect(out.z).toBeCloseTo(-1050, 6);
+    expect(out.y).toBeCloseTo(105, 6);
+    path.pointAt(3000, out);
+    expect(out.x).toBeCloseTo(-1000, 6);
+    // Clamped at both ends.
+    path.pointAt(-50, out);
+    expect(out.z).toBeCloseTo(0, 6);
+    path.pointAt(99999, out);
+    expect(out.x).toBeCloseTo(-2000, 6);
+  });
+
   it('accumulates distance along the samples', () => {
     const path = lPath();
     expect(path.length).toBeCloseTo(4000, 6);

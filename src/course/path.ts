@@ -49,6 +49,33 @@ export class TrackPath {
     return s;
   }
 
+  /** The point `s` units along the path (clamped to its ends), written into `out`. Returns the heading there. */
+  pointAt(s: number, out: Vector3): number {
+    const n = this.samples.length;
+    if (n === 0) throw new Error('TrackPath is empty');
+    if (s <= 0 || n === 1) {
+      out.copy(this.samples[0]!.pos);
+      return this.samples[0]!.heading;
+    }
+    if (s >= this.length) {
+      out.copy(this.samples[n - 1]!.pos);
+      return this.samples[n - 1]!.heading;
+    }
+    // Last sample at or before s.
+    let lo = 0;
+    let hi = n - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (this.samples[mid]!.s <= s) lo = mid;
+      else hi = mid;
+    }
+    const a = this.samples[lo]!;
+    const b = this.samples[hi]!;
+    const t = b.s > a.s ? (s - a.s) / (b.s - a.s) : 0;
+    out.lerpVectors(a.pos, b.pos, t);
+    return a.heading;
+  }
+
   add(pos: Vector3, heading: number, piece: number, floorY: number): void {
     const prev = this.samples[this.samples.length - 1];
     const s = prev ? prev.s + Math.hypot(pos.x - prev.pos.x, pos.z - prev.pos.z) : 0;

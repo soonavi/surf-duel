@@ -1,6 +1,6 @@
 import { formatDelta, formatTime } from '../game/time';
 
-export type OverlayScreen = 'start' | 'loading' | 'lobby' | 'pause' | 'results' | 'unsupported' | 'none';
+export type OverlayScreen = 'start' | 'loading' | 'lobby' | 'pause' | 'results' | 'unsupported' | 'generate' | 'preview' | 'none';
 
 export interface CourseCard {
   id: string;
@@ -104,6 +104,7 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
  */
 export class Overlay {
   onEngage: (() => void) | null = null;
+  onOpenGenerator: (() => void) | null = null;
   onSelectCourse: ((id: string) => void) | null = null;
   onRestart: (() => void) | null = null;
   onMenu: (() => void) | null = null;
@@ -126,7 +127,7 @@ export class Overlay {
   onBackToLobby: (() => void) | null = null;
 
   private readonly root: HTMLElement;
-  private readonly screens: Record<Exclude<OverlayScreen, 'none'>, HTMLElement>;
+  private readonly screens: Partial<Record<Exclude<OverlayScreen, 'none'>, HTMLElement>>;
   private readonly messages: HTMLElement[];
   private readonly debugHud: HTMLElement;
   private readonly crosshair: HTMLElement;
@@ -161,6 +162,7 @@ export class Overlay {
           <p class="pitch">Slide the ramps. Race your friends. Build courses with AI.</p>
           <div class="course-list" role="group" aria-label="Choose a course"></div>
           <button class="btn btn--primary" data-action="engage" type="button">Play solo</button>
+          <button class="btn btn--ai" data-action="open-generator" type="button">Design a course with AI</button>
           <div class="mp-block">
             <span class="mp-block__label">Multiplayer</span>
             <button class="btn btn--ghost btn--small" data-action="create-room" type="button">Create room</button>
@@ -179,7 +181,7 @@ export class Overlay {
             <span><kbd>Space</kbd> jump (hold to bunny-hop) &nbsp;·&nbsp; <kbd>R</kbd> last checkpoint &nbsp;·&nbsp;
             <kbd>Shift</kbd><kbd>R</kbd> restart &nbsp;·&nbsp; <kbd>Esc</kbd> pause</span>
           </p>
-          <p class="phase-tag">Phase 4 · multiplayer rooms</p>
+          <p class="phase-tag">Phase 5 · AI course generator</p>
         </div>
       </section>
 
@@ -266,8 +268,15 @@ export class Overlay {
     this.crosshair.hidden = screen !== 'none';
     if (screen !== 'none') this.setMessage('');
     // Move focus to the screen's main button for keyboard players.
-    const primary = screen === 'none' ? null : this.screens[screen].querySelector<HTMLButtonElement>('.btn--primary:not([disabled])');
+    const primary = screen === 'none' ? null : (this.screens[screen]?.querySelector<HTMLButtonElement>('.btn--primary:not([disabled])') ?? null);
     primary?.focus({ preventScroll: true });
+  }
+
+  /** Add a screen built elsewhere (the AI generator's), so show() manages it with the rest. */
+  registerScreen(name: 'generate' | 'preview', element: HTMLElement): void {
+    element.hidden = this.current !== name;
+    this.root.append(element);
+    this.screens[name] = element;
   }
 
   setMessage(text: string): void {
@@ -300,9 +309,10 @@ export class Overlay {
     this.pauseText.hidden = !room;
     this.pauseText.textContent =
       mode === 'room-grab' ? 'Click to take control of your surfer.' : 'The race keeps going without you — click to jump back in.';
-    const resume = this.screens.pause.querySelector<HTMLButtonElement>('[data-action="engage"]');
+    const pause = this.screens.pause!; // built in the constructor
+    const resume = pause.querySelector<HTMLButtonElement>('[data-action="engage"]');
     if (resume) resume.textContent = mode === 'room-grab' ? 'Take control' : 'Resume';
-    for (const e of this.screens.pause.querySelectorAll<HTMLElement>('[data-mode]')) e.hidden = e.dataset.mode !== (room ? 'room' : 'solo');
+    for (const e of pause.querySelectorAll<HTMLElement>('[data-mode]')) e.hidden = e.dataset.mode !== (room ? 'room' : 'solo');
   }
 
   setCourses(cards: readonly CourseCard[], selected: string): void {
@@ -584,6 +594,7 @@ export class Overlay {
       menu: () => this.onMenu?.(),
       'leave-race': () => this.onLeaveRace?.(),
       'create-room': () => this.onCreateRoom?.(),
+      'open-generator': () => this.onOpenGenerator?.(),
     };
     for (const btn of scope.querySelectorAll<HTMLButtonElement>('[data-action]')) {
       if (btn.dataset.bound) continue;

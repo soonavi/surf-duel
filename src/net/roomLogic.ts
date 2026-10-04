@@ -2,6 +2,7 @@
  * Pure room rules: codes, names, colours, host election, capacity, send-rate
  * budgeting and live ranking. No networking here, so it's all unit-tested.
  */
+import { cleanText } from '../util/text';
 
 export const MAX_PLAYERS = 8;
 export const NAME_MAX = 16;
@@ -33,22 +34,9 @@ export function normalizeRoomCode(input: string): string | null {
   return /^[A-HJ-NP-Z]{4}$/.test(code) ? code : null;
 }
 
-// A short list is enough for display names; the leaderboard API filters again server-side.
-const BLOCKED = ['fuck', 'shit', 'cunt', 'nigg', 'fag', 'bitch', 'whore', 'slut', 'rape'];
-
 export function sanitizeName(raw: unknown, fallback = 'Surfer'): string {
   if (typeof raw !== 'string') return fallback;
-  let name = raw
-    .replace(/[​-‏⁠﻿]/g, '') // zero-width and direction marks
-    .replace(/[\t\n\v\f\r]+/g, ' ')
-    // eslint-disable-next-line no-control-regex
-    .replace(/[\u0000-\u001F\u007F]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  for (const word of BLOCKED) {
-    name = name.replace(new RegExp(word, 'gi'), (m) => '*'.repeat(m.length));
-  }
-  name = Array.from(name).slice(0, NAME_MAX).join('').trim();
+  const name = cleanText(raw, NAME_MAX);
   return name.length > 0 ? name : fallback;
 }
 

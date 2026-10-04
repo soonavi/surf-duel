@@ -55,3 +55,57 @@ describe('random courses', () => {
     expect(failures).toEqual([]);
   }, 180_000);
 });
+
+/**
+ * AI output stays inside the JSON schema's ranges but can be far stranger
+ * than the random generator: every knob at its extreme. Whatever the model
+ * sends, validateCourse + the layout must still produce a beatable course.
+ */
+describe('extreme AI-style courses', () => {
+  const ramp = (angle: number, side: 'left' | 'right' | 'both', curve: number, length = 9000) => ({ type: 'ramp', length, angle, side, curve });
+  const alt = (i: number): 'left' | 'right' => (i % 2 === 0 ? 'right' : 'left');
+  const extremes: Record<string, unknown> = {
+    'max drop after every ramp, all 60°': {
+      name: 'Freefall', theme: 'void', difficulty: 'hard',
+      segments: Array.from({ length: 8 }, (_, i) => [ramp(60, alt(i), 0), { type: 'drop', height: 2500 }]).flat(),
+    },
+    'longest gaps everywhere': {
+      name: 'Air Time', theme: 'ice', difficulty: 'hard',
+      segments: Array.from({ length: 8 }, (_, i) => [ramp(58, alt(i), 0, 3000), { type: 'gap', length: 3000 }]).flat(),
+    },
+    'every ramp bends hard the same way': {
+      name: 'Spiral', theme: 'neon', difficulty: 'hard',
+      segments: Array.from({ length: 10 }, (_, i) => ramp(56, alt(i), 45)),
+    },
+    'two-sided ridges, shortest ramps': {
+      name: 'Knife Edge', theme: 'desert', difficulty: 'medium',
+      segments: Array.from({ length: 10 }, () => ramp(52, 'both', 0, 1500)),
+    },
+    'same side every time, boosters between': {
+      name: 'One Way', theme: 'lava', difficulty: 'easy',
+      segments: Array.from({ length: 8 }, () => [ramp(46, 'right', -15), { type: 'booster', strength: 800 }]).flat(),
+    },
+    'forty segments of everything': {
+      name: 'Kitchen Sink', theme: 'lava', difficulty: 'hard',
+      segments: Array.from({ length: 40 }, (_, i) =>
+        [ramp(60, alt(i), i % 3 === 0 ? 45 : -45, 2000), { type: 'drop', height: 2500 }, { type: 'gap', length: 3000 }, { type: 'booster', strength: 800 }, { type: 'checkpoint' }][i % 5],
+      ),
+    },
+  };
+
+  for (const [label, spec] of Object.entries(extremes)) {
+    it(`${label}: beatable from the start and every checkpoint`, () => {
+      const built = buildCourse(spec);
+      const failures: string[] = [];
+      for (const style of STYLES) {
+        const r = simulateRun(built, { hop: style.hop }, 240);
+        if (!r.finished || r.deaths > 0) failures.push(`${style.name}: finished=${r.finished} deaths=${r.deaths}`);
+      }
+      for (let cp = 1; cp < built.checkpoints.length; cp++) {
+        const r = simulateRun(built, { hop: false }, 240, cp);
+        if (!r.finished || r.deaths > 0) failures.push(`from cp ${cp}: finished=${r.finished} deaths=${r.deaths}`);
+      }
+      expect(failures).toEqual([]);
+    }, 120_000);
+  }
+});
