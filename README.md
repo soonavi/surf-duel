@@ -23,16 +23,29 @@ npm run dev                  # http://localhost:5173
 
 Press <kbd>`</kbd> (backtick) to toggle it. It's on in `npm run dev`, and in any build with `?dev` in the URL. Physics tweaks persist in localStorage until you press **Reset to defaults**; **Copy physics JSON** copies the current values.
 
-## Current controls (Phase 1 movement playtest)
+## Controls
 
 | Key | Action |
 |---|---|
 | Mouse | Look (pointer lock, raw input where supported) |
 | W A S D | Move / air-strafe |
 | Space | Jump (hold to auto-hop) |
-| R | Respawn |
+| R | Back to last checkpoint |
+| Shift + R | Restart the course |
 | Esc | Pause (release mouse) |
-| N | Toggle noclip (dev builds only; Space/C up/down, Shift fast) |
+| B | Autopilot: watch the bot surf the course (dev builds) |
+| N | Noclip (dev builds; Space/C up/down, Shift fast) |
+
+## Courses
+
+A course is a small JSON spec (`src/course/schema.ts`): a name, a theme (`neon`, `desert`, `ice`, `lava`, `void`), a difficulty, and a list of segments — `ramp` (length, angle 46–70°, side, curve), `drop`, `gap`, `booster`, `checkpoint`.
+
+- `validator.ts` repairs anything (bad numbers, unknown types, two drops in a row, gaps too long for the speed riders will have, courses too long/short or looping back on themselves) and never throws.
+- `layout.ts` walks a track cursor along the *riding line* and sizes every transition from a speed model with a cautious and a fast rider: the cautious one must clear the next ramp's ridge, the fast one must still land on it (ramps are lengthened and kept straight through the landing zone). Checkpoint pads are inserted after every three ramps.
+- `builder.ts` turns the layout into merged geometry (a handful of draw calls), trigger volumes and a track path (progress, kill floor).
+- `playability.test.ts` runs a bot through every shipped course and 40 random ones in the real physics, riding cautiously and aggressively; every run must finish without dying.
+
+Shipped courses live in `src/course/courses/*.json`. Ramp colour tells you which key to hold: each theme uses one colour for ramps on your right (hold D) and another for ramps on your left (hold A).
 
 ## Movement model
 

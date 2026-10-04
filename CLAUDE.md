@@ -16,14 +16,21 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Player `pos` is the capsule's bottom (feet); camera = feet + `EYE_HEIGHT`.
 - Collision resolves the deepest contact first (prevents seam "rampbug"); keep it that way when touching `collision.ts`.
 
+## Course layout invariants (keep `playability.test.ts` green when touching `src/course/`)
+- Every spec goes through `validateCourse` (repairs, never throws) before `planCourse`/`buildCourse`.
+- A cautious rider (speed model `lo`) must arrive above the next ramp's **ridge** + clearance; alternating-side transitions add `SLIDE_TOLERANCE·(tanθprev + tanθnext)` because sliding down one face moves you toward the next ridge.
+- Ramps after pads tuck under the pad (no gap to fall through). Ramps stay straight through the fast rider's landing zone, then curve.
+- Ramp colour is semantic: `rampRight` = ramp on your right (hold D), `rampLeft` = hold A.
+- The bot (`course/bot.ts`) faces the *local* track heading; looking ahead on curves makes its strafe brake.
+
 ## Notes for upcoming phases
-- Ramp angle 45° gives normal.y ≈ 0.707 ≥ 0.7 → walkable, not surfable. The Phase 2 validator should clamp ramp angles to ≥ 46°.
-- On pitched ramps the world-space grid shader draws diagonal lines; Phase 2 ramp material should use ramp-local UVs so lines run along/across the ramp.
+- Tutorial on-screen prompts (keyed to segment index, detect success) are a Phase 7 polish item; the tutorial course layout ships now.
+- `randomCourse(seed)` is the Phase 5 fallback when AI generation fails; `SurfBot` can drive the Phase 7 attract-mode camera.
 
 ## Phase status
 - [x] Phase 0 — scaffold, fixed-timestep loop, pointer lock, dev tuning panel
-- [~] Phase 1 — movement physics + tests on a test ramp (built; awaiting the user's "feels like surf" sign-off)
-- [ ] Phase 2 — course schema, builder, validator, 3 courses, themes
+- [x] Phase 1 — movement physics + tests on a test ramp (user: "this feels like surf")
+- [~] Phase 2 — course schema, builder, validator, 3 courses, themes (built; awaiting playtest)
 - [ ] Phase 3 — single-player race loop
 - [ ] Phase 4 — multiplayer rooms
 - [ ] Phase 5 — AI course generator

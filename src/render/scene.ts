@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { createSky, type SkyColors } from './materials';
+import { createSky, setSkyColors, type SkyColors } from './materials';
+import type { Theme } from './themes';
 
 const CAMERA_NEAR = 4;
 const CAMERA_FAR = 100_000;
@@ -33,6 +34,16 @@ export class SceneView {
     this.scene.add(this.sky);
     this.scene.background = new THREE.Color(DEFAULT_SKY.horizon);
     this.scene.fog = new THREE.Fog(DEFAULT_SKY.horizon, 5_000, 32_000);
+  }
+
+  /** Sky gradient, background and fog for a course theme. */
+  applyTheme(theme: Theme): void {
+    setSkyColors(this.sky, theme.sky);
+    (this.scene.background as THREE.Color).set(theme.sky.horizon);
+    const fog = this.scene.fog as THREE.Fog;
+    fog.color.set(theme.sky.horizon);
+    fog.near = theme.fog.near;
+    fog.far = theme.fog.far;
   }
 
   get canvas(): HTMLCanvasElement {

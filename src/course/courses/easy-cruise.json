@@ -1,0 +1,16 @@
+{
+  "name": "Easy Cruise",
+  "theme": "desert",
+  "difficulty": "easy",
+  "segments": [
+    { "type": "ramp", "length": 5000, "angle": 55, "side": "right", "curve": -10 },
+    { "type": "ramp", "length": 5500, "angle": 55, "side": "left", "curve": 15 },
+    { "type": "booster", "strength": 250 },
+    { "type": "ramp", "length": 6000, "angle": 57, "side": "right", "curve": 20 },
+    { "type": "checkpoint" },
+    { "type": "ramp", "length": 5000, "angle": 55, "side": "left", "curve": -20 },
+    { "type": "drop", "height": 700 },
+    { "type": "ramp", "length": 6500, "angle": 58, "side": "right", "curve": 0 },
+    { "type": "ramp", "length": 6000, "angle": 56, "side": "left", "curve": -15 }
+  ]
+}

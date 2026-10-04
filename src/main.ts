@@ -4,8 +4,9 @@ import { App } from './game/app';
 const root = document.getElementById('app');
 if (!root) throw new Error('#app element missing from index.html');
 
-const devMode = import.meta.env.DEV || new URLSearchParams(window.location.search).has('dev');
-const app = new App(root, devMode);
+const params = new URLSearchParams(window.location.search);
+const devMode = import.meta.env.DEV || params.has('dev');
+const app = new App(root, devMode, params.get('course') ?? undefined);
 app.start();
 
 if (devMode) {

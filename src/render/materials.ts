@@ -84,10 +84,88 @@ export function createGridMaterial(opts: GridMaterialOptions): THREE.ShaderMater
   });
 }
 
+const rampVertexShader = /* glsl */ `
+  #include <common>
+  #include <fog_pars_vertex>
+  varying vec2 vUv;
+  varying vec3 vNormal;
+  void main() {
+    vUv = uv;
+    vNormal = normalize(mat3(modelMatrix) * normal);
+    vec4 mvPosition = viewMatrix * modelMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    #include <fog_vertex>
+  }
+`;
+
+const rampFragmentShader = /* glsl */ `
+  #include <common>
+  #include <fog_pars_fragment>
+  uniform vec3 uBase;
+  uniform vec3 uLine;
+  uniform vec3 uLightDir;
+  varying vec2 vUv;
+  varying vec3 vNormal;
+
+  float lines(float coord, float spacing, float width) {
+    float c = coord / spacing;
+    float d = fwidth(c);
+    float g = abs(fract(c - 0.5) - 0.5) / max(d, 1e-5);
+    float fade = 1.0 - smoothstep(0.1, 0.4, d);
+    return (1.0 - min(g / width, 1.0)) * fade;
+  }
+
+  void main() {
+    vec3 n = normalize(vNormal);
+    // u runs along the ramp: "rungs" across it flash past and make speed readable.
+    float rungs = lines(vUv.x, 256.0, 1.6);
+    float rails = lines(vUv.y, 128.0, 1.0);
+    // Bright stripe along the ridge so the top edge always reads.
+    float ridgeW = fwidth(vUv.y) * 2.5 + 10.0;
+    float ridge = 1.0 - smoothstep(ridgeW * 0.5, ridgeW, vUv.y);
+    float light = 0.5 + 0.5 * max(dot(n, uLightDir), 0.0);
+    vec3 col = uBase * light;
+    col = mix(col, uLine, max(rungs * 0.9, rails * 0.35));
+    col = mix(col, uLine, ridge);
+    gl_FragColor = vec4(col, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+  }
+`;
+
+/**
+ * Ramp surfaces: grid lines in ramp-local space (UV u = distance along the
+ * ramp, v = distance down the face), so lines follow the ramp around curves.
+ */
+export function createRampMaterial(colors: { base: THREE.ColorRepresentation; line: THREE.ColorRepresentation }): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.merge([
+      THREE.UniformsLib.fog,
+      {
+        uBase: { value: new THREE.Color(colors.base) },
+        uLine: { value: new THREE.Color(colors.line) },
+        uLightDir: { value: LIGHT_DIR.clone() },
+      },
+    ]),
+    vertexShader: rampVertexShader,
+    fragmentShader: rampFragmentShader,
+    fog: true,
+  });
+}
+
 export interface SkyColors {
   zenith: THREE.ColorRepresentation;
   horizon: THREE.ColorRepresentation;
   nadir: THREE.ColorRepresentation;
+}
+
+/** Recolour an existing sky in place. */
+export function setSkyColors(sky: THREE.Mesh, colors: SkyColors): void {
+  const u = (sky.material as THREE.ShaderMaterial).uniforms;
+  u.uZenith!.value.set(colors.zenith);
+  u.uHorizon!.value.set(colors.horizon);
+  u.uNadir!.value.set(colors.nadir);
 }
 
 /** Big inverted sphere with a vertical gradient. Follows the camera. */

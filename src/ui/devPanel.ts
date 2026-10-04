@@ -2,6 +2,9 @@ import GUI from 'lil-gui';
 import { z } from 'zod';
 import { DEFAULT_PHYSICS, PHYSICS_LIMITS, physics, type PhysicsParams } from '../physics/constants';
 import { SETTINGS_LIMITS } from '../game/settings';
+import { SHIPPED_COURSES } from '../course/courses';
+import { randomCourse } from '../course/random';
+import { THEMES } from '../course/schema';
 import type { App } from '../game/app';
 
 const STORAGE_KEY = 'surfduel.dev.physics.v1';
@@ -51,7 +54,40 @@ export function createDevPanel(app: App): GUI {
     gui.title(app.tuningModified ? 'Tuning — modified  ( ` )' : 'Tuning  ( ` to hide )');
   };
 
-  const phys = gui.addFolder('Physics');
+  // --- Course -------------------------------------------------------------
+  const course = gui.addFolder('Course');
+  const courseState = {
+    course: SHIPPED_COURSES[0]!.id,
+    seed: 1,
+    load: () => {
+      if (courseState.course === 'random') {
+        const built = app.loadCourse(randomCourse(courseState.seed));
+        console.info(`[surf-duel] random seed ${courseState.seed}:`, built.course);
+      } else {
+        app.selectCourse(courseState.course);
+      }
+    },
+    nextSeed: () => {
+      courseState.seed++;
+      seedCtrl.updateDisplay();
+      courseState.course = 'random';
+      courseCtrl.updateDisplay();
+      courseState.load();
+    },
+    logSpec: () => console.info('[surf-duel] course spec:', JSON.stringify(app.course.course, null, 2)),
+  };
+  const courseCtrl = course.add(courseState, 'course', [...SHIPPED_COURSES.map((c) => c.id), 'random']).name('course');
+  const seedCtrl = course.add(courseState, 'seed', 1, 9999, 1).name('random seed');
+  course.add(courseState, 'load').name('Load course');
+  course.add(courseState, 'nextSeed').name('Next random seed');
+  course
+    .add(app.debug, 'themeOverride', ['auto', ...THEMES])
+    .name('theme')
+    .onChange(() => app.applyTheme());
+  course.add(courseState, 'logSpec').name('Log spec JSON');
+
+  // --- Physics ------------------------------------------------------------
+  const phys = gui.addFolder('Physics').close();
   for (const key of PHYSICS_KEYS) {
     const { min, max, step } = PHYSICS_LIMITS[key];
     phys.add(physics, key, min, max, step).onChange(() => {
@@ -81,18 +117,21 @@ export function createDevPanel(app: App): GUI {
   phys.add(physActions, 'reset').name('Reset to defaults');
   const copyCtrl = phys.add(physActions, 'copy').name('Copy physics JSON');
 
-  const input = gui.addFolder('Input & view');
+  // --- Input & view ---------------------------------------------------------
+  const input = gui.addFolder('Input & view').close();
   const { sensitivity, fov } = SETTINGS_LIMITS;
   input.add(app.settings, 'sensitivity', sensitivity.min, sensitivity.max, sensitivity.step).onChange(() => app.applySettings());
   input.add(app.settings, 'invertY').name('invert Y').onChange(() => app.applySettings());
   input.add(app.settings, 'rawInput').name('raw input (next lock)').onChange(() => app.applySettings());
   input.add(app.settings, 'fov', fov.min, fov.max, fov.step).name('FOV (vertical)').onChange(() => app.applySettings());
 
+  // --- Debug ----------------------------------------------------------------
   const debug = gui.addFolder('Debug');
-  debug.add(app.debug, 'showHud').name('debug readout').onChange(() => app.applyDebug());
+  debug.add(app.debug, 'autopilot').name('autopilot (B)').listen();
   debug.add(app.debug, 'noclip').name('noclip (N)').listen();
   debug.add(app.debug, 'flySpeed', 100, 5000, 50).name('noclip speed');
-  debug.add({ respawn: () => app.respawn() }, 'respawn').name('Respawn (R)');
+  debug.add(app.debug, 'showHud').name('debug readout').onChange(() => app.applyDebug());
+  debug.add({ restart: () => app.restart() }, 'restart').name('Restart course (Shift+R)');
 
   refreshModified();
 
