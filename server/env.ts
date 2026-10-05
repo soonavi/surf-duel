@@ -3,8 +3,8 @@
  * functions (and the dev server's /api middleware), never by the client.
  *
  *   OPENAI_API_KEY, OPENAI_MODEL      required for generation
- *   SUPABASE_SERVICE_ROLE_KEY         optional: without it courses still
- *   VITE_SUPABASE_URL                 generate, but get no share code
+ *   SUPABASE_SERVICE_ROLE_KEY         required too: the spending caps live in
+ *   VITE_SUPABASE_URL                 the database, and without them we refuse
  */
 import { createHmac } from 'node:crypto';
 import OpenAI from 'openai';
@@ -34,7 +34,6 @@ export function generateDeps(): GenerateDeps | null {
     design: openAiDesigner(openai, model),
     store: db ? supabaseStore(db) : null,
     hashIp: (ip) => createHmac('sha256', hmacKey).update(ip).digest('hex').slice(0, 32),
-    now: () => Date.now(),
     random: Math.random,
   };
   cached = { key: cacheKey, deps };

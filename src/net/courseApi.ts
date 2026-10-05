@@ -17,7 +17,7 @@ export interface GeneratedCourse {
   prompt: string;
 }
 
-export type GenerateFailure = 'bad-request' | 'rate-limited' | 'timeout' | 'ai-failed' | 'unavailable' | 'network';
+export type GenerateFailure = 'bad-request' | 'rate-limited' | 'budget' | 'timeout' | 'ai-failed' | 'unavailable' | 'network';
 
 export type GenerateOutcome = { ok: true; value: GeneratedCourse } | { ok: false; reason: GenerateFailure; message: string };
 
@@ -30,11 +30,12 @@ const CODE = /^[A-HJ-NP-Z2-9]{6}$/;
 const Success = z.object({ ok: z.literal(true), code: z.string().regex(CODE).nullable(), course: z.unknown(), prompt: z.string().max(400) });
 const Failure = z.object({ ok: z.literal(false), reason: z.string().max(40), error: z.string().max(300) });
 
-const KNOWN: readonly GenerateFailure[] = ['bad-request', 'rate-limited', 'timeout', 'ai-failed', 'unavailable', 'network'];
+const KNOWN: readonly GenerateFailure[] = ['bad-request', 'rate-limited', 'budget', 'timeout', 'ai-failed', 'unavailable', 'network'];
 
 const DEFAULT_MESSAGE: Record<GenerateFailure, string> = {
   'bad-request': 'Try describing the course a different way.',
   'rate-limited': "You're generating courses fast! Give it a few minutes.",
+  budget: "Today's AI course budget is used up. Race a random course instead!",
   timeout: 'The course designer took too long.',
   'ai-failed': "The course designer couldn't make that one.",
   unavailable: "AI course generation isn't available right now.",

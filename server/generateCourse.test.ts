@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { RATE_LIMIT, handleGenerate, type CourseRow, type CourseStore, type GenerateDeps } from './generateCourse';
+import { BUDGET, RATE_LIMIT, handleGenerate, type ClaimLimits, type ClaimResult, type CourseRow, type CourseStore, type GenerateDeps } from './generateCourse';
 import { createRng } from '../src/util/rng';
+import { COURSE_JSON_SCHEMA, COURSE_SYSTEM_PROMPT, PROMPT_MAX_CHARS, courseUserMessage } from '../src/course/aiSchema';
 
 const GOOD = {
   name: 'Molten Mile',
@@ -15,19 +16,30 @@ const GOOD = {
   ],
 };
 
+const DAY_MS = 24 * 60 * 60_000;
+
+/** Same rules as the claim_generation SQL function, in memory. */
 class FakeStore implements CourseStore {
   rows: CourseRow[] = [];
   requests: { ipHash: string; at: number }[] = [];
+  lifetimeTotal = 0;
   takenCodes = new Set<string>();
   failInsert = false;
-  failCount = false;
+  failClaim = false;
+  lastLimits: ClaimLimits | null = null;
   constructor(private readonly now: () => number) {}
-  async countRecent(ipHash: string, sinceMs: number): Promise<number> {
-    if (this.failCount) throw new Error('db down');
-    return this.requests.filter((r) => r.ipHash === ipHash && r.at >= sinceMs).length;
-  }
-  async logRequest(ipHash: string): Promise<void> {
-    this.requests.push({ ipHash, at: this.now() });
+  async claim(ipHash: string, limits: ClaimLimits): Promise<ClaimResult> {
+    if (this.failClaim) throw new Error('db down');
+    this.lastLimits = limits;
+    const t = this.now();
+    const since = (ms: number, ip?: string) => this.requests.filter((r) => r.at > t - ms && (ip === undefined || r.ipHash === ip)).length;
+    if (this.lifetimeTotal >= limits.lifetime) return 'lifetime';
+    if (since(DAY_MS) >= limits.globalPerDay) return 'global-day';
+    if (since(DAY_MS, ipHash) >= limits.perIpPerDay) return 'ip-day';
+    if (since(limits.windowMs, ipHash) >= limits.perIpPerWindow) return 'ip-window';
+    this.requests.push({ ipHash, at: t });
+    this.lifetimeTotal++;
+    return 'ok';
   }
   async insertCourse(row: CourseRow): Promise<'ok' | 'duplicate'> {
     if (this.failInsert) throw new Error('db down');
@@ -48,7 +60,6 @@ function setup(design: GenerateDeps['design'] = async () => GOOD) {
     },
     store,
     hashIp: (ip) => `h:${ip}`,
-    now: () => t,
     random: createRng(1),
   };
   return { deps, store, calls, advance: (ms: number) => (t += ms) };
@@ -167,12 +178,67 @@ describe('handleGenerate: rate limit', () => {
     expect(store.requests).toHaveLength(1);
   });
 
-  it('falls back to a per-instance limit when the database is unreachable', async () => {
+  it('passes the limits to the database, which enforces them in one locked step', async () => {
     const { deps, store } = setup();
-    store.failCount = true;
-    const statuses: number[] = [];
-    for (let i = 0; i <= RATE_LIMIT.perWindow; i++) statuses.push((await handleGenerate({ prompt: 'a' }, '9.9.9.9', deps)).status);
-    expect(statuses.slice(0, -1).every((s) => s === 200)).toBe(true);
-    expect(statuses.at(-1)).toBe(429);
+    await handleGenerate({ prompt: 'a' }, '1.2.3.4', deps);
+    expect(store.lastLimits).toEqual({
+      windowMs: RATE_LIMIT.windowMs,
+      perIpPerWindow: RATE_LIMIT.perWindow,
+      perIpPerDay: RATE_LIMIT.perDay,
+      globalPerDay: BUDGET.perDay,
+      lifetime: BUDGET.lifetime,
+    });
+  });
+});
+
+describe('handleGenerate: spending caps (all players together)', () => {
+  it(`stops after ${BUDGET.perDay} generations a day across everyone`, async () => {
+    const { deps, calls, advance } = setup();
+    for (let i = 0; i < BUDGET.perDay; i++) {
+      expect((await handleGenerate({ prompt: 'a' }, `10.0.${Math.floor(i / 200)}.${i % 200}`, deps)).status).toBe(200);
+    }
+    const capped = await handleGenerate({ prompt: 'a' }, '99.99.99.99', deps);
+    expect(capped.status).toBe(429);
+    expect(capped.body).toMatchObject({ ok: false, reason: 'budget' });
+    expect(calls).toHaveLength(BUDGET.perDay);
+    advance(DAY_MS + 1);
+    expect((await handleGenerate({ prompt: 'a' }, '99.99.99.99', deps)).status).toBe(200);
+  });
+
+  it(`stops for good after ${BUDGET.lifetime} generations in total`, async () => {
+    const { deps, store, calls } = setup();
+    store.lifetimeTotal = BUDGET.lifetime;
+    const res = await handleGenerate({ prompt: 'a' }, '1.2.3.4', deps);
+    expect(res.status).toBe(429);
+    expect(res.body).toMatchObject({ ok: false, reason: 'budget' });
+    expect(calls).toEqual([]);
+  });
+
+  it('really does send fewer input tokens than the cost math assumes', () => {
+    // Under 3 characters per token is a pessimistic count for English text and JSON.
+    const chars = COURSE_SYSTEM_PROMPT.length + JSON.stringify(COURSE_JSON_SCHEMA).length + courseUserMessage('x'.repeat(PROMPT_MAX_CHARS)).length;
+    expect(chars / 3).toBeLessThan(BUDGET.maxInputTokens);
+  });
+
+  it('keeps the worst case under the $5 prepaid credit at gpt-5.4-nano prices', () => {
+    // $0.20 per million input tokens, $1.25 per million output tokens (Oct 2026).
+    const worstCall = BUDGET.maxInputTokens * 0.2e-6 + BUDGET.maxOutputTokens * 1.25e-6;
+    expect(worstCall * BUDGET.lifetime).toBeLessThan(5);
+  });
+
+  it('refuses to call the AI when it cannot check the caps (database down)', async () => {
+    const { deps, store, calls } = setup();
+    store.failClaim = true;
+    const res = await handleGenerate({ prompt: 'a' }, '1.2.3.4', deps);
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({ ok: false, reason: 'unavailable' });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses to call the AI without a database at all', async () => {
+    const { deps, calls } = setup();
+    const res = await handleGenerate({ prompt: 'a' }, '1.2.3.4', { ...deps, store: null });
+    expect(res.status).toBe(503);
+    expect(calls).toEqual([]);
   });
 });

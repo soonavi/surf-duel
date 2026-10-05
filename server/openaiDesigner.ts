@@ -4,7 +4,7 @@
  */
 import type OpenAI from 'openai';
 import { COURSE_JSON_SCHEMA, COURSE_SCHEMA_NAME, COURSE_SYSTEM_PROMPT, courseUserMessage } from '../src/course/aiSchema';
-import type { CourseDesigner } from './generateCourse';
+import { BUDGET, type CourseDesigner } from './generateCourse';
 
 /** The slice of the OpenAI client we use (lets tests pass a fake). */
 export interface ResponsesClient {
@@ -26,6 +26,8 @@ export function openAiDesigner(client: ResponsesClient, model: string): CourseDe
         text: { format: { type: 'json_schema', name: COURSE_SCHEMA_NAME, schema: COURSE_JSON_SCHEMA, strict: true } },
         // Players' prompts don't need to live on OpenAI's side.
         store: false,
+        // Caps what one call can cost (a course is ~400-800 tokens).
+        max_output_tokens: BUDGET.maxOutputTokens,
       },
       // One attempt: the whole request has a 15 s budget, and the client falls back to a random course.
       { signal, maxRetries: 0 },

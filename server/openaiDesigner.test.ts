@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { openAiDesigner, type ResponsesClient } from './openaiDesigner';
 import { COURSE_JSON_SCHEMA, COURSE_SYSTEM_PROMPT } from '../src/course/aiSchema';
+import { BUDGET } from './generateCourse';
 
 function fakeClient(outputText: string) {
   const calls: { body: Record<string, unknown>; options: Record<string, unknown> | undefined }[] = [];
@@ -28,6 +29,7 @@ describe('openAiDesigner', () => {
     expect(body.input).toContain('icy canyon');
     expect(body.text).toEqual({ format: { type: 'json_schema', name: 'surf_course', schema: COURSE_JSON_SCHEMA, strict: true } });
     expect(body.store).toBe(false); // players' prompts aren't kept on OpenAI's side
+    expect(body.max_output_tokens).toBe(BUDGET.maxOutputTokens); // bounds what one call can cost
     expect(options?.signal).toBe(signal);
   });
 
