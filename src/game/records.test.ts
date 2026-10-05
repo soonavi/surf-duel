@@ -96,3 +96,14 @@ describe('RecordStore', () => {
     expect(store.save('c', run(50_000)).runs).toBeLessThanOrEqual(200);
   });
 });
+
+describe('RecordStore: your leaderboard row', () => {
+  it('remembers your row id per course, across store instances', () => {
+    const storage = new MemoryStorage();
+    const store = new RecordStore(storage);
+    expect(store.boardRunId('c3-abc')).toBeNull();
+    store.setBoardRunId('c3-abc', 'run-1');
+    expect(new RecordStore(storage).boardRunId('c3-abc')).toBe('run-1');
+    expect(store.boardRunId('c3-other')).toBeNull();
+  });
+});

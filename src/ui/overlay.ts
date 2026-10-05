@@ -17,6 +17,35 @@ export interface CourseCard {
   badge: string | null;
 }
 
+/** One line of a leaderboard. */
+export interface BoardRowView {
+  id: string;
+  place: number;
+  name: string;
+  timeMs: number;
+  /** Your own entry. */
+  isMe: boolean;
+  /** The ghost you've picked to race. */
+  selected: boolean;
+}
+
+export interface BoardView {
+  /** 'none': this course has no leaderboard (random courses, offline builds). */
+  state: 'loading' | 'ready' | 'unavailable' | 'none';
+  rows: BoardRowView[];
+  /** A line under the list ("No times yet: set the first!"). */
+  note: string;
+}
+
+/** The leaderboard part of the results screen. */
+export interface ResultsBoardView {
+  board: BoardView;
+  /** What happened to this run: "Posting your time…", "#3 of 12 on the leaderboard", "Not posted: …". */
+  status: string;
+  /** The name runs are posted under, or null when this run can't be posted. */
+  postingAs: string | null;
+}
+
 export interface ResultsRow {
   label: string;
   timeMs: number | null;
@@ -54,6 +83,8 @@ export interface ResultsView {
   backToLobby?: boolean;
   /** Present for a multiplayer race: the shared standings and room controls. */
   room?: { standings: StandingRow[]; isHost: boolean; raceOver: boolean };
+  /** Present when the course has a leaderboard (solo and practice runs). */
+  board?: ResultsBoardView;
 }
 
 export interface LobbyPlayerRow {
@@ -103,6 +134,37 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
   return b;
 }
 
+/** A leaderboard list: home rows pick a ghost (toggle), results rows race one. */
+function boardList(view: BoardView, where: 'home' | 'results', onRow: (row: BoardRowView) => void): HTMLElement {
+  const list = el('ol', undefined, `board board--${where}`);
+  if (view.state === 'loading') {
+    list.append(el('li', 'Loading times…', 'board__empty'));
+    return list;
+  }
+  if (view.state !== 'ready' || view.rows.length === 0) return list;
+  for (const row of view.rows) {
+    const li = el('li', undefined, 'board__item');
+    const b = el('button', undefined, 'board__row');
+    b.type = 'button';
+    if (row.isMe) b.classList.add('is-me');
+    if (where === 'home') b.setAttribute('aria-pressed', String(row.selected));
+    b.title = where === 'home' ? `Race ${row.name}'s ghost` : `Race ${row.name}'s ghost now`;
+    b.append(
+      el('span', String(row.place), 'board__place'),
+      el('span', row.isMe ? `${row.name} (you)` : row.name, 'board__name'),
+      el('span', formatTime(row.timeMs), 'board__time'),
+      el('span', where === 'home' ? (row.selected ? 'picked' : 'ghost') : 'race', 'board__ghost'),
+    );
+    b.addEventListener('click', () => {
+      b.blur();
+      onRow(row);
+    });
+    li.append(b);
+    list.append(li);
+  }
+  return list;
+}
+
 /**
  * Full-screen HTML overlays (start, loading, lobby, pause, results), toasts,
  * the connection banner and the debug readout. In-race HUD elements live in hud.ts.
@@ -130,6 +192,12 @@ export class Overlay {
   onLobbySpectate: (() => void) | null = null;
   onEndRace: (() => void) | null = null;
   onBackToLobby: (() => void) | null = null;
+  // Leaderboards.
+  /** Home screen: pick (or un-pick) a leaderboard ghost to race. */
+  onBoardPick: ((runId: string) => void) | null = null;
+  /** Results screen: race a leaderboard ghost now. */
+  onBoardRace: ((runId: string) => void) | null = null;
+  onChangeName: ((name: string) => void) | null = null;
 
   private readonly root: HTMLElement;
   private readonly screens: Partial<Record<Exclude<OverlayScreen, 'none'>, HTMLElement>>;
@@ -139,6 +207,9 @@ export class Overlay {
   private readonly courseList: HTMLElement;
   private readonly raceCourse: HTMLElement;
   private courseNames = new Map<string, string>();
+  private raceVs: string | null = null;
+  private readonly homeBoard: HTMLElement;
+  private resultsBoard: HTMLElement | null = null;
   private readonly toastEl: HTMLElement;
   private readonly banner: HTMLElement;
   private readonly loadingText: HTMLElement;
@@ -174,6 +245,7 @@ export class Overlay {
             <section class="panel home__courses" aria-labelledby="home-courses-title">
               <h2 class="panel__title" id="home-courses-title">Choose a course</h2>
               <div class="course-list" role="group" aria-labelledby="home-courses-title"></div>
+              <div class="home__board" aria-live="polite"></div>
               <button class="btn btn--primary btn--race" data-action="engage" type="button">
                 <span class="btn--race__go" aria-hidden="true"></span>
                 <span class="btn--race__label">Race</span>
@@ -285,6 +357,7 @@ export class Overlay {
     this.crosshair = q('.crosshair');
     this.courseList = q('.course-list');
     this.raceCourse = q('.btn--race__course');
+    this.homeBoard = q('.home__board');
     this.toastEl = q('.toast');
     this.banner = q('.banner');
     this.loadingText = q('.loading-text');
@@ -390,7 +463,33 @@ export class Overlay {
     for (const btn of this.courseList.querySelectorAll<HTMLButtonElement>('.course-card')) {
       btn.setAttribute('aria-pressed', String(btn.dataset.id === id));
     }
-    this.raceCourse.textContent = this.courseNames.get(id) ?? '';
+    this.selectedId = id;
+    this.renderRaceLabel();
+  }
+
+  private selectedId = '';
+
+  private renderRaceLabel(): void {
+    const name = this.courseNames.get(this.selectedId) ?? '';
+    this.raceCourse.textContent = this.raceVs ? `${name} · vs ${this.raceVs}` : name;
+  }
+
+  /** "Race · Speed Demon · vs Wave Rider" while a leaderboard ghost is picked. */
+  setRaceVs(name: string | null): void {
+    this.raceVs = name;
+    this.renderRaceLabel();
+  }
+
+  /** The selected course's top times on the start screen. Click one to race its ghost. */
+  setHomeBoard(view: BoardView, courseName: string): void {
+    const box = this.homeBoard;
+    const head = el('div', undefined, 'home__board-head');
+    head.append(el('span', 'Top times', 'panel__title'));
+    if (view.state === 'ready' && view.rows.length > 0) head.append(el('span', 'pick one to race its ghost', 'home__board-hint'));
+    const list = boardList(view, 'home', (row) => this.onBoardPick?.(row.id));
+    list.setAttribute('aria-label', `Top times on ${courseName}`);
+    box.replaceChildren(head, list);
+    if (view.note) box.append(el('p', view.note, 'board__note'));
   }
 
   /** Ids of the start-screen course cards, in order (for arrow-key picking). */
@@ -529,10 +628,20 @@ export class Overlay {
   // --- results ---------------------------------------------------------------
 
   showResults(view: ResultsView): void {
-    const r = this.results;
-    r.replaceChildren();
+    const card = this.results;
+    card.replaceChildren();
+    card.classList.toggle('results--board', view.board !== undefined);
     this.standingsTable = null;
     this.resultsRoomNote = null;
+    this.resultsBoard = null;
+    const r = el('div', undefined, 'results__main');
+    card.append(r);
+    if (view.board) {
+      this.resultsBoard = el('section', undefined, 'results__side');
+      this.resultsBoard.setAttribute('aria-labelledby', 'results-board-title');
+      card.append(this.resultsBoard);
+      this.updateResultsBoard(view.board);
+    }
 
     const badge = el('div', 'New personal best!', 'results__badge');
     badge.hidden = !view.isBest;
@@ -601,6 +710,55 @@ export class Overlay {
     }
     r.append(el('p', view.note, 'results__note'));
     this.show('results');
+  }
+
+  /** Refresh the leaderboard on the results screen (posting finishes after it appears). */
+  updateResultsBoard(view: ResultsBoardView): void {
+    const side = this.resultsBoard;
+    if (!side) return;
+    const heading = el('h3', 'Leaderboard', 'results__board-title');
+    heading.id = 'results-board-title';
+    const status = el('p', view.status, 'results__board-status');
+    const list = boardList(view.board, 'results', (row) => this.onBoardRace?.(row.id));
+    side.replaceChildren(heading, status, list);
+    if (view.board.note) side.append(el('p', view.board.note, 'board__note'));
+    if (view.postingAs !== null) side.append(this.nameLine(view.postingAs));
+  }
+
+  /** "Posting as Surfer 123 · Change name", which turns into a name field. */
+  private nameLine(name: string): HTMLElement {
+    const line = el('p', undefined, 'results__name');
+    const show = (): void => {
+      line.replaceChildren(document.createTextNode('Posting as '), el('strong', name), document.createTextNode(' · '));
+      line.append(
+        button('Change name', 'link-btn', () => {
+          const input = el('input', undefined, 'input input--name');
+          input.value = name;
+          input.maxLength = 16;
+          input.spellcheck = false;
+          input.autocomplete = 'off';
+          input.setAttribute('aria-label', 'Your name on the leaderboard');
+          let done = false;
+          const finish = (save: boolean): void => {
+            if (done) return;
+            done = true;
+            if (save && input.value.trim() !== '' && input.value !== name) this.onChangeName?.(input.value);
+            else show();
+          };
+          input.addEventListener('keydown', (e) => {
+            e.stopPropagation(); // R / Enter / M mean something on this screen
+            if (e.key === 'Enter') finish(true);
+            if (e.key === 'Escape') finish(false);
+          });
+          input.addEventListener('blur', () => finish(true));
+          line.replaceChildren(document.createTextNode('Name: '), input);
+          input.focus();
+          input.select();
+        }),
+      );
+    };
+    show();
+    return line;
   }
 
   /** Refresh the live standings on a multiplayer results screen. */

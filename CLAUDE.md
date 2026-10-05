@@ -50,6 +50,13 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Course share codes: 6 chars `[A-HJ-NP-Z2-9]` (`course/shareCode.ts`, enforced by a DB check). Room codes stay 4 letters.
 - The `courses` table holds a test row `TESTQA` for checking share links without OpenAI; delete it before submission.
 
+## Leaderboards (Phase 6)
+- `runs` holds one row per (course_key, player_id): the player's best, with its ghost. Anon can read only id, course_key, player_name, time_ms, checkpoint_splits, ghost, updated_at (column grants), never player_id/ip_hash. Writes only via `submit_run` (service role) from `/api/submit-run`.
+- The server rebuilds the course from its own copy (shipped JSON, or `courses.spec` by share code) and computes the key; `checkRun` (`src/course/runCheck.ts`) must pass. If you change physics limits (maxVelocity) or ghost sampling, re-check `runCheck` (its tests ride real bot runs). Leaderboard runs must hit every checkpoint.
+- `Profile.boardId` (localStorage `surfduel.player.v1`) is the leaderboard identity; `Profile.id` stays per page load for rooms.
+- Deploy check (Phase 8): `api/submit-run.ts` imports the shipped course JSON through `src/course/courses`; make sure Vercel's function bundling handles JSON and extensionless imports (it already must for `api/generate-course.ts`).
+- When testing, delete test rows from `runs` afterwards (the board is public).
+
 ## Notes for upcoming phases
 - Tutorial coach (`game/tutorialCoach.ts`): user feedback Oct 4 2026 — prompts switched "too fast"; must be "much slower and digestible". So: one lesson per ramp, changed only once settled on a new ramp and after `readingTicks(text)`; live key feedback goes in the hint line, never the lesson; events are notes. Keep lessons short. Tests: every lesson ≥ 3.5 s in a bot run, and a student pressing only what the coach shows must finish with no falls. The Tutorial's last two ramps are 9000 long (booster 200) to give the last lesson reading time.
 - `randomCourse(seed)` is the Phase 5 fallback when AI generation fails; `SurfBot` can drive the Phase 7 attract-mode camera.
@@ -60,7 +67,7 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - [x] Phase 2 — course schema, builder, validator, 3 courses, themes
 - [x] Phase 3 — single-player race loop (dev ghosts: only speed-demon.json has arrived; tutorial / easy-cruise still use the bot)
 - [x] Phase 4 — multiplayer rooms (user: "the 2 player works")
-- [~] Phase 5 — AI course generator (built and verified live with gpt-5.4-nano on Oct 5 2026: ~2–7 s, ~1,125 tokens in / ~210 out ≈ $0.0005 per course; awaiting user playtest)
-- [ ] Phase 6 — leaderboards
+- [x] Phase 5 — AI course generator (verified live with gpt-5.4-nano: ~2–7 s, ~$0.0005 per course; user moved on to Phase 6 on Oct 5 2026)
+- [~] Phase 6 — leaderboards (built Oct 5 2026, posting verified live; awaiting user playtest). Also done before it: home screen redesign, prompt-injection hardening.
 - [ ] Phase 7 — polish
 - [ ] Phase 8 — deploy + submission assets

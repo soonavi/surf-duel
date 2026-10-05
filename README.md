@@ -87,6 +87,26 @@ How it works:
 - **Never a dead end:** a timeout, an AI failure, the rate limit, a bad code or no network all show a friendly message with **Race a random course instead**.
 - In a room, AI and shared courses travel as their full spec (plus share code), random ones as their seed, and every client rebuilds the same geometry.
 
+## Leaderboards
+
+Every shipped course and every AI/shared course (anything with a share code) has an online top 10. Random courses don't.
+
+- **Start screen:** the selected course's top 5 sit under the course list. Pick one to race that player's ghost (pick it again to drop it); the Race button shows who you're up against.
+- **Results screen:** your run on the left, the top 10 on the right with your row marked, and where your time landed ("You're #3 of 12"). **Race** on any row starts a race against that ghost straight away. Times are posted under your name (the one you use in rooms, `Surfer 123` until you change it); **Change name** re-posts your run under the new one.
+- One entry per player per course: your best. The browser keeps a random player id for this (not secret, never shown).
+- Runs that don't go up: autopilot/noclip, changed physics tuning, a missed checkpoint, or a room race where the tab was hidden (its clock ran on without the simulation). The run is always kept locally either way.
+
+How it works:
+
+- Reading is client-side: the `runs` table (`supabase/migrations/20261006090000_runs.sql`) is readable by anyone, but only the leaderboard columns, never the player id or IP hash. Nobody can write to it except the service role.
+- Posting goes through `POST /api/submit-run` (`server/submitRun.ts`). The server never trusts the client's idea of the course: it loads the spec itself (shipped id, or share code from the database), builds it, and works out the course key. Then the run must pass `checkRun` (`src/course/runCheck.ts`):
+  - splits: one per checkpoint, all there, increasing, before the finish;
+  - time at least the course minimum (straight lines through every gate at the fastest speed the physics allows);
+  - the ghost (the 20 Hz recording) lasts as long as the time claimed, starts on the start pad, never moves faster than the physics allows (velocity is clamped per axis), only teleports back to checkpoints it has already reached (R or a fall), goes through each gate when its split says, and ends at the finish.
+  The tests ride real bot runs through it (including a respawn) and catch forged ones: sped-up recordings, jumps, teleports ahead, wrong splits, short or misplaced ghosts. Ghosts are public, so anything odd that slips through is visible too.
+- Names get the same cleaning as every other name other players see (`cleanName`: no hidden text, links or blocked words; 16 characters).
+- One Postgres function (`submit_run`) applies the rate limits (30 posts per IP per 10 minutes, 20,000 a day in total) and keeps the player's best, in one locked step. Courses get a fresh leaderboard by themselves when their geometry changes, because the course key includes the layout version.
+
 ## Multiplayer
 
 **Create room** gives you a 4-letter code and an invite link (`/?room=ABCD`); **Join** takes a code. Up to 8 players. The host (whoever has been in the room longest) picks the course and starts the race; everyone else readies up. Testing alone? The lobby's **Open a second tab** button opens the invite in a new tab — each tab is a separate player — and **Race the dev ghost** practises the room's course solo.

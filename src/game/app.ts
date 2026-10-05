@@ -36,6 +36,7 @@ import { MAX_PLAYERS, rankRacers } from '../net/roomLogic';
 import type { CourseRef } from '../net/protocol';
 import { multiplayerConfigured } from '../net/config';
 import { fetchSharedCourse, requestCourse } from '../net/courseApi';
+import { BOARD_SIZE, fetchLeaderboard, fetchRunGhost, submitRun, type BoardEntry, type BoardRef, type SubmitPayload } from '../net/leaderboardApi';
 import type { RoomTransport } from '../net/transport';
 
 /** The Supabase client is only downloaded once someone creates or joins a room. */
@@ -43,7 +44,7 @@ async function roomTransport(): Promise<RoomTransport> {
   const { supabaseTransport } = await import('../net/supabase');
   return supabaseTransport();
 }
-import { Overlay, type CourseCard, type LobbyView, type ResultsView, type StandingRow } from '../ui/overlay';
+import { Overlay, type BoardView, type CourseCard, type LobbyView, type ResultsBoardView, type ResultsView, type StandingRow } from '../ui/overlay';
 import { Hud, type HudMarker, type HudStanding } from '../ui/hud';
 import { GeneratorUi } from '../ui/generator';
 import { flyoverPose } from '../render/flyover';
@@ -63,6 +64,8 @@ export interface DebugOptions {
 }
 
 interface ActiveGhost {
+  /** Your best, the course's rival (dev ghost or bot), or a leaderboard run you picked. */
+  kind: 'pb' | 'rival' | 'board';
   run: GhostRun;
   view: GhostView;
   color: string;
@@ -77,6 +80,13 @@ const RESULTS_DELAY_MS = 1400;
 const GO_FLASH_MS = 700;
 const PB_COLOR = '#ffd27a';
 const RIVAL_COLOR = '#7cf8c4';
+const BOARD_COLOR = '#ff8bd1';
+/** Leaderboard rows on the start screen (the results screen shows BOARD_SIZE). */
+const HOME_BOARD_ROWS = 5;
+/** A fetched leaderboard is reused for this long before asking again. */
+const BOARD_FRESH_MS = 30_000;
+/** Longest the loading screen waits for a leaderboard ghost before racing without it. */
+const GHOST_WAIT_MS = 6_000;
 /** Multiplayer: the host announces GO this far ahead, enough for everyone to hear it. */
 const ROOM_START_DELAY_MS = 4500;
 /** Samples are taken every 5 ticks = 20 Hz. */
@@ -157,6 +167,20 @@ export class App {
   private flyoverStart = 0;
   private readonly flyTarget = new THREE.Vector3();
 
+  // Leaderboards.
+  /** How the server finds the loaded course; null for courses without a board (random ones). */
+  private boardRef: BoardRef | null = null;
+  /** Fetched leaderboards by course key; entries null when the fetch failed. */
+  private readonly boards = new Map<string, { at: number; entries: BoardEntry[] | null }>();
+  /** The leaderboard ghost picked to race on this course; `run` is filled in once it has loaded. */
+  private boardTarget: { key: string; entry: BoardEntry; run: GhostRun | null; ready: Promise<GhostRun | null> } | null = null;
+  /** Course keys whose best was posted this session. */
+  private readonly posted = new Set<string>();
+  /** The last run posted, and on which course (re-posted under a new name if you change it). */
+  private lastPost: { key: string; payload: SubmitPayload } | null = null;
+  /** The results screen's leaderboard section while it's up (posting finishes after it appears). */
+  private resultsBoard: { key: string; status: string; postingAs: string | null } | null = null;
+
   // Multiplayer.
   private room: Room | null = null;
   private readonly remotes: RemotePlayers;
@@ -234,6 +258,9 @@ export class App {
     this.overlay.onMenu = () => this.goToMenu();
     this.overlay.onSaveDevGhost = () => void this.saveDevGhost();
     this.overlay.onLeaveRace = () => this.leaveRoomRace();
+    this.overlay.onBoardPick = (runId) => this.pickBoardGhost(runId);
+    this.overlay.onBoardRace = (runId) => this.raceBoardGhost(runId);
+    this.overlay.onChangeName = (name) => this.changeName(name);
     this.bindRoomUi();
     this.input.onLockChange = (locked) => this.handleLockChange(locked);
 
@@ -270,7 +297,7 @@ export class App {
     if (id === CUSTOM_ID && this.custom) {
       this.selectedCourseId = id;
       this.overlay.setSelectedCourse(id);
-      this.loadCourse(this.custom.course, null);
+      this.loadCourse(this.custom.course, null, true, this.custom.code);
       if (!this.inRoom) setUrlCourse(this.custom.code);
       return;
     }
@@ -282,13 +309,18 @@ export class App {
     if (!this.inRoom) setUrlCourse(null);
   }
 
-  /** Build and show any course spec (shipped, random, or later AI-generated). Solo: returns to the menu. */
-  loadCourse(spec: unknown, shippedId: string | null = null, toMenu = true): BuiltCourse {
+  /**
+   * Build and show any course spec (shipped, random, AI or shared). Solo: returns to the menu.
+   * `code` is a shared course's share code: with it (or a shipped id) the course has a leaderboard.
+   */
+  loadCourse(spec: unknown, shippedId: string | null = null, toMenu = true, code: string | null = null): BuiltCourse {
     const built = buildCourse(spec);
     if (built.repairs.length > 0 && this.devMode) console.info('[surf-duel] course repaired:', built.repairs);
     this.built = built;
     this.key = courseKey(built.course);
     this.courseId = shippedId;
+    this.boardRef = shippedId ? { kind: 'shipped', id: shippedId } : code ? { kind: 'code', code } : null;
+    if (this.boardTarget && this.boardTarget.key !== this.key) this.setBoardTarget(null);
     this.world = new BvhWorld(built.collision);
     this.runtime = new CourseRuntime(built);
     this.bot = new SurfBot(built, { hop: true });
@@ -416,10 +448,15 @@ export class App {
     }
     if (kind === 'full') {
       this.hud.setVisible(false);
-      this.overlay.setLoadingText(this.rivalCache.has(this.key) ? 'Get ready…' : 'Warming up your rival ghost…');
+      const target = this.boardTarget?.key === this.key && this.boardTarget.run === null ? this.boardTarget : null;
+      this.overlay.setLoadingText(
+        target ? `Fetching ${target.entry.name}'s ghost…` : this.rivalCache.has(this.key) ? 'Get ready…' : 'Warming up your rival ghost…',
+      );
       this.overlay.show('loading');
       // Let the loading screen paint before the (brief) synchronous work.
-      window.setTimeout(() => this.beginCountdown(COUNTDOWN_FULL), 30);
+      const go = (): void => void window.setTimeout(() => this.beginCountdown(COUNTDOWN_FULL), 30);
+      if (target) void Promise.race([target.ready, new Promise((resolve) => window.setTimeout(resolve, GHOST_WAIT_MS))]).finally(go);
+      else go();
     } else {
       this.beginCountdown(COUNTDOWN_QUICK);
     }
@@ -516,6 +553,7 @@ export class App {
     this.respawnAt(this.built.spawn);
     this.flyoverStart = performance.now();
     this.overlay.show('start');
+    this.refreshHomeBoard();
   }
 
   private handleMenuKeys(e: KeyboardEvent): void {
@@ -555,28 +593,203 @@ export class App {
     }
   }
 
+  // --- leaderboards ------------------------------------------------------------
+
+  /** The start screen's top times for the selected course, fetched again when stale. */
+  private refreshHomeBoard(): void {
+    const key = this.key;
+    const name = this.built.course.name;
+    if (!this.boardRef || !multiplayerConfigured()) {
+      const note = !this.boardRef ? 'Random courses have no leaderboard. Make one with AI to get one!' : 'Leaderboards are offline in this build.';
+      this.overlay.setHomeBoard({ state: 'none', rows: [], note }, name);
+      return;
+    }
+    const cached = this.boards.get(key);
+    this.overlay.setHomeBoard(this.boardView(key, HOME_BOARD_ROWS), name);
+    if (cached && performance.now() - cached.at < BOARD_FRESH_MS) return;
+    void this.loadBoard(key).then(() => {
+      if (this.key === key && this.state === 'menu') this.overlay.setHomeBoard(this.boardView(key, HOME_BOARD_ROWS), name);
+    });
+  }
+
+  private async loadBoard(key: string): Promise<void> {
+    const out = await fetchLeaderboard(key, BOARD_SIZE);
+    this.boards.set(key, { at: performance.now(), entries: out.ok ? out.entries : (this.boards.get(key)?.entries ?? null) });
+  }
+
+  private boardView(key: string, limit: number): BoardView {
+    const cached = this.boards.get(key);
+    if (!cached) return { state: 'loading', rows: [], note: '' };
+    if (cached.entries === null) return { state: 'unavailable', rows: [], note: "Couldn't load the leaderboard." };
+    const entries = cached.entries;
+    const mine = this.records.boardRunId(key);
+    const picked = this.boardTarget?.key === key ? this.boardTarget.entry.id : null;
+    const rows = entries.slice(0, limit).map((e) => ({
+      id: e.id,
+      place: 1 + entries.filter((o) => o.timeMs < e.timeMs).length, // ties share a place
+      name: e.name,
+      timeMs: e.timeMs,
+      isMe: e.id === mine,
+      selected: e.id === picked,
+    }));
+    return { state: 'ready', rows, note: rows.length === 0 ? 'No times yet: set the first!' : '' };
+  }
+
+  /** Start screen: pick a leaderboard run to race its ghost (pick it again to drop it). */
+  private pickBoardGhost(runId: string): void {
+    if (this.boardTarget?.entry.id === runId) this.setBoardTarget(null);
+    else {
+      const entry = this.boards.get(this.key)?.entries?.find((e) => e.id === runId);
+      if (entry) this.setBoardTarget(entry);
+    }
+    if (this.state === 'menu') this.overlay.setHomeBoard(this.boardView(this.key, HOME_BOARD_ROWS), this.built.course.name);
+  }
+
+  /** Results screen: race a leaderboard ghost right away (this click is the gesture pointer lock needs). */
+  private raceBoardGhost(runId: string): void {
+    if (this.boardTarget?.entry.id !== runId) {
+      const entry = this.boards.get(this.key)?.entries?.find((e) => e.id === runId);
+      if (!entry) return;
+      this.setBoardTarget(entry);
+    }
+    this.pendingStart = 'full';
+    this.engage();
+  }
+
+  private setBoardTarget(entry: BoardEntry | null): void {
+    if (!entry) {
+      this.boardTarget = null;
+      this.overlay.setRaceVs(null);
+      return;
+    }
+    const ready = fetchRunGhost(entry.id).then((g): GhostRun | null =>
+      g ? { label: entry.name, timeMs: entry.timeMs, splits: g.splits, ghost: g.ghost } : null,
+    );
+    const target = { key: this.key, entry, run: null as GhostRun | null, ready };
+    this.boardTarget = target;
+    this.overlay.setRaceVs(entry.name);
+    void ready.then((run) => {
+      if (this.boardTarget !== target) return;
+      if (run) {
+        target.run = run;
+        return;
+      }
+      this.setBoardTarget(null);
+      this.overlay.toast("Couldn't load that ghost", 2500);
+      if (this.state === 'menu') this.refreshHomeBoard();
+    });
+  }
+
+  /**
+   * After a finish: post the run (or your stored best, if that's faster) to
+   * the course's leaderboard when it qualifies. Returns the results screen's
+   * leaderboard section, or undefined when the course has no board.
+   */
+  private postRun(outcome: SaveOutcome | null, splits: readonly (number | null)[]): ResultsBoardView | undefined {
+    const key = this.key;
+    const ref = this.boardRef;
+    if (!ref || !multiplayerConfigured()) return undefined;
+    let notPosted = '';
+    if (this.assisted) notPosted = 'Not posted: autopilot or noclip was used.';
+    else if (this.tuningModified) notPosted = 'Not posted: physics tuning differs from the defaults.';
+    else if (this.lostMs > 0) notPosted = 'Not posted: the race clock ran on while the tab was hidden.';
+    else if (splits.some((s) => s === null)) notPosted = 'Not posted: you missed a checkpoint.';
+
+    const best = this.records.best(key);
+    const payloadFrom = best && best.splits.every((s) => s !== null) ? best : null;
+    const shouldPost = notPosted === '' && payloadFrom !== null && (outcome?.isBest === true || !this.posted.has(key));
+    this.resultsBoard = {
+      key,
+      status: notPosted || (shouldPost ? 'Posting your time…' : 'Your best is on the leaderboard.'),
+      postingAs: notPosted ? null : this.profile.name,
+    };
+    if (shouldPost && payloadFrom) {
+      const payload: SubmitPayload = {
+        course: ref,
+        playerId: this.profile.boardId,
+        name: this.profile.name,
+        timeMs: payloadFrom.timeMs,
+        splits: payloadFrom.splits,
+        ghost: payloadFrom.ghost,
+      };
+      void this.sendRun(key, payload);
+    } else if (!this.boards.has(key)) {
+      void this.loadBoard(key).then(() => this.renderResultsBoard());
+    }
+    return this.resultsBoardView() ?? undefined;
+  }
+
+  private async sendRun(key: string, payload: SubmitPayload): Promise<void> {
+    const out = await submitRun(payload);
+    let status: string;
+    if (out.ok) {
+      this.posted.add(key);
+      this.records.setBoardRunId(key, out.runId);
+      this.lastPost = { key, payload: { ...payload, name: out.name } };
+      status = out.improved
+        ? `You're #${out.place} of ${out.total} on the leaderboard!`
+        : `Your best stays ${formatTime(out.bestMs)}: #${out.place} of ${out.total}.`;
+    } else {
+      status = `Not posted: ${out.message}`;
+    }
+    if (this.resultsBoard?.key === key) this.resultsBoard.status = status;
+    await this.loadBoard(key);
+    this.renderResultsBoard();
+    if (this.state === 'menu' && this.key === key) this.refreshHomeBoard();
+  }
+
+  private resultsBoardView(): ResultsBoardView | null {
+    const rb = this.resultsBoard;
+    if (!rb || rb.key !== this.key) return null;
+    return { board: this.boardView(rb.key, BOARD_SIZE), status: rb.status, postingAs: rb.postingAs };
+  }
+
+  private renderResultsBoard(): void {
+    const view = this.resultsBoardView();
+    if (view && this.state === 'results') this.overlay.updateResultsBoard(view);
+  }
+
+  /** New name from the results screen: used everywhere, and your posted run is re-posted under it. */
+  private changeName(name: string): void {
+    this.profile.name = name;
+    this.room?.setName(this.profile.name);
+    if (this.resultsBoard?.postingAs !== null && this.resultsBoard) this.resultsBoard.postingAs = this.profile.name;
+    const last = this.lastPost;
+    if (last && last.key === this.key && this.resultsBoard) {
+      this.resultsBoard.status = 'Updating your name…';
+      void this.sendRun(last.key, { ...last.payload, name: this.profile.name });
+    }
+    this.renderResultsBoard();
+  }
+
   // --- ghosts ----------------------------------------------------------------
 
   /** PB ghost (if any) plus the rival: a recorded dev ghost, or the bot. */
   private prepareGhosts(): void {
     this.clearGhosts();
-    const runs: { run: GhostRun; color: string }[] = [];
 
+    const runs: { kind: ActiveGhost['kind']; run: GhostRun; color: string }[] = [];
     const best = this.records.best(this.key);
     const pbGhost = best ? decodeGhost(best.ghost) : null;
-    if (best && pbGhost) runs.push({ run: { label: 'PB', timeMs: best.timeMs, splits: best.splits, ghost: pbGhost }, color: PB_COLOR });
+    if (best && pbGhost) runs.push({ kind: 'pb', run: { label: 'PB', timeMs: best.timeMs, splits: best.splits, ghost: pbGhost }, color: PB_COLOR });
 
-    if (!this.rivalCache.has(this.key)) {
-      const shipped = this.courseId ? shippedDevGhost(this.courseId, this.key) : null;
-      this.rivalCache.set(this.key, shipped ?? recordBotGhost(this.built));
+    // A leaderboard ghost you picked takes the rival's place.
+    const picked = this.boardTarget?.key === this.key ? this.boardTarget.run : null;
+    if (picked) {
+      runs.push({ kind: 'board', run: picked, color: BOARD_COLOR });
+    } else {
+      if (!this.rivalCache.has(this.key)) {
+        const shipped = this.courseId ? shippedDevGhost(this.courseId, this.key) : null;
+        this.rivalCache.set(this.key, shipped ?? recordBotGhost(this.built));
+      }
+      const rival = this.rivalCache.get(this.key);
+      if (rival) runs.push({ kind: 'rival', run: rival, color: RIVAL_COLOR });
     }
-    const rival = this.rivalCache.get(this.key);
-    if (rival) runs.push({ run: rival, color: RIVAL_COLOR });
 
-    for (const { run, color } of runs) {
+    for (const { kind, run, color } of runs) {
       const view = new GhostView(run.label, color);
       this.view.scene.add(view.group);
-      this.ghosts.push({ run, view, color, hint: 0, progress: 0 });
+      this.ghosts.push({ kind, run, view, color, hint: 0, progress: 0 });
     }
   }
 
@@ -746,7 +959,7 @@ export class App {
     if (!room) return;
     const st = room.state;
     const spec = resolveCourseRef(st.course);
-    this.loadCourse(spec ?? null, st.course.kind === 'shipped' ? st.course.id : null, false);
+    this.loadCourse(spec ?? null, st.course.kind === 'shipped' ? st.course.id : null, false, st.course.kind === 'spec' ? (st.course.code ?? null) : null);
     this.roomCourseKey = st.courseKey;
     this.roomCourseOk = st.courseKey === '' || st.courseKey === this.key;
   }
@@ -1050,7 +1263,7 @@ export class App {
 
   private useCustom(custom: CustomCourse): void {
     this.custom = custom;
-    this.loadCourse(custom.course, null, false);
+    this.loadCourse(custom.course, null, false, custom.code);
     if (this.generatorFor === 'solo') {
       this.selectedCourseId = CUSTOM_ID;
       setUrlCourse(custom.code);
@@ -1203,12 +1416,16 @@ export class App {
         timeMs: t,
         deltaMs: t !== null && best?.splits[i] != null ? t - best.splits[i]! : null,
       })),
-      rivals: this.ghosts.filter((g) => g.run.label !== 'PB').map((g) => ({ label: g.run.label === 'BOT' ? 'Bot' : 'Dev ghost', timeMs: g.run.timeMs })),
+      rivals: this.ghosts
+        .filter((g) => g.kind !== 'pb')
+        .map((g) => ({ label: g.kind === 'board' ? g.run.label : g.run.label === 'BOT' ? 'Bot' : 'Dev ghost', timeMs: g.run.timeMs })),
       note,
       canSaveDevGhost: this.devMode && this.courseId !== null && outcome !== null && !roomRace,
       backToLobby: this.inRoom,
       room: roomRace && this.room ? { standings: this.standingRows(), isHost: this.room.isHost, raceOver: this.room.state.phase === 'lobby' } : undefined,
     };
+    const board = this.postRun(outcome, result.splits);
+    if (board && !roomRace) view.board = board;
 
     // Keep sliding on the finish pad for a moment, then show the results.
     // Counted in simulation ticks so pausing in between holds it too.
@@ -1223,6 +1440,7 @@ export class App {
     this.hud.setVisible(false);
     this.input.releaseLock();
     if (view.room) view.room.standings = this.standingRows();
+    if (view.board) view.board = this.resultsBoardView() ?? view.board; // posting may have finished meanwhile
     this.overlay.showResults(view);
   }
 

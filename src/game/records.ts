@@ -40,6 +40,8 @@ const StoredRun = z.object({
 
 const StoredHistory = z.array(z.number().int().positive()).max(MAX_HISTORY * 2);
 
+const BoardRunId = z.string().min(1).max(64);
+
 export function browserStorage(): KeyValueStorage | null {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage;
@@ -68,6 +70,15 @@ export class RecordStore {
 
     const rank = 1 + history.filter((t) => t < run.timeMs).length;
     return { isBest, rank, runs: history.length, previousBest };
+  }
+
+  /** Your row on this course's online leaderboard, once you've posted a run there. */
+  boardRunId(courseKey: string): string | null {
+    return this.readJson(`surfduel.board.v1.${courseKey}`, BoardRunId);
+  }
+
+  setBoardRunId(courseKey: string, id: string): void {
+    this.write(`surfduel.board.v1.${courseKey}`, JSON.stringify(id));
   }
 
   private readJson<T>(key: string, schema: z.ZodType<T>): T | null {
