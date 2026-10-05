@@ -36,6 +36,15 @@ body {
   height: 100%;
 }
 
+/* Dims the 3D view through the course flyover's loop seam. */
+.scene-fade {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  opacity: 0;
+  pointer-events: none;
+}
+
 .overlay {
   position: fixed;
   inset: 0;
@@ -414,6 +423,11 @@ kbd {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+/* Only the selected course shows its description, so the list stays short. */
+.course-list .course-card:not([aria-pressed='true']) .course-card__blurb {
+  display: none;
 }
 
 .course-list .course-card__blurb {

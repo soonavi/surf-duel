@@ -47,7 +47,7 @@ async function roomTransport(): Promise<RoomTransport> {
 import { Overlay, type BoardView, type CourseCard, type LobbyView, type ResultsBoardView, type ResultsView, type StandingRow } from '../ui/overlay';
 import { Hud, type HudMarker, type HudStanding } from '../ui/hud';
 import { GeneratorUi } from '../ui/generator';
-import { flyoverPose } from '../render/flyover';
+import { flyoverFade, flyoverPose } from '../render/flyover';
 
 type AppState = 'menu' | 'loading' | 'lobby' | 'countdown' | 'racing' | 'results' | 'spectating' | 'generate' | 'preview';
 type StartKind = 'full' | 'quick';
@@ -81,8 +81,8 @@ const GO_FLASH_MS = 700;
 const PB_COLOR = '#ffd27a';
 const RIVAL_COLOR = '#7cf8c4';
 const BOARD_COLOR = '#ff8bd1';
-/** Leaderboard rows on the start screen (the results screen shows BOARD_SIZE). */
-const HOME_BOARD_ROWS = 5;
+/** Leaderboard rows on the start screen, a podium (the results screen shows BOARD_SIZE). */
+const HOME_BOARD_ROWS = 3;
 /** A fetched leaderboard is reused for this long before asking again. */
 const BOARD_FRESH_MS = 30_000;
 /** Longest the loading screen waits for a leaderboard ghost before racing without it. */
@@ -166,6 +166,9 @@ export class App {
   private generateRequest = 0;
   private flyoverStart = 0;
   private readonly flyTarget = new THREE.Vector3();
+  /** Dims the 3D view through the flyover's loop seam (a cut from the finish back to the start). */
+  private readonly sceneFade: HTMLElement;
+  private sceneFadeOpacity = 0;
 
   // Leaderboards.
   /** How the server finds the loaded course; null for courses without a board (random ones). */
@@ -226,6 +229,9 @@ export class App {
   ) {
     this.debug = { showHud: devMode, noclip: false, autopilot: false, flySpeed: 900, themeOverride: 'auto' };
     this.view = new SceneView(root);
+    this.sceneFade = document.createElement('div');
+    this.sceneFade.className = 'scene-fade';
+    root.appendChild(this.sceneFade);
     this.view.setFov(this.settings.fov);
     this.input = new Input(this.view.canvas);
     this.overlay = new Overlay(document.body);
@@ -342,8 +348,8 @@ export class App {
     this.courseView = new CourseView(this.built, theme);
     this.view.scene.add(this.courseView.group);
     this.view.applyTheme(theme);
-    this.hud.coach.setRampColors(theme.rampRight.line, theme.rampLeft.line);
-    this.overlay.setRampColors(theme.rampRight.line, theme.rampLeft.line);
+    this.hud.coach.setRampColors(theme.rampRight.ui, theme.rampLeft.ui);
+    this.overlay.setRampColors(theme.rampRight.ui, theme.rampLeft.ui);
   }
 
   private refreshCourseCards(): void {
@@ -1610,13 +1616,17 @@ export class App {
 
     const cam = this.view.camera;
     if (this.state === 'spectating') {
+      this.setSceneFade(0);
       this.renderSpectator();
     } else if (this.state === 'preview' || this.state === 'menu') {
       // The menu drifts over the selected course at a calmer pace than the preview.
       const pace = this.state === 'menu' ? MENU_FLYOVER_PACE : 1;
-      flyoverPose(this.built.path, ((performance.now() - this.flyoverStart) / 1000) * pace, cam.position, this.flyTarget);
+      const t = ((performance.now() - this.flyoverStart) / 1000) * pace;
+      flyoverPose(this.built.path, t, cam.position, this.flyTarget);
       cam.lookAt(this.flyTarget);
+      this.setSceneFade(flyoverFade(this.built.path, t));
     } else {
+      this.setSceneFade(0);
       this.camPos.lerpVectors(this.prevPos, this.player.pos, alpha);
       this.camPos.y += EYE_HEIGHT;
       cam.position.copy(this.camPos);
@@ -1626,6 +1636,13 @@ export class App {
     }
     this.view.render();
     this.updateStats(frameDt);
+  }
+
+  private setSceneFade(opacity: number): void {
+    const rounded = Math.round(opacity * 100) / 100;
+    if (rounded === this.sceneFadeOpacity) return;
+    this.sceneFadeOpacity = rounded;
+    this.sceneFade.style.opacity = String(rounded);
   }
 
   private renderRemotes(raceTimeMs: number): void {

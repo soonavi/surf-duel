@@ -1,0 +1,21 @@
+{
+  "name": "Frostbite Flow",
+  "theme": "ice",
+  "difficulty": "medium",
+  "segments": [
+    { "type": "ramp", "length": 6000, "angle": 52, "side": "right", "curve": -25 },
+    { "type": "ramp", "length": 6000, "angle": 53, "side": "left", "curve": 25 },
+    { "type": "drop", "height": 900 },
+    { "type": "ramp", "length": 5000, "angle": 54, "side": "right", "curve": -30 },
+    { "type": "checkpoint" },
+    { "type": "ramp", "length": 4500, "angle": 54, "side": "right", "curve": 0 },
+    { "type": "gap", "length": 600 },
+    { "type": "ramp", "length": 6500, "angle": 55, "side": "left", "curve": 30 },
+    { "type": "booster", "strength": 400 },
+    { "type": "ramp", "length": 7000, "angle": 55, "side": "right", "curve": -20 },
+    { "type": "checkpoint" },
+    { "type": "ramp", "length": 5500, "angle": 56, "side": "left", "curve": 25 },
+    { "type": "drop", "height": 1200 },
+    { "type": "ramp", "length": 8000, "angle": 56, "side": "right", "curve": -25 }
+  ]
+}

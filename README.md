@@ -119,6 +119,10 @@ How it works (`src/net/`), on Supabase Realtime, one channel per room:
 - **Message budget:** Realtime counts every delivered copy, so a room costs ~players² messages per send. Samples are always taken at 20 Hz but batched to fit `DEFAULT_BUDGET` (300 msg/s): one sample per message for 2 players, larger batches as the room grows. The Supabase client is lazy-loaded, so solo players never download it.
 - **Edge cases:** host leaves → next player promoted; joining mid-race → spectate (chase cam, ←/→ to switch); room full (8) and invalid / unknown codes get clear messages; losing the mouse or hiding the tab doesn't pause a shared race, and time the tab spent asleep is charged to your clock; connection loss shows a reconnecting banner.
 
+## Course flyover
+
+The start screen and the AI course preview fly a camera over the course (`src/render/flyover.ts`). It follows a smoothed copy of the riding line rather than the line itself: heights take a running maximum and then a wide blur, so the camera stays up until a drop is behind it and then glides down (and never dips below the line before a drop), and the zigzag between left and right ramp faces is ironed out. The cut from the finish back to the start fades through dark. Tests fly every shipped course and random ones at 60 fps and bound the glide angle, acceleration, turn rate and pitch rate.
+
 ## Courses
 
 A course is a small JSON spec (`src/course/schema.ts`): a name, a theme (`neon`, `desert`, `ice`, `lava`, `void`), a difficulty, and a list of segments — `ramp` (length, angle 46–60°, side, curve), `drop`, `gap`, `booster`, `checkpoint`. (The original spec allowed 70° ramps; playtesting found anything past 60° barely holdable.)
@@ -130,7 +134,7 @@ Checkpoints are fly-through arches over the flight into the next ramp. Respawnin
 - `builder.ts` turns the layout into merged geometry (a handful of draw calls), trigger volumes and a track path (progress, kill floor).
 - `playability.test.ts` runs a bot through every shipped course and 40 random ones in the real physics — riding cautiously and aggressively, and restarting from every checkpoint; every run must finish without dying.
 
-Shipped courses live in `src/course/courses/*.json`. Ramp colour tells you which key to hold: each theme uses one colour for ramps on your right (hold D) and another for ramps on your left (hold A).
+Shipped courses live in `src/course/courses/*.json`: **Tutorial** (neon, easy, with the coach), **Easy Cruise** (desert, easy), **Frostbite Flow** (ice, medium: sweeping S-bends), **Speed Demon** (lava, hard: steep, huge drops) and **Event Horizon** (void, hard: big gaps and two-sided ridges). Ramp colour tells you which key to hold: each theme uses one colour for ramps on your right (hold D) and another for ramps on your left (hold A).
 
 ## Movement model
 

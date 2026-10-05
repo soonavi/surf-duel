@@ -50,6 +50,10 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Course share codes: 6 chars `[A-HJ-NP-Z2-9]` (`course/shareCode.ts`, enforced by a DB check). Room codes stay 4 letters.
 - The `courses` table holds a test row `TESTQA` for checking share links without OpenAI; delete it before submission.
 
+## Flyover camera
+- `render/flyover.ts` follows a smoothed line (height: running max then blur; horizontal: blur), never the raw riding line: the raw line drops near-vertically and zigzags (user, Oct 5 2026: transitions must be smooth). Keep `flyover.test.ts` green: it bounds glide angle, acceleration, turn rate and pitch rate on every course. The loop seam fades through dark (`flyoverFade`, the `.scene-fade` div).
+- Theme `rampRight.ui` / `rampLeft.ui` are the ramp colours for UI (A/D keys, coach); `line` can be dark on light-surfaced themes.
+
 ## Leaderboards (Phase 6)
 - `runs` holds one row per (course_key, player_id): the player's best, with its ghost. Anon can read only id, course_key, player_name, time_ms, checkpoint_splits, ghost, updated_at (column grants), never player_id/ip_hash. Writes only via `submit_run` (service role) from `/api/submit-run`.
 - The server rebuilds the course from its own copy (shipped JSON, or `courses.spec` by share code) and computes the key; `checkRun` (`src/course/runCheck.ts`) must pass. If you change physics limits (maxVelocity) or ghost sampling, re-check `runCheck` (its tests ride real bot runs). Leaderboard runs must hit every checkpoint.
