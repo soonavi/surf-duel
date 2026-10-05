@@ -29,6 +29,12 @@ export class Input {
     document.addEventListener('pointerlockchange', this.handleLockChange);
   }
 
+  /** A phone or tablet: touch is the only pointer, so there's no mouse to steer with. */
+  static get touchOnly(): boolean {
+    if (typeof matchMedia !== 'function') return false;
+    return matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+  }
+
   static get pointerLockSupported(): boolean {
     return typeof Element !== 'undefined' && 'requestPointerLock' in Element.prototype;
   }

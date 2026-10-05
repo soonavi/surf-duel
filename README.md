@@ -39,8 +39,34 @@ Press <kbd>`</kbd> (backtick) to toggle it. It's on in `npm run dev`, and in any
 | R | Back to last checkpoint |
 | Shift + R | Restart the course |
 | Esc | Pause (release mouse) |
+| ↑ / ↓, Enter | Pick a course / race (start screen) |
 | B | Autopilot: watch the bot surf the course (dev builds) |
 | N | Noclip (dev builds; Space/C up/down, Shift fast) |
+
+## Sound and music
+
+Everything is made live with the Web Audio API: no sound files, nothing to license, no extra dependencies (`src/audio/`).
+
+- **Generated soundtrack.** Every course gets its own 8-bar synthwave loop (`music.ts`), composed from its theme's mood and its course key, so the same course always sounds the same. Neon is classic synthwave, lava drives at 128 BPM in a Phrygian key, ice floats in Lydian, desert sways in harmonic minor, void broods half-time in Dorian. It builds with your speed (`levels.ts`): pads on the start pad, then bass and kick, the arpeggio, hats and snare, with a low-pass filter opening up as you go faster.
+- **Your own music.** Settings → Music → My music plays an audio file you pick. It's played straight from your disk and never uploaded; pick it again on your next visit.
+- **Effects:** countdown beeps and a GO chord, a checkpoint chime and finish fanfare in the song's key, a boost whoosh, a respawn sweep, and wind that rises with speed.
+- **Equalizers.** An analyser on the music drives bars along the bottom of the start screen and under the speedometer, and ramp lines, grids, gates and boosters pulse with the bass (with your own music too).
+- Audio starts on your first click or key press (browsers require one) and pauses in background tabs.
+
+## Settings
+
+⚙ Settings on the start screen (or Settings in the pause menu): mouse sensitivity, field of view, invert Y, assist mode, music and effects volume, music source (generated, your file, off), graphics quality, and the key list. Saved in localStorage.
+
+- **Assist mode**, for trackpads and first runs: while surfing it holds the key toward the ramp for you and ignores W/S; in the air you steer 30% more strongly. The speed cap is unchanged. Runs set with it go on the same leaderboards with an **A** badge. A test proves it: a rider who only steers and never presses A or D falls off Easy Cruise without assist and finishes with it.
+- **Graphics: Low** renders fewer pixels and drops the speed lines and particle bursts.
+
+## Game feel
+
+The view widens up to 10° with speed and leans about 1.4° toward the strafe key; speed lines rush past above 2200 u/s; checkpoints burst into particles. View effects are off when the system asks for reduced motion (`src/game/feel.ts` holds the tested numbers).
+
+## Phones and tablets
+
+Touch-only devices get the start screen in view-only mode: course flyovers, leaderboards and the AI course designer all work, racing (which needs a mouse) is disabled with a note, and room invites explain they need a computer.
 
 ## Tutorial coach
 

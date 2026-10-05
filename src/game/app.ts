@@ -180,6 +180,9 @@ export class App {
   private readonly sceneFade: HTMLElement;
   private sceneFadeOpacity = 0;
 
+  /** No mouse to race with: watch, browse leaderboards and design courses only. */
+  private readonly viewOnly = Input.touchOnly || !Input.pointerLockSupported;
+
   // Game feel.
   private fovNow = 75;
   private roll = 0;
@@ -324,7 +327,8 @@ export class App {
       if (document.hidden) this.pause();
     });
 
-    if (!Input.pointerLockSupported) this.overlay.show('unsupported');
+    // Phones and tablets (or browsers without pointer lock) get everything but racing.
+    if (this.viewOnly) this.overlay.setViewOnly();
   }
 
   start(): void {
@@ -497,6 +501,7 @@ export class App {
   // --- solo flow -------------------------------------------------------------
 
   private engage(): void {
+    if (this.viewOnly) return;
     this.overlay.setMessage('');
     this.input.requestLock(this.settings.rawInput).catch(() => {
       // Most often Chrome refusing a re-lock within ~1 s of pressing Esc.
@@ -923,6 +928,10 @@ export class App {
 
   /** Called by main.ts for ?room=CODE links. */
   joinRoomFromUrl(code: string): void {
+    if (this.viewOnly) {
+      this.overlay.showStartMessage('Rooms are live races: open this invite link on a computer to join in.');
+      return;
+    }
     if (!multiplayerConfigured()) {
       this.overlay.showStartMessage('Multiplayer is not configured in this build.');
       return;
@@ -1376,7 +1385,8 @@ export class App {
       prompt: c.prompt,
       code: c.code,
       codeNote: c.source === 'random' ? 'Random courses have no share code.' : "Couldn't save a share code for this one, but you can still race it.",
-      primaryLabel: this.generatorFor === 'room' ? 'Use in room' : 'Race',
+      primaryLabel: this.viewOnly ? 'Race on a computer' : this.generatorFor === 'room' ? 'Use in room' : 'Race',
+      canRace: !this.viewOnly,
       canRegenerate: c.source === 'ai' && c.prompt !== null,
     });
     this.overlay.show('preview');

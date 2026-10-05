@@ -50,6 +50,13 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Course share codes: 6 chars `[A-HJ-NP-Z2-9]` (`course/shareCode.ts`, enforced by a DB check). Room codes stay 4 letters.
 - The `courses` table holds a test row `TESTQA` for checking share links without OpenAI; delete it before submission.
 
+## Audio (Phase 7)
+- `src/audio/music.ts` (composition) and `levels.ts` (mix, intensity, equalizer math) are pure and tested; `engine.ts` is the thin Web Audio layer. No sound files or audio dependencies: keep it that way unless the user says otherwise.
+- Audio only starts on a user gesture (`AudioEngine.unlock`, wired to the first pointerdown/keydown). Every engine call is a no-op before that.
+- The player's own music file is played from a blob URL and never uploaded; it isn't persisted between visits.
+- `BEAT_PULSE` (render/materials.ts) is one shared uniform object for every course material; respect `prefers-reduced-motion` (pulse, equalizers, FOV/roll changes off).
+- Assist mode (`game/assist.ts`) must never raise `maxVelocity`: the leaderboard's `runCheck` assumes the default cap for every run.
+
 ## Flyover camera
 - `render/flyover.ts` follows a smoothed line (height: running max then blur; horizontal: blur), never the raw riding line: the raw line drops near-vertically and zigzags (user, Oct 5 2026: transitions must be smooth). Keep `flyover.test.ts` green: it bounds glide angle, acceleration, turn rate and pitch rate on every course. The loop seam fades through dark (`flyoverFade`, the `.scene-fade` div).
 - Theme `rampRight.ui` / `rampLeft.ui` are the ramp colours for UI (A/D keys, coach); `line` can be dark on light-surfaced themes.
@@ -72,6 +79,6 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - [x] Phase 3 — single-player race loop (dev ghosts: only speed-demon.json has arrived; tutorial / easy-cruise still use the bot)
 - [x] Phase 4 — multiplayer rooms (user: "the 2 player works")
 - [x] Phase 5 — AI course generator (verified live with gpt-5.4-nano: ~2–7 s, ~$0.0005 per course; user moved on to Phase 6 on Oct 5 2026)
-- [~] Phase 6 — leaderboards (built Oct 5 2026, posting verified live; awaiting user playtest). Also done before it: home screen redesign, prompt-injection hardening.
-- [ ] Phase 7 — polish
+- [x] Phase 6 — leaderboards (user moved on to Phase 7 on Oct 5 2026). Also done before it: home screen redesign, prompt-injection hardening.
+- [~] Phase 7 — polish: music (user chose options 1 + 4: generated soundtrack and your own file), effects, equalizers, settings screen, game feel, assist mode, view-only mode for touch devices (built Oct 5–6 2026; awaiting user playtest)
 - [ ] Phase 8 — deploy + submission assets

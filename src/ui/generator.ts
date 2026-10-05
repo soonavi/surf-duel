@@ -35,6 +35,8 @@ export interface PreviewView {
   /** Shown instead of the code when there isn't one. */
   codeNote: string;
   primaryLabel: string;
+  /** False in view-only mode (touch devices): the race button is shown but disabled. */
+  canRace?: boolean;
   canRegenerate: boolean;
 }
 
@@ -256,7 +258,9 @@ export class GeneratorUi {
     parts.push(share);
 
     const actions = el('div', undefined, 'btn-row');
-    actions.append(button(view.primaryLabel, 'btn btn--primary', () => this.onRace?.()));
+    const race = button(view.primaryLabel, 'btn btn--primary', () => this.onRace?.());
+    race.disabled = view.canRace === false;
+    actions.append(race);
     if (view.canRegenerate) actions.append(button('Regenerate', 'btn btn--ghost', () => this.onRegenerate?.()));
     actions.append(button('New prompt', 'btn btn--ghost', () => this.onNewPrompt?.()), button('Back', 'btn btn--ghost', () => this.onPreviewBack?.()));
     parts.push(actions);

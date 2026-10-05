@@ -254,6 +254,11 @@ export class Overlay {
           <header class="home__brand">
             <h1 class="title">SURF DUEL</h1>
             <p class="pitch">Slide the ramps. Race your friends. Build courses with AI.</p>
+            <p class="home__view-only" hidden>
+              <strong>Surf Duel is best on a computer with a mouse and keyboard.</strong>
+              Here you can watch every course fly by, check the leaderboards and design courses with AI.
+              Open it on a computer to race.
+            </p>
           </header>
 
           <div class="home__main">
@@ -311,7 +316,7 @@ export class Overlay {
           </div>
 
           <p class="message home__message" role="status" aria-live="polite"></p>
-          <p class="phase-tag">Phase 6 · Leaderboards</p>
+          <p class="phase-tag">Phase 7 · Polish</p>
         </div>
       </section>
 
@@ -430,6 +435,20 @@ export class Overlay {
 
   setLoadingText(text: string): void {
     this.loadingText.textContent = text;
+  }
+
+  /**
+   * Touch devices: everything but racing. The note explains, the Race button
+   * is disabled, and multiplayer is hidden (rooms are races).
+   */
+  setViewOnly(): void {
+    this.root.querySelector<HTMLElement>('.home__view-only')!.hidden = false;
+    const race = this.root.querySelector<HTMLButtonElement>('.btn--race')!;
+    race.disabled = true;
+    race.querySelector('.btn--race__label')!.textContent = 'Race on a computer';
+    this.root.querySelector<HTMLElement>('.home__keyhint')!.hidden = true;
+    this.root.querySelector<HTMLElement>('.howto')!.hidden = true;
+    this.mpBlock.hidden = true;
   }
 
   setMultiplayerAvailable(available: boolean): void {
