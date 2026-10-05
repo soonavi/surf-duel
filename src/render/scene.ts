@@ -51,6 +51,14 @@ export class SceneView {
   }
 
   private maxPixelRatio = MAX_PIXEL_RATIO;
+  /** A fixed render size (the cover capture), ignoring the window. */
+  private fixedSize: { w: number; h: number } | null = null;
+
+  /** Render at exactly w × h pixels from now on (pixel ratio 1), e.g. for a cover image. */
+  setFixedSize(w: number, h: number): void {
+    this.fixedSize = { w, h };
+    this.resize();
+  }
 
   /** 'low' renders fewer pixels, for slower machines. */
   setQuality(quality: 'high' | 'low'): void {
@@ -64,9 +72,9 @@ export class SceneView {
   }
 
   resize(): void {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.maxPixelRatio));
+    const w = this.fixedSize?.w ?? window.innerWidth;
+    const h = this.fixedSize?.h ?? window.innerHeight;
+    this.renderer.setPixelRatio(this.fixedSize ? 1 : Math.min(window.devicePixelRatio, this.maxPixelRatio));
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();

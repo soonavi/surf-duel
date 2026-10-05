@@ -16,7 +16,8 @@ app.start();
 
 const roomCode = params.get('room');
 const shareCode = shipped ? null : normalizeShareCode(courseParam);
-if (roomCode) app.joinRoomFromUrl(roomCode);
+if (params.get('capture') === 'cover') app.captureCover();
+else if (roomCode) app.joinRoomFromUrl(roomCode);
 else if (shareCode) app.openSharedCourseFromUrl(shareCode);
 
 if (devMode) {

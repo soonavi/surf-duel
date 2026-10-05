@@ -451,6 +451,11 @@ export class Overlay {
     this.mpBlock.hidden = true;
   }
 
+  /** Hide every overlay, toast and readout (the cover capture). */
+  hideAll(): void {
+    this.root.style.display = 'none';
+  }
+
   setMultiplayerAvailable(available: boolean): void {
     this.mpBlock.hidden = !available;
   }

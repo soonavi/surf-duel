@@ -49,6 +49,7 @@ import { Hud, type HudMarker, type HudStanding } from '../ui/hud.js';
 import { GeneratorUi } from '../ui/generator.js';
 import { flyoverFade, flyoverPose } from '../render/flyover.js';
 import { BEAT_PULSE } from '../render/materials.js';
+import { COVER_HEIGHT, COVER_WIDTH, buildCoverRider, coverShot, drawCoverTitle, type CoverShot } from '../render/cover.js';
 import { AudioEngine } from '../audio/engine.js';
 import { assistCommand, assistedPhysics } from './assist.js';
 import { approachRoll, speedFov, speedLines } from './feel.js';
@@ -59,7 +60,7 @@ import { hashString } from '../util/rng.js';
 import { SettingsUi } from '../ui/settingsPanel.js';
 import { drawEqualizer } from '../ui/equalizer.js';
 
-type AppState = 'menu' | 'loading' | 'lobby' | 'countdown' | 'racing' | 'results' | 'spectating' | 'generate' | 'preview';
+type AppState = 'menu' | 'loading' | 'lobby' | 'countdown' | 'racing' | 'results' | 'spectating' | 'generate' | 'preview' | 'cover';
 type StartKind = 'full' | 'quick';
 
 /** Dev-only knobs, exposed in the tuning panel. */
@@ -179,6 +180,9 @@ export class App {
   /** Dims the 3D view through the flyover's loop seam (a cut from the finish back to the start). */
   private readonly sceneFade: HTMLElement;
   private sceneFadeOpacity = 0;
+
+  /** The cover capture's shot and title canvas (/?capture=cover). */
+  private cover: { shot: CoverShot; title: HTMLCanvasElement } | null = null;
 
   /** No mouse to race with: watch, browse leaderboards and design courses only. */
   private readonly viewOnly = Input.touchOnly || !Input.pointerLockSupported;
@@ -1724,7 +1728,13 @@ export class App {
     this.loop.droppedTime = 0;
 
     const cam = this.view.camera;
-    if (this.state === 'spectating') {
+    if (this.state === 'cover' && this.cover) {
+      cam.position.copy(this.cover.shot.camera);
+      cam.lookAt(this.cover.shot.target);
+      cam.rotateZ(this.cover.shot.roll);
+      this.view.render();
+      return;
+    } else if (this.state === 'spectating') {
       this.setSceneFade(0);
       this.renderSpectator();
     } else if (this.state === 'preview' || this.state === 'menu') {
@@ -1766,6 +1776,58 @@ export class App {
     const theme = THEME_DEFS[this.built.course.theme];
     if (this.overlay.screen === 'start') drawEqualizer(this.overlay.equalizerCanvas, this.audio.bars(48), theme.swatch);
     else if (racing || this.state === 'countdown') drawEqualizer(this.hud.equalizerCanvas, this.audio.bars(16), ['#ffffff', '#ffffff']);
+  }
+
+  /**
+   * /?capture=cover: a 1600×900 shot for the submission's cover image (a
+   * rider mid-surf on Speed Demon, title over it). Take a screenshot of the
+   * top-left 1600×900, or press P to download it as a PNG.
+   */
+  captureCover(): void {
+    this.selectCourse('speed-demon');
+    this.state = 'cover';
+    this.overlay.hideAll();
+    this.hud.setVisible(false);
+    BEAT_PULSE.value = 0;
+    const shot = coverShot(this.built);
+    this.view.scene.add(buildCoverRider(shot, '#3ee6ff'));
+    this.view.setFixedSize(COVER_WIDTH, COVER_HEIGHT);
+    this.view.setFov(shot.fov);
+
+    const title = document.createElement('canvas');
+    title.width = COVER_WIDTH;
+    title.height = COVER_HEIGHT;
+    title.className = 'cover-title';
+    const g = title.getContext('2d');
+    if (g) drawCoverTitle(g);
+    document.body.append(title);
+    this.cover = { shot, title };
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'KeyP') this.saveCover();
+    });
+    console.info('[surf-duel] Cover mode: press P to save surf-duel-cover.png (1600×900).');
+  }
+
+  private saveCover(): void {
+    const cover = this.cover;
+    if (!cover) return;
+    this.render(0, 0); // a fresh frame, so the WebGL canvas can be read
+    const out = document.createElement('canvas');
+    out.width = COVER_WIDTH;
+    out.height = COVER_HEIGHT;
+    const g = out.getContext('2d');
+    if (!g) return;
+    g.drawImage(this.view.canvas, 0, 0, COVER_WIDTH, COVER_HEIGHT);
+    g.drawImage(cover.title, 0, 0);
+    out.toBlob((blob) => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'surf-duel-cover.png';
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }, 'image/png');
   }
 
   /** Extra effects (speed lines, bursts, view sway) are for high graphics, and off with reduced motion. */
