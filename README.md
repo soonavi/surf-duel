@@ -1,74 +1,110 @@
 # Surf Duel
 
-Browser multiplayer surf racing, inspired by the "surf" gamemode from Source-engine games. Slide along angled ramps, build speed by air-strafing, and race friends — or an AI-generated course.
+**Browser multiplayer surf racing.** Slide along steep ramps, build speed by air-strafing, and race your friends live, on hand-made courses or on courses the OpenAI API designs from a sentence you type. Inspired by the "surf" game mode from Source-engine games.
 
-> Work in progress. The full README (controls, architecture diagram, OpenAI course generator notes) lands in Phase 8. See [docs/SPEC.md](docs/SPEC.md) for the plan.
+> **Play:** _link added when deployed_ · Best on a computer with a mouse and keyboard (phones get a view-only mode).
 
-## Setup
+> **Uses the OpenAI API.** The AI course designer sends the description a player types to the OpenAI API: a free moderation check first, then a course designed with Structured Outputs (`gpt-5.4-nano`). See [AI course generator](#ai-course-generator) for how prompts are checked and how spending is capped.
 
-```bash
-npm install
-cp .env.example .env.local   # Supabase + OpenAI settings (see below)
-npm run dev                  # http://localhost:5173
-```
+## How to play
 
-Without Supabase settings the game still runs; the multiplayer buttons are simply hidden. Without OpenAI settings the AI generator says it isn't set up and offers a random course instead.
-
-`npm run dev` also runs the serverless functions in `api/` (a small dev-server middleware calls the same handlers Vercel does), so the whole game works locally without the Vercel CLI. Server-only variables from `.env.local` are loaded into the dev server's Node process for those handlers; only `VITE_`-prefixed ones ever reach the browser.
-
-The database schema lives in `supabase/migrations/`.
-
-| Script | What it does |
-|---|---|
-| `npm run dev` | Vite dev server (tuning panel enabled) |
-| `npm test` | Vitest unit tests |
-| `npm run typecheck` | Strict TypeScript check |
-| `npm run build` | Typecheck + production build to `dist/` |
-
-## Dev tuning panel
-
-Press <kbd>`</kbd> (backtick) to toggle it. It's on in `npm run dev`, and in any build with `?dev` in the URL. Physics tweaks persist in localStorage until you press **Reset to defaults**; **Copy physics JSON** copies the current values.
-
-## Controls
+On a ramp to your **right**, hold **D**. On a ramp to your **left**, hold **A**. Steer with the mouse and never press **W**: your speed comes from the slope. The ramp's colour tells you which key to hold. The **Tutorial** has an on-screen coach that teaches it in about two minutes.
 
 | Key | Action |
 |---|---|
-| Mouse | Look (pointer lock, raw input where supported) |
-| W A S D | Move / air-strafe |
-| Space | Jump (hold to auto-hop) |
-| R | Back to last checkpoint |
-| Shift + R | Restart the course |
-| Esc | Pause (release mouse) |
+| Mouse | Look and steer |
+| A / D | Hold toward the ramp you're surfing (air-strafe in the air) |
+| Space | Jump (hold to bunny-hop) |
+| R | Back to the last checkpoint |
+| Shift + R | Restart the run |
+| Esc | Pause / release the mouse |
 | ↑ / ↓, Enter | Pick a course / race (start screen) |
-| B | Autopilot: watch the bot surf the course (dev builds) |
-| N | Noclip (dev builds; Space/C up/down, Shift fast) |
 
-## Sound and music
+## Features
 
-Everything is made live with the Web Audio API: no sound files, nothing to license, no extra dependencies (`src/audio/`).
+- **Five hand-made courses** across five themes, from the coached Tutorial to Event Horizon, each with your personal-best ghost and a rival ghost to race.
+- **AI course designer.** Describe a course ("long sweeping ramps over lava, one huge drop") and the OpenAI API designs it in a few seconds. Every course is repaired until it's beatable, gets a flyover preview and a 6-character share code.
+- **Live multiplayer rooms** for up to 8 players (Supabase Realtime): share a link, ready up, race with live positions and standings, spectate.
+- **Global leaderboards** on every course with a share code: top 10, your place, and **race anyone's ghost**. Runs are checked on the server against the course and the physics.
+- **Generated soundtrack.** Every course has its own synthwave loop that builds as you speed up, or play your own music file; equalizers and the course pulse with the beat.
+- **Polish:** settings (sensitivity, FOV, volumes, graphics), assist mode for trackpads, speed effects, accessibility (colour-blind-safe splits, reduced motion), and a view-only mode for phones.
 
-- **Generated soundtrack.** Every course gets its own 8-bar synthwave loop (`music.ts`), composed from its theme's mood and its course key, so the same course always sounds the same. Neon is classic synthwave, lava drives at 128 BPM in a Phrygian key, ice floats in Lydian, desert sways in harmonic minor, void broods half-time in Dorian. It builds with your speed (`levels.ts`): pads on the start pad, then bass and kick, the arpeggio, hats and snare, with a low-pass filter opening up as you go faster.
-- **Your own music.** Settings → Music → My music plays an audio file you pick. It's played straight from your disk and never uploaded; pick it again on your next visit.
-- **Effects:** countdown beeps and a GO chord, a checkpoint chime and finish fanfare in the song's key, a boost whoosh, a respawn sweep, and wind that rises with speed.
-- **Equalizers.** An analyser on the music drives bars along the bottom of the start screen and under the speedometer, and ramp lines, grids, gates and boosters pulse with the bass (with your own music too).
-- Audio starts on your first click or key press (browsers require one) and pauses in background tabs.
+## Quick start
 
-## Settings
+```bash
+npm install
+cp .env.example .env.local   # then fill in the values below
+npm run dev                  # http://localhost:5173
+```
 
-⚙ Settings on the start screen (or Settings in the pause menu): mouse sensitivity, field of view, invert Y, assist mode, music and effects volume, music source (generated, your file, off), graphics quality, and the key list. Saved in localStorage.
+The game runs without any keys: multiplayer and leaderboards hide themselves without Supabase, and the AI designer offers a random course without OpenAI.
 
-- **Assist mode**, for trackpads and first runs: while surfing it holds the key toward the ramp for you and ignores W/S; in the air you steer 30% more strongly. The speed cap is unchanged. Runs set with it go on the same leaderboards with an **A** badge. A test proves it: a rider who only steers and never presses A or D falls off Easy Cruise without assist and finishes with it.
-- **Graphics: Low** renders fewer pixels and drops the speed lines and particle bursts.
+| Variable | Used by | What it's for |
+|---|---|---|
+| `VITE_SUPABASE_URL` | browser + server | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | browser | Supabase publishable key (safe to expose) |
+| `OPENAI_API_KEY` | server only | AI course design and the moderation check |
+| `OPENAI_MODEL` | server only | `gpt-5.4-nano` (the spending caps are sized for its prices) |
+| `SUPABASE_SERVICE_ROLE_KEY` | server only | spending caps, saving AI courses, posting leaderboard runs |
 
-## Game feel
+Server-only variables never reach the browser: Vite only exposes `VITE_`-prefixed ones. `npm run dev` also serves the `api/` functions through a small dev-server middleware, so the whole game works locally without the Vercel CLI.
 
-The view widens up to 10° with speed and leans about 1.4° toward the strafe key; speed lines rush past above 2200 u/s; checkpoints burst into particles. View effects are off when the system asks for reduced motion (`src/game/feel.ts` holds the tested numbers).
+**Database:** create a Supabase project and run the SQL files in `supabase/migrations/` in order (SQL editor, or `supabase db push`).
 
-## Phones and tablets
+| Script | What it does |
+|---|---|
+| `npm run dev` | Dev server with the tuning panel |
+| `npm test` | Unit tests (Vitest): physics, courses, playability, server handlers, run checks, audio math |
+| `npm run typecheck` | Strict TypeScript, client and server |
+| `npm run build` | Typecheck + production build to `dist/` |
+| `npm run check:api` | Loads each `api/` function under plain Node ESM, the way Vercel runs them |
 
-Touch-only devices get the start screen in view-only mode: course flyovers, leaderboards and the AI course designer all work, racing (which needs a mouse) is disabled with a note, and room invites explain they need a computer.
+## Deploy (Vercel)
 
-## Tutorial coach
+1. Import the repository in Vercel. It detects Vite: build `npm run build`, output `dist`, functions from `api/`.
+2. Add the five environment variables above (Project → Settings → Environment Variables).
+3. Apply `supabase/migrations/` to the Supabase project.
+4. Before deploying changes to `api/` or `server/`, run `npm run check:api`: Vercel compiles each file on its own, so every relative import must name its `.js` file.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Browser["Browser · Vite + TypeScript + Three.js"]
+    Game["Game loop<br/>100 Hz physics, interpolated render"]
+    Course["Courses<br/>validator, layout, builder, BVH collision"]
+    Audio["Web Audio<br/>generated music, effects"]
+    UI["HTML UI<br/>menus, HUD, settings"]
+  end
+  subgraph Vercel["Vercel functions · api/"]
+    Gen["/api/generate-course"]
+    Submit["/api/submit-run"]
+  end
+  subgraph Supabase["Supabase"]
+    RT["Realtime<br/>rooms: presence + broadcast"]
+    DB[("Postgres<br/>courses, runs, spending caps")]
+  end
+  OpenAI["OpenAI API<br/>moderation + Structured Outputs"]
+
+  Game <-->|"positions, race state"| RT
+  UI -->|"course description"| Gen
+  Gen -->|"claim_generation (caps)"| DB
+  Gen -->|"moderate, then design"| OpenAI
+  Gen -->|"save under a share code"| DB
+  Game -->|"finished run + ghost"| Submit
+  Submit -->|"checkRun, then submit_run"| DB
+  UI -->|"leaderboards, shared courses (read-only)"| DB
+```
+
+- **Client** (`src/`): `physics/` is pure and unit-tested (Source-style movement, capsule vs. BVH collision); `course/` turns a JSON spec into geometry, triggers and a riding line, and a bot rides every course in the tests; `game/` runs the fixed-timestep loop, races, ghosts and records; `net/` holds rooms and API clients; `render/`, `audio/` and `ui/` draw, play and show it.
+- **Server** (`api/` + `server/`): thin Vercel functions over handlers that take their dependencies, so every path (rate limits, budget caps, moderation, run checks) is unit-tested without a network.
+- **Database** (`supabase/migrations/`): row-level security everywhere. The browser can read courses and leaderboard columns; only the server (service role) writes, through functions that check limits in one locked step.
+
+**Tech:** TypeScript (strict), Vite, Three.js + three-mesh-bvh, Supabase (Realtime, Postgres), Vercel functions, OpenAI API (`openai` SDK), zod, Vitest.
+
+## How it works
+
+### Tutorial coach
 
 The **Tutorial** course has an on-screen coach (`src/game/tutorialCoach.ts`), paced for someone who has never surfed. A card above the speedometer has three parts that change at different speeds:
 
@@ -80,7 +116,7 @@ Next to it, a live W A S D / Space display: keys to hold pulse blue, keys to let
 
 Tests check the pacing (every lesson stays up long enough to read, in a bot run through the real Tutorial) and the advice itself: a simulated beginner who presses exactly the keys the coach shows, and nothing else, finishes the Tutorial without falling off.
 
-## Racing
+### Racing
 
 Pick a course and press **Play**: a 3-2-1 countdown (you can look around but not move), then the clock runs from GO in exact 10 ms simulation ticks. The HUD shows the run time, checkpoints reached, a progress bar with markers for each ghost, split pop-ups (`+0.42` / `−0.31` against your personal best, in colour-blind-safe blue/orange) and your speed. After the finish you get the results: time, splits, top speed, rank among your local runs, and the rival ghost's time. **R**/Enter races again, **M** goes back to the menu, **Shift+R** restarts mid-run.
 
@@ -93,7 +129,7 @@ Records and ghosts are keyed by a fingerprint of the course spec, the layout ver
 
 **Recording a dev ghost:** in `npm run dev`, finish a clean run and click **Save as dev ghost** on the results screen. The dev server writes the file into `src/course/ghosts/`; commit it.
 
-## AI course generator
+### AI course generator
 
 **Design a course with AI** on the start screen (or **✨ AI course / code…** in a room, for the host) takes a description up to 200 characters, with five example prompts to start from. The OpenAI API designs the course; the game builds it, shows a flyover preview, and gives it a 6-character share code (`/?course=K7M2QX`) so friends can race it. **Regenerate** asks again with the same prompt; the share-code box (or a pasted link) loads anyone's course.
 
@@ -113,7 +149,7 @@ How it works:
 - **Never a dead end:** a timeout, an AI failure, the rate limit, a bad code or no network all show a friendly message with **Race a random course instead**.
 - In a room, AI and shared courses travel as their full spec (plus share code), random ones as their seed, and every client rebuilds the same geometry.
 
-## Leaderboards
+### Leaderboards
 
 Every shipped course and every AI/shared course (anything with a share code) has an online top 10. Random courses don't.
 
@@ -133,7 +169,7 @@ How it works:
 - Names get the same cleaning as every other name other players see (`cleanName`: no hidden text, links or blocked words; 16 characters).
 - One Postgres function (`submit_run`) applies the rate limits (30 posts per IP per 10 minutes, 20,000 a day in total) and keeps the player's best, in one locked step. Courses get a fresh leaderboard by themselves when their geometry changes, because the course key includes the layout version.
 
-## Multiplayer
+### Multiplayer
 
 **Create room** gives you a 4-letter code and an invite link (`/?room=ABCD`); **Join** takes a code. Up to 8 players. The host (whoever has been in the room longest) picks the course and starts the race; everyone else readies up. Testing alone? The lobby's **Open a second tab** button opens the invite in a new tab — each tab is a separate player — and **Race the dev ghost** practises the room's course solo.
 
@@ -145,11 +181,36 @@ How it works (`src/net/`), on Supabase Realtime, one channel per room:
 - **Message budget:** Realtime counts every delivered copy, so a room costs ~players² messages per send. Samples are always taken at 20 Hz but batched to fit `DEFAULT_BUDGET` (300 msg/s): one sample per message for 2 players, larger batches as the room grows. The Supabase client is lazy-loaded, so solo players never download it.
 - **Edge cases:** host leaves → next player promoted; joining mid-race → spectate (chase cam, ←/→ to switch); room full (8) and invalid / unknown codes get clear messages; losing the mouse or hiding the tab doesn't pause a shared race, and time the tab spent asleep is charged to your clock; connection loss shows a reconnecting banner.
 
-## Course flyover
+### Sound and music
+
+Everything is made live with the Web Audio API: no sound files, nothing to license, no extra dependencies (`src/audio/`).
+
+- **Generated soundtrack.** Every course gets its own 8-bar synthwave loop (`music.ts`), composed from its theme's mood and its course key, so the same course always sounds the same. Neon is classic synthwave, lava drives at 128 BPM in a Phrygian key, ice floats in Lydian, desert sways in harmonic minor, void broods half-time in Dorian. It builds with your speed (`levels.ts`): pads on the start pad, then bass and kick, the arpeggio, hats and snare, with a low-pass filter opening up as you go faster.
+- **Your own music.** Settings → Music → My music plays an audio file you pick. It's played straight from your disk and never uploaded; pick it again on your next visit.
+- **Effects:** countdown beeps and a GO chord, a checkpoint chime and finish fanfare in the song's key, a boost whoosh, a respawn sweep, and wind that rises with speed.
+- **Equalizers.** An analyser on the music drives bars along the bottom of the start screen and under the speedometer, and ramp lines, grids, gates and boosters pulse with the bass (with your own music too).
+- Audio starts on your first click or key press (browsers require one) and pauses in background tabs.
+
+### Settings
+
+⚙ Settings on the start screen (or Settings in the pause menu): mouse sensitivity, field of view, invert Y, assist mode, music and effects volume, music source (generated, your file, off), graphics quality, and the key list. Saved in localStorage.
+
+- **Assist mode**, for trackpads and first runs: while surfing it holds the key toward the ramp for you and ignores W/S; in the air you steer 30% more strongly. The speed cap is unchanged. Runs set with it go on the same leaderboards with an **A** badge. A test proves it: a rider who only steers and never presses A or D falls off Easy Cruise without assist and finishes with it.
+- **Graphics: Low** renders fewer pixels and drops the speed lines and particle bursts.
+
+### Game feel
+
+The view widens up to 10° with speed and leans about 1.4° toward the strafe key; speed lines rush past above 2200 u/s; checkpoints burst into particles. View effects are off when the system asks for reduced motion (`src/game/feel.ts` holds the tested numbers).
+
+### Phones and tablets
+
+Touch-only devices get the start screen in view-only mode: course flyovers, leaderboards and the AI course designer all work, racing (which needs a mouse) is disabled with a note, and room invites explain they need a computer.
+
+### Course flyover
 
 The start screen and the AI course preview fly a camera over the course (`src/render/flyover.ts`). It follows a smoothed copy of the riding line rather than the line itself: heights take a running maximum and then a wide blur, so the camera stays up until a drop is behind it and then glides down (and never dips below the line before a drop), and the zigzag between left and right ramp faces is ironed out. The cut from the finish back to the start fades through dark. Tests fly every shipped course and random ones at 60 fps and bound the glide angle, acceleration, turn rate and pitch rate.
 
-## Courses
+### Courses
 
 A course is a small JSON spec (`src/course/schema.ts`): a name, a theme (`neon`, `desert`, `ice`, `lava`, `void`), a difficulty, and a list of segments — `ramp` (length, angle 46–60°, side, curve), `drop`, `gap`, `booster`, `checkpoint`. (The original spec allowed 70° ramps; playtesting found anything past 60° barely holdable.)
 
@@ -162,10 +223,20 @@ Checkpoints are fly-through arches over the flight into the next ramp. Respawnin
 
 Shipped courses live in `src/course/courses/*.json`: **Tutorial** (neon, easy, with the coach), **Easy Cruise** (desert, easy), **Frostbite Flow** (ice, medium: sweeping S-bends), **Speed Demon** (lava, hard: steep, huge drops) and **Event Horizon** (void, hard: big gaps and two-sided ridges). Ramp colour tells you which key to hold: each theme uses one colour for ramps on your right (hold D) and another for ramps on your left (hold A).
 
-## Movement model
+### Movement model
 
 Source/Quake-style, in `src/physics/` — pure, deterministic, and unit-tested:
 
 - `movement.ts` — accelerate / air-accelerate (wish-speed cap), friction, velocity clipping, multi-plane crease logic.
 - `collision.ts` — capsule (32 × 72) vs. a three-mesh-bvh BVH, resolved deepest-contact-first so triangle seams don't bleed speed.
 - `player.ts` — one 100 Hz tick: half-gravity before/after, jump-before-friction (lossless bunny-hops), ground vs. air movement, sub-stepped collide-and-slide (≤ 8 units per substep, so no tunnelling at 3500 u/s), ground categorisation. Surfaces with `normal.y < 0.7` are surfable.
+
+### Dev tuning panel
+
+Press <kbd>`</kbd> (backtick) to toggle it. It's on in `npm run dev`, and in any build with `?dev` in the URL. Physics tweaks persist in localStorage until you press **Reset to defaults**; **Copy physics JSON** copies the current values.
+
+Dev builds also have **B** (autopilot: the bot surfs the course for you) and **N** (noclip: Space/C up and down, Shift fast). Runs that use either aren't saved or posted.
+
+### Cover image
+
+`/?capture=cover` renders a fixed 1600×900 shot (a rider mid-surf on Speed Demon, title over it) for the submission cover. Press **P** to download it as `surf-duel-cover.png`, or screenshot the top-left 1600×900 of the window.

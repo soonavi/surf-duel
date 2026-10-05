@@ -8,6 +8,9 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Ask before adding any dependency not listed in the spec. Never commit secrets (`.env*` is gitignored except `.env.example`).
 - Prefer simple, working, polished over ambitious and broken. If a phase runs long, say what to cut.
 
+## Imports (deploy rule)
+- Every relative import names its file: `./foo.js` (for foo.ts), `./courses/index.js`; JSON imports use `with { type: 'json' }`. Vercel compiles api/ functions file by file under Node ESM, and anything else crashes them at runtime. `npm run check:api` verifies it (Vite/Vitest/tsc don't care either way).
+
 ## Commits
 - Write commit messages via the Bash tool (heredoc → `git commit -F -`). Windows PowerShell 5.1 prepends a UTF-8 BOM when piping text to git, and mangles messages containing double quotes when passed as arguments.
 
@@ -81,4 +84,4 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - [x] Phase 5 — AI course generator (verified live with gpt-5.4-nano: ~2–7 s, ~$0.0005 per course; user moved on to Phase 6 on Oct 5 2026)
 - [x] Phase 6 — leaderboards (user moved on to Phase 7 on Oct 5 2026). Also done before it: home screen redesign, prompt-injection hardening.
 - [~] Phase 7 — polish: music (user chose options 1 + 4: generated soundtrack and your own file), effects, equalizers, settings screen, game feel, assist mode, view-only mode for touch devices (built Oct 5–6 2026; awaiting user playtest)
-- [ ] Phase 8 — deploy + submission assets
+- [~] Phase 8 — deploy + submission assets: api/ made ESM-safe (check:api), /?capture=cover (P saves the PNG), README with Mermaid architecture, docs/SUBMISSION.md (145-word description). Deploy needs the user's go-ahead and their keys in Vercel.
