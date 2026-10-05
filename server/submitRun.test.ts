@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { SUBMIT_LIMITS, handleSubmitRun, type RunRow, type RunStore, type StoreOutcome, type SubmitDeps, type SubmitLimits } from './submitRun';
-import { buildCourse } from '../src/course/builder';
-import { SHIPPED_COURSES } from '../src/course/courses';
-import { courseKey } from '../src/course/courseKey';
-import { simulateRun } from '../src/course/simulate';
-import { GhostRecorder, encodeGhost } from '../src/game/ghost';
+import { SUBMIT_LIMITS, handleSubmitRun, type RunRow, type RunStore, type StoreOutcome, type SubmitDeps, type SubmitLimits } from './submitRun.js';
+import { buildCourse } from '../src/course/builder.js';
+import { SHIPPED_COURSES } from '../src/course/courses/index.js';
+import { courseKey } from '../src/course/courseKey.js';
+import { simulateRun } from '../src/course/simulate.js';
+import { GhostRecorder, encodeGhost } from '../src/game/ghost.js';
 
 const PLAYER = '6f1c1d2e-8a4b-4c3d-9e2f-1a2b3c4d5e6f';
 const spec = (id: string) => SHIPPED_COURSES.find((c) => c.id === id)!.spec;

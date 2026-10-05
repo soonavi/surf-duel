@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PLAYER_HEIGHT, PLAYER_RADIUS } from '../physics/constants';
+import { PLAYER_HEIGHT, PLAYER_RADIUS } from '../physics/constants.js';
 
 /** Ghosts closer than this to the camera are hidden so they don't fill the screen. */
 const NEAR_HIDE = 90;

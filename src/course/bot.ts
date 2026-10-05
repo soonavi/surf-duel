@@ -4,8 +4,8 @@
  * it. Used to prove courses are beatable (playability tests) and, later, to
  * drive the menu's attract-mode camera.
  */
-import type { BuiltCourse } from './builder';
-import type { MoveCmd, PlayerState } from '../physics/player';
+import type { BuiltCourse } from './builder.js';
+import type { MoveCmd, PlayerState } from '../physics/player.js';
 
 export interface BotStyle {
   /** Bunny-hop across pads (keeps speed) instead of walking (cautious). */

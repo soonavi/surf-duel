@@ -22,11 +22,11 @@
  * the client offers a random course instead.
  */
 import { z } from 'zod';
-import { preparePrompt } from '../src/course/aiSchema';
-import { generateShareCode } from '../src/course/shareCode';
-import type { Course } from '../src/course/schema';
-import { DEFAULT_NAME, validateCourse } from '../src/course/validator';
-import type { Moderator } from './openaiModerator';
+import { preparePrompt } from '../src/course/aiSchema.js';
+import { generateShareCode } from '../src/course/shareCode.js';
+import type { Course } from '../src/course/schema.js';
+import { DEFAULT_NAME, validateCourse } from '../src/course/validator.js';
+import type { Moderator } from './openaiModerator.js';
 
 export const GENERATE_TIMEOUT_MS = 15_000;
 /** Each moderation check usually takes well under a second. */

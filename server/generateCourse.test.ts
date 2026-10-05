@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BUDGET, RATE_LIMIT, handleGenerate, type ClaimLimits, type ClaimResult, type CourseRow, type CourseStore, type GenerateDeps } from './generateCourse';
-import { createRng } from '../src/util/rng';
-import { COURSE_JSON_SCHEMA, COURSE_SYSTEM_PROMPT, PROMPT_MAX_CHARS, courseUserMessage } from '../src/course/aiSchema';
+import { BUDGET, RATE_LIMIT, handleGenerate, type ClaimLimits, type ClaimResult, type CourseRow, type CourseStore, type GenerateDeps } from './generateCourse.js';
+import { createRng } from '../src/util/rng.js';
+import { COURSE_JSON_SCHEMA, COURSE_SYSTEM_PROMPT, PROMPT_MAX_CHARS, courseUserMessage } from '../src/course/aiSchema.js';
 
 const GOOD = {
   name: 'Molten Mile',

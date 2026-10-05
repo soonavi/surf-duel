@@ -1,4 +1,4 @@
-import { parseCoachText, type CoachKey, type CoachKeys, type CoachPrompt } from '../game/tutorialCoach';
+import { parseCoachText, type CoachKey, type CoachKeys, type CoachPrompt } from '../game/tutorialCoach.js';
 
 const KEYS: readonly { key: CoachKey; label: string }[] = [
   { key: 'w', label: 'W' },

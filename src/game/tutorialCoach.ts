@@ -19,9 +19,9 @@
  * wish direction diagonal, so its projection on your velocity is already past
  * the cap and the push vanishes: you slide off.
  */
-import type { Piece } from '../course/layout';
-import type { CourseEvent } from '../course/runtime';
-import type { RampSide } from '../course/schema';
+import type { Piece } from '../course/layout.js';
+import type { CourseEvent } from '../course/runtime.js';
+import type { RampSide } from '../course/schema.js';
 
 export type CoachKey = 'w' | 'a' | 's' | 'd' | 'space';
 export type CoachKeys = Record<CoachKey, boolean>;

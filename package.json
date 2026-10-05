@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:api": "node scripts/check-api-modules.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

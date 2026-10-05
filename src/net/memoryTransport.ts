@@ -2,7 +2,7 @@
  * In-memory RoomTransport for tests: a hub that delivers presence and
  * broadcasts synchronously between transports on the same topic.
  */
-import type { PresenceEntry, RoomTransport, TransportHandlers } from './transport';
+import type { PresenceEntry, RoomTransport, TransportHandlers } from './transport.js';
 
 interface Peer {
   key: string;

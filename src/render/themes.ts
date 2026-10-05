@@ -1,5 +1,5 @@
-import type { ThemeName } from '../course/schema';
-import type { SkyColors } from './materials';
+import type { ThemeName } from '../course/schema.js';
+import type { SkyColors } from './materials.js';
 
 export interface SurfaceColors {
   base: string;

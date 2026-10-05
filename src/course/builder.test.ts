@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { BufferGeometry, Vector3 } from 'three';
-import { buildCourse } from './builder';
-import type { Course, Segment } from './schema';
-import { BvhWorld, ContactList } from '../physics/collision';
-import { DEFAULT_PHYSICS, FLOOR_NORMAL_Y, TICK_DT } from '../physics/constants';
-import { createPlayer, stepPlayer } from '../physics/player';
+import { buildCourse } from './builder.js';
+import type { Course, Segment } from './schema.js';
+import { BvhWorld, ContactList } from '../physics/collision.js';
+import { DEFAULT_PHYSICS, FLOOR_NORMAL_Y, TICK_DT } from '../physics/constants.js';
+import { createPlayer, stepPlayer } from '../physics/player.js';
 
 const ramp = (over: Partial<Extract<Segment, { type: 'ramp' }>> = {}): Segment => ({
   type: 'ramp',

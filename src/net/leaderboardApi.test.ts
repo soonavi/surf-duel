@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { fetchLeaderboard, fetchRunGhost, submitRun, type SubmitPayload } from './leaderboardApi';
-import { encodeGhost } from '../game/ghost';
+import { fetchLeaderboard, fetchRunGhost, submitRun, type SubmitPayload } from './leaderboardApi.js';
+import { encodeGhost } from '../game/ghost.js';
 
 const ok = (data: unknown) => async () => ({ data, error: null });
 const row = (over: Record<string, unknown> = {}) => ({

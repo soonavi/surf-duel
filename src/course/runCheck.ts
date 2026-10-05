@@ -13,9 +13,9 @@
  * The ghost is public, so anything odd that slips through is visible too.
  */
 import { Vector3 } from 'three';
-import type { BuiltCourse, Trigger } from './builder';
-import { GHOST_RATE, type GhostData, type GhostSample } from '../game/ghost';
-import { DEFAULT_PHYSICS, PLAYER_HEIGHT } from '../physics/constants';
+import type { BuiltCourse, Trigger } from './builder.js';
+import { GHOST_RATE, type GhostData, type GhostSample } from '../game/ghost.js';
+import { DEFAULT_PHYSICS, PLAYER_HEIGHT } from '../physics/constants.js';
 
 export interface RunClaim {
   timeMs: number;

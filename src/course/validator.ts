@@ -14,9 +14,9 @@ import {
   type RampSide,
   type Segment,
   type ThemeName,
-} from './schema';
-import { cleanName as cleanPublicName } from '../util/text';
-import { START_SPEED, afterBooster, afterFall, afterRamp, maxGapLength, type SpeedRange } from './tuning';
+} from './schema.js';
+import { cleanName as cleanPublicName } from '../util/text.js';
+import { START_SPEED, afterBooster, afterFall, afterRamp, maxGapLength, type SpeedRange } from './tuning.js';
 
 export interface ValidationResult {
   course: Course;

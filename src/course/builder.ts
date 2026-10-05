@@ -5,9 +5,9 @@
  */
 import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, MathUtils, Vector3 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { Course, Segment } from './schema';
-import { validateCourse } from './validator';
-import type { TrackPath } from './path';
+import type { Course, Segment } from './schema.js';
+import { validateCourse } from './validator.js';
+import type { TrackPath } from './path.js';
 import {
   FINISH_PAD,
   PAD_THICKNESS,
@@ -20,9 +20,9 @@ import {
   type Piece,
   type RampPiece,
   type SpawnPoint,
-} from './layout';
+} from './layout.js';
 
-export type { BoosterPiece, GatePiece, PadPiece, Piece, RampPiece, RidePoint, SpawnPoint } from './layout';
+export type { BoosterPiece, GatePiece, PadPiece, Piece, RampPiece, RidePoint, SpawnPoint } from './layout.js';
 
 export type TriggerKind = 'start' | 'checkpoint' | 'booster' | 'finish';
 

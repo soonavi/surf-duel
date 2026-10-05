@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { SnapshotBuffer, type Snapshot } from './interpolation';
+import { SnapshotBuffer, type Snapshot } from './interpolation.js';
 
 const snap = (t: number, x: number, vx = 0, yaw = 0): Snapshot => ({ t, x, y: 0, z: 0, vx, vy: 0, vz: 0, yaw });
 

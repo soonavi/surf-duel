@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { browserStorage, type KeyValueStorage } from './records';
+import { browserStorage, type KeyValueStorage } from './records.js';
 
 export type MusicChoice = 'generated' | 'file' | 'off';
 export type GraphicsQuality = 'high' | 'low';

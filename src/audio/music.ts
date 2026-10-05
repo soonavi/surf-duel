@@ -5,8 +5,8 @@
  * and drum hits by sixteenth-note step); engine.ts plays it with Web Audio.
  * No samples, no files, nothing to license.
  */
-import type { ThemeName } from '../course/schema';
-import { createRng } from '../util/rng';
+import type { ThemeName } from '../course/schema.js';
+import { createRng } from '../util/rng.js';
 
 export const STEPS_PER_BAR = 16;
 export const SONG_BARS = 8;

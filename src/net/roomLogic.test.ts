@@ -11,8 +11,8 @@ import {
   pickColor,
   rankRacers,
   sanitizeName,
-} from './roomLogic';
-import { createRng } from '../util/rng';
+} from './roomLogic.js';
+import { createRng } from '../util/rng.js';
 
 describe('room codes', () => {
   it('generates 4 unambiguous capital letters', () => {

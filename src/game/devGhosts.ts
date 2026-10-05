@@ -5,10 +5,10 @@
  * an older layout of the course — a ghost is recorded live by the cautious
  * bot, so it always matches the current geometry.
  */
-import type { BuiltCourse } from '../course/builder';
-import { simulateRun } from '../course/simulate';
-import { GhostRecorder, decodeGhost, type GhostData } from './ghost';
-import { DevGhostFile } from './devGhostFile';
+import type { BuiltCourse } from '../course/builder.js';
+import { simulateRun } from '../course/simulate.js';
+import { GhostRecorder, decodeGhost, type GhostData } from './ghost.js';
+import { DevGhostFile } from './devGhostFile.js';
 
 export interface GhostRun {
   /** Short tag shown over the ghost and on the progress bar. */

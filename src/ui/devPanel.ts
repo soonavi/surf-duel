@@ -1,11 +1,11 @@
 import GUI from 'lil-gui';
 import { z } from 'zod';
-import { DEFAULT_PHYSICS, PHYSICS_LIMITS, physics, type PhysicsParams } from '../physics/constants';
-import { SETTINGS_LIMITS } from '../game/settings';
-import { SHIPPED_COURSES } from '../course/courses';
-import { randomCourse } from '../course/random';
-import { THEMES } from '../course/schema';
-import type { App } from '../game/app';
+import { DEFAULT_PHYSICS, PHYSICS_LIMITS, physics, type PhysicsParams } from '../physics/constants.js';
+import { SETTINGS_LIMITS } from '../game/settings.js';
+import { SHIPPED_COURSES } from '../course/courses/index.js';
+import { randomCourse } from '../course/random.js';
+import { THEMES } from '../course/schema.js';
+import type { App } from '../game/app.js';
 
 const STORAGE_KEY = 'surfduel.dev.physics.v1';
 const StoredPhysics = z.record(z.string(), z.number());

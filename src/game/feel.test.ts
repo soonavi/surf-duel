@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_ROLL, SPEED_FOV_EXTRA, approachRoll, speedFov, speedLines } from './feel';
+import { MAX_ROLL, SPEED_FOV_EXTRA, approachRoll, speedFov, speedLines } from './feel.js';
 
 describe('speedFov', () => {
   it('widens the view slightly with speed, and never by more than the cap', () => {

@@ -3,7 +3,7 @@
  * presence for the player list, broadcast for everything else.
  */
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js';
-import type { PresenceEntry, RoomTransport, TransportHandlers } from './transport';
+import type { PresenceEntry, RoomTransport, TransportHandlers } from './transport.js';
 
 let client: SupabaseClient | null = null;
 

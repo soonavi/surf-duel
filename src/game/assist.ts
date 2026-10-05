@@ -9,9 +9,9 @@
  * run checks hold for assisted runs too.
  */
 import { Vector3 } from 'three';
-import { rightOf } from '../course/layout';
-import type { PhysicsParams } from '../physics/constants';
-import type { MoveCmd, PlayerState } from '../physics/player';
+import { rightOf } from '../course/layout.js';
+import type { PhysicsParams } from '../physics/constants.js';
+import type { MoveCmd, PlayerState } from '../physics/player.js';
 
 export const ASSIST_AIR_ACCEL_SCALE = 1.3;
 

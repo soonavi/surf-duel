@@ -2,9 +2,9 @@
  * Seeded procedural courses. The fallback when AI generation fails (Phase 5),
  * and a fuzzer for the builder: every seed must produce a beatable course.
  */
-import { DIFFICULTIES, DIFFICULTY_STYLE, THEMES, type Course, type Difficulty, type RampSide, type Segment, type ThemeName } from './schema';
-import { validateCourse } from './validator';
-import { createRng } from '../util/rng';
+import { DIFFICULTIES, DIFFICULTY_STYLE, THEMES, type Course, type Difficulty, type RampSide, type Segment, type ThemeName } from './schema.js';
+import { validateCourse } from './validator.js';
+import { createRng } from '../util/rng.js';
 
 const ADJECTIVES = ['Neon', 'Molten', 'Frozen', 'Hollow', 'Velvet', 'Silent', 'Crimson', 'Electric', 'Drifting', 'Shattered', 'Golden', 'Midnight'];
 const NOUNS = ['Rapids', 'Spiral', 'Canyon', 'Descent', 'Ribbon', 'Cascade', 'Gauntlet', 'Slipstream', 'Abyss', 'Highway', 'Chasm', 'Run'];

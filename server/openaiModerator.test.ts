@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MODERATION_MODEL, moderationFlagged, openAiModerator, type ModerationClient } from './openaiModerator';
+import { MODERATION_MODEL, moderationFlagged, openAiModerator, type ModerationClient } from './openaiModerator.js';
 
 const CLEAN = { harassment: false, hate: false, sexual: false, 'self-harm': false, violence: false, 'violence/graphic': false, illicit: false };
 

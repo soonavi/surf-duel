@@ -1,4 +1,4 @@
-import { TICK_DT } from '../physics/constants';
+import { TICK_DT } from '../physics/constants.js';
 
 /** Longest frame we will simulate; anything beyond (tab hitch, debugger pause) is dropped. */
 export const MAX_FRAME_DT = 0.25;

@@ -15,8 +15,8 @@
  * The loop seam (finish back to start) fades through dark: see flyoverFade.
  */
 import { Vector3 } from 'three';
-import type { TrackPath } from '../course/path';
-import { forwardOf, rightOf } from '../course/layout';
+import type { TrackPath } from '../course/path.js';
+import { forwardOf, rightOf } from '../course/layout.js';
 
 /** Height above the (smoothed) riding line. */
 const HEIGHT = 520;

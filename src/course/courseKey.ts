@@ -1,6 +1,6 @@
-import type { Course } from './schema';
-import { DEFAULT_PHYSICS } from '../physics/constants';
-import { hashString } from '../util/rng';
+import type { Course } from './schema.js';
+import { DEFAULT_PHYSICS } from '../physics/constants.js';
+import { hashString } from '../util/rng.js';
 
 /**
  * Bump when the layout or builder changes what geometry a spec produces.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { openAiDesigner, type ResponsesClient } from './openaiDesigner';
-import { COURSE_JSON_SCHEMA, COURSE_SYSTEM_PROMPT } from '../src/course/aiSchema';
-import { BUDGET } from './generateCourse';
+import { openAiDesigner, type ResponsesClient } from './openaiDesigner.js';
+import { COURSE_JSON_SCHEMA, COURSE_SYSTEM_PROMPT } from '../src/course/aiSchema.js';
+import { BUDGET } from './generateCourse.js';
 
 function fakeClient(outputText: string) {
   const calls: { body: Record<string, unknown>; options: Record<string, unknown> | undefined }[] = [];

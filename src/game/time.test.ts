@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDelta, formatTime } from './time';
+import { formatDelta, formatTime } from './time.js';
 
 describe('formatTime', () => {
   it('formats as m:ss.cc', () => {

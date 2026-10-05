@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { createSky, setSkyColors, type SkyColors } from './materials';
-import type { Theme } from './themes';
+import { createSky, setSkyColors, type SkyColors } from './materials.js';
+import type { Theme } from './themes.js';
 
 const CAMERA_NEAR = 4;
 const CAMERA_FAR = 100_000;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { persistentId } from './profile';
-import type { KeyValueStorage } from './records';
+import { persistentId } from './profile.js';
+import type { KeyValueStorage } from './records.js';
 
 class MemoryStorage implements KeyValueStorage {
   readonly data = new Map<string, string>();

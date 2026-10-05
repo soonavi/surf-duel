@@ -5,7 +5,7 @@
  * It edits the Settings object in place and calls onChange; the App applies
  * and saves. Pure DOM.
  */
-import { SETTINGS_LIMITS, type GraphicsQuality, type MusicChoice, type Settings } from '../game/settings';
+import { SETTINGS_LIMITS, type GraphicsQuality, type MusicChoice, type Settings } from '../game/settings.js';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);

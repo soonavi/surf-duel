@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanName, cleanText, containsBlocked, containsLink } from './text';
+import { cleanName, cleanText, containsBlocked, containsLink } from './text.js';
 
 describe('cleanText', () => {
   it('collapses whitespace and strips control and zero-width characters', () => {

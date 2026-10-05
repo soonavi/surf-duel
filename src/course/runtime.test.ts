@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { buildCourse, type Trigger } from './builder';
-import { CourseRuntime, applyBoost, triggerContains } from './runtime';
-import { createPlayer } from '../physics/player';
-import type { Course } from './schema';
+import { buildCourse, type Trigger } from './builder.js';
+import { CourseRuntime, applyBoost, triggerContains } from './runtime.js';
+import { createPlayer } from '../physics/player.js';
+import type { Course } from './schema.js';
 
 const course: Course = {
   name: 'Runtime Test',

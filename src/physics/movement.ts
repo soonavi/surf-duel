@@ -4,7 +4,7 @@
  * and trivially testable.
  */
 import { Vector3 } from 'three';
-import type { PhysicsParams } from './constants';
+import type { PhysicsParams } from './constants.js';
 
 /**
  * Source's PM_Accelerate / PM_AirAccelerate in one function.

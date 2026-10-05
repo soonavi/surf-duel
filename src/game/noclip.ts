@@ -1,5 +1,5 @@
 import { Vector3 } from 'three';
-import { flatRight, lookDirection, type ViewAngles } from './view';
+import { flatRight, lookDirection, type ViewAngles } from './view.js';
 
 export interface NoclipInput {
   /** -1..1, W/S */

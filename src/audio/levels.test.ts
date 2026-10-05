@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bassLevel, followPulse, mixLevels, spectrumBars, speedIntensity } from './levels';
+import { bassLevel, followPulse, mixLevels, spectrumBars, speedIntensity } from './levels.js';
 
 describe('mixLevels', () => {
   it('builds up layer by layer as intensity rises', () => {

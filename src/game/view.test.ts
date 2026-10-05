@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Euler, Vector3 } from 'three';
-import { PITCH_LIMIT, applyMouseLook, flatForward, flatRight, lookDirection, wrapAngle } from './view';
+import { PITCH_LIMIT, applyMouseLook, flatForward, flatRight, lookDirection, wrapAngle } from './view.js';
 
 describe('view angles', () => {
   it('turns right when the mouse moves right', () => {

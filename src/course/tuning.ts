@@ -4,8 +4,8 @@
  * Planning always uses DEFAULT_PHYSICS, never the live tuning values, so a
  * course spec builds the same geometry for everyone.
  */
-import { DEFAULT_PHYSICS } from '../physics/constants';
-import type { Difficulty } from './schema';
+import { DEFAULT_PHYSICS } from '../physics/constants.js';
+import type { Difficulty } from './schema.js';
 
 export const PLAN_GRAVITY = DEFAULT_PHYSICS.gravity;
 

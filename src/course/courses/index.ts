@@ -1,8 +1,8 @@
-import tutorial from './tutorial.json';
-import easyCruise from './easy-cruise.json';
-import speedDemon from './speed-demon.json';
-import frostbiteFlow from './frostbite-flow.json';
-import eventHorizon from './event-horizon.json';
+import tutorial from './tutorial.json' with { type: 'json' };
+import easyCruise from './easy-cruise.json' with { type: 'json' };
+import speedDemon from './speed-demon.json' with { type: 'json' };
+import frostbiteFlow from './frostbite-flow.json' with { type: 'json' };
+import eventHorizon from './event-horizon.json' with { type: 'json' };
 
 export interface ShippedCourse {
   id: string;

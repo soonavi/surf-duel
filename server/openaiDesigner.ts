@@ -3,8 +3,8 @@
  * Outputs (strict JSON schema), so the reply is always shaped like a course.
  */
 import type OpenAI from 'openai';
-import { COURSE_JSON_SCHEMA, COURSE_SCHEMA_NAME, COURSE_SYSTEM_PROMPT, courseUserMessage } from '../src/course/aiSchema';
-import { BUDGET, type CourseDesigner } from './generateCourse';
+import { COURSE_JSON_SCHEMA, COURSE_SCHEMA_NAME, COURSE_SYSTEM_PROMPT, courseUserMessage } from '../src/course/aiSchema.js';
+import { BUDGET, type CourseDesigner } from './generateCourse.js';
 
 /** The slice of the OpenAI client we use (lets tests pass a fake). */
 export interface ResponsesClient {

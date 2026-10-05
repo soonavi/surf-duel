@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { RecordStore, type RunRecord, type KeyValueStorage } from './records';
-import { courseKey } from '../course/courseKey';
-import { validateCourse } from '../course/validator';
-import { SHIPPED_COURSES } from '../course/courses';
+import { RecordStore, type RunRecord, type KeyValueStorage } from './records.js';
+import { courseKey } from '../course/courseKey.js';
+import { validateCourse } from '../course/validator.js';
+import { SHIPPED_COURSES } from '../course/courses/index.js';
 
 class MemoryStorage implements KeyValueStorage {
   readonly map = new Map<string, string>();

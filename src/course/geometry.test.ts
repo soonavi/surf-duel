@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { rampPrismGeometry } from './geometry';
-import { FLOOR_NORMAL_Y } from '../physics/constants';
+import { rampPrismGeometry } from './geometry.js';
+import { FLOOR_NORMAL_Y } from '../physics/constants.js';
 
 describe('rampPrismGeometry', () => {
   it('faces every triangle outward and makes 60° slopes surfable', () => {

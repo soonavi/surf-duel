@@ -4,9 +4,9 @@
  * the `PlayerState` it's handed.
  */
 import { Vector3 } from 'three';
-import { FLOOR_NORMAL_Y, PLAYER_RADIUS, type PhysicsParams } from './constants';
-import { ContactList, type CollisionWorld } from './collision';
-import { accelerate, applyFriction, clipVelocity, clipVelocityToPlanes, wishFromInput } from './movement';
+import { FLOOR_NORMAL_Y, PLAYER_RADIUS, type PhysicsParams } from './constants.js';
+import { ContactList, type CollisionWorld } from './collision.js';
+import { accelerate, applyFriction, clipVelocity, clipVelocityToPlanes, wishFromInput } from './movement.js';
 
 export interface PlayerState {
   /** Bottom of the capsule. */

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import type { BuiltCourse } from '../course/builder';
-import { createGridMaterial, createRampMaterial } from './materials';
-import type { Theme } from './themes';
+import type { BuiltCourse } from '../course/builder.js';
+import { createGridMaterial, createRampMaterial } from './materials.js';
+import type { Theme } from './themes.js';
 
 /** How far below the course's lowest point the decorative ground sits. */
 const GROUND_DEPTH = 4000;

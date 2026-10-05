@@ -5,7 +5,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
-import type { RunStore, StoreOutcome } from './submitRun';
+import type { RunStore, StoreOutcome } from './submitRun.js';
 
 const Row = z.object({
   status: z.enum(['ok', 'kept', 'ip-window', 'global-day']),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SONG_BARS, STEPS_PER_BAR, THEME_MOODS, composeSong, stepSeconds, type Song } from './music';
-import { THEMES } from '../course/schema';
+import { SONG_BARS, STEPS_PER_BAR, THEME_MOODS, composeSong, stepSeconds, type Song } from './music.js';
+import { THEMES } from '../course/schema.js';
 
 const melodic = (song: Song) => [...song.bass, ...song.arp, ...song.pad];
 

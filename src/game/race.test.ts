@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RaceSession, type RaceEvent } from './race';
+import { RaceSession, type RaceEvent } from './race.js';
 
 const run = (session: RaceSession, ticks: number): RaceEvent[] => {
   const events: RaceEvent[] = [];

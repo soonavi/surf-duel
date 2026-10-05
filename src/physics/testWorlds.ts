@@ -2,9 +2,9 @@
  * Small collision worlds shared by the physics tests. Not imported by game code.
  */
 import { BoxGeometry, BufferGeometry, Matrix4, MathUtils, Vector3 } from 'three';
-import { BvhWorld } from './collision';
-import { rampPrismGeometry } from '../course/geometry';
-import { PLAYER_RADIUS } from './constants';
+import { BvhWorld } from './collision.js';
+import { rampPrismGeometry } from '../course/geometry.js';
+import { PLAYER_RADIUS } from './constants.js';
 
 /** A huge box whose top face sits at `y`. */
 export function floorGeometry(y = 0): BufferGeometry {

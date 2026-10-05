@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { ASSIST_AIR_ACCEL_SCALE, assistCommand, assistedPhysics } from './assist';
-import { buildCourse, type BuiltCourse } from '../course/builder';
-import { findCourse } from '../course/courses';
-import { SurfBot } from '../course/bot';
-import { CourseRuntime, placeAtSpawn } from '../course/runtime';
-import { rightOf } from '../course/layout';
-import { BvhWorld } from '../physics/collision';
-import { DEFAULT_PHYSICS, TICK_DT, TICK_RATE } from '../physics/constants';
-import { createPlayer, stepPlayer, type MoveCmd } from '../physics/player';
+import { ASSIST_AIR_ACCEL_SCALE, assistCommand, assistedPhysics } from './assist.js';
+import { buildCourse, type BuiltCourse } from '../course/builder.js';
+import { findCourse } from '../course/courses/index.js';
+import { SurfBot } from '../course/bot.js';
+import { CourseRuntime, placeAtSpawn } from '../course/runtime.js';
+import { rightOf } from '../course/layout.js';
+import { BvhWorld } from '../physics/collision.js';
+import { DEFAULT_PHYSICS, TICK_DT, TICK_RATE } from '../physics/constants.js';
+import { createPlayer, stepPlayer, type MoveCmd } from '../physics/player.js';
 
 const cmd = (over: Partial<MoveCmd> = {}): MoveCmd => ({ forward: 0, side: 0, jump: false, yaw: 0, ...over });
 

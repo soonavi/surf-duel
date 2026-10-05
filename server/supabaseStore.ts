@@ -4,7 +4,7 @@
  * server-side.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ClaimResult, CourseRow, CourseStore } from './generateCourse';
+import type { ClaimResult, CourseRow, CourseStore } from './generateCourse.js';
 
 /** Postgres unique_violation: the share code is already taken. */
 const UNIQUE_VIOLATION = '23505';

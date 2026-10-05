@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Course } from './schema';
-import { randomCourse } from './random';
-import { validateCourse } from './validator';
+import { Course } from './schema.js';
+import { randomCourse } from './random.js';
+import { validateCourse } from './validator.js';
 
 describe('randomCourse', () => {
   it('is deterministic per seed', () => {

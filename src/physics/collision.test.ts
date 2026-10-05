@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BoxGeometry, Group, Mesh, Vector3 } from 'three';
-import { BvhWorld, ContactList, mergeCollisionGeometry } from './collision';
-import { PLAYER_RADIUS } from './constants';
-import { feetOnLeftFace, floorWorld, leftFaceNormal, rampWorld, sphereDistanceToLeftFace } from './testWorlds';
+import { BvhWorld, ContactList, mergeCollisionGeometry } from './collision.js';
+import { PLAYER_RADIUS } from './constants.js';
+import { feetOnLeftFace, floorWorld, leftFaceNormal, rampWorld, sphereDistanceToLeftFace } from './testWorlds.js';
 
 describe('BvhWorld.resolveCapsule', () => {
   it('reports nothing for a capsule standing clear of the floor', () => {

@@ -6,8 +6,8 @@
  * shown, and failures come back as values: the game works without a board.
  */
 import { z } from 'zod';
-import { decodeGhost, type GhostData } from '../game/ghost';
-import { sanitizeName } from './roomLogic';
+import { decodeGhost, type GhostData } from '../game/ghost.js';
+import { sanitizeName } from './roomLogic.js';
 
 /** How the server finds a course: shipped courses by id, AI/shared ones by share code. Random courses have no board. */
 export type BoardRef = { kind: 'shipped'; id: string } | { kind: 'code'; code: string };
@@ -32,7 +32,7 @@ export const BOARD_SIZE = 10;
 const FALLBACK_NAME = 'Surfer';
 
 async function client() {
-  const { supabaseClient } = await import('./supabase'); // keeps supabase-js out of the main bundle
+  const { supabaseClient } = await import('./supabase.js'); // keeps supabase-js out of the main bundle
   return supabaseClient();
 }
 

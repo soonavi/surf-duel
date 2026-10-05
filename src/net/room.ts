@@ -12,8 +12,8 @@
  *   ClockSync converts it.
  */
 import type { Vector3 } from 'three';
-import { ClockSync } from './clock';
-import { SnapshotBuffer } from './interpolation';
+import { ClockSync } from './clock.js';
+import { SnapshotBuffer } from './interpolation.js';
 import {
   EVENTS,
   Finish,
@@ -27,9 +27,9 @@ import {
   type PlayerStatus,
   type RaceResult,
   type RoomState,
-} from './protocol';
-import { batchInterval, generateRoomCode, hostOf, normalizeRoomCode, orderMembers, overCapacity, pickColor, sanitizeName } from './roomLogic';
-import type { PresenceEntry, RoomTransport, TransportStatus } from './transport';
+} from './protocol.js';
+import { batchInterval, generateRoomCode, hostOf, normalizeRoomCode, orderMembers, overCapacity, pickColor, sanitizeName } from './roomLogic.js';
+import type { PresenceEntry, RoomTransport, TransportStatus } from './transport.js';
 
 export type RoomJoinErrorKind = 'invalid-code' | 'not-found' | 'full' | 'connection';
 

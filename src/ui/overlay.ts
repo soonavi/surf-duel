@@ -1,5 +1,5 @@
-import { formatDelta, formatTime } from '../game/time';
-import { MAX_PLAYERS } from '../net/roomLogic';
+import { formatDelta, formatTime } from '../game/time.js';
+import { MAX_PLAYERS } from '../net/roomLogic.js';
 
 export type OverlayScreen = 'start' | 'loading' | 'lobby' | 'pause' | 'results' | 'unsupported' | 'generate' | 'preview' | 'settings' | 'none';
 

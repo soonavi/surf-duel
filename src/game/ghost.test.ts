@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { GHOST_RATE, GhostRecorder, decodeGhost, encodeGhost, sampleGhost, type GhostData } from './ghost';
+import { GHOST_RATE, GhostRecorder, decodeGhost, encodeGhost, sampleGhost, type GhostData } from './ghost.js';
 
 function circleRun(seconds: number): GhostData {
   const rec = new GhostRecorder();

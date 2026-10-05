@@ -3,7 +3,7 @@
  * tick, so times are exact and identical across machines), checkpoint splits
  * and the finish. Pure state, driven once per simulation tick.
  */
-import { TICK_RATE } from '../physics/constants';
+import { TICK_RATE } from '../physics/constants.js';
 
 export type RacePhase = 'countdown' | 'racing' | 'finished';
 export type RaceEvent = { type: 'count'; n: number } | { type: 'go' };

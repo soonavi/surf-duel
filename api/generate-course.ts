@@ -6,8 +6,8 @@
  * The logic lives in server/generateCourse.ts; this is only HTTP plumbing.
  * In `npm run dev` the same handler runs through the dev server's /api middleware.
  */
-import { handleGenerate } from '../server/generateCourse';
-import { clientIp, generateDeps, json } from '../server/env';
+import { handleGenerate } from '../server/generateCourse.js';
+import { clientIp, generateDeps, json } from '../server/env.js';
 
 // The OpenAI call itself is capped at 15 s; leave room for the database around it.
 export const config = { maxDuration: 30 };

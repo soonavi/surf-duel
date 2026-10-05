@@ -5,10 +5,10 @@
  * (bunny-hops across pads, keeping it) — and must finish without dying.
  */
 import { describe, expect, it } from 'vitest';
-import { buildCourse } from './builder';
-import { SHIPPED_COURSES } from './courses';
-import { randomCourse } from './random';
-import { simulateRun } from './simulate';
+import { buildCourse } from './builder.js';
+import { SHIPPED_COURSES } from './courses/index.js';
+import { randomCourse } from './random.js';
+import { simulateRun } from './simulate.js';
 
 const STYLES = [
   { name: 'cautious', hop: false },

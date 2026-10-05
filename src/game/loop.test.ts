@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_STEPS_PER_FRAME, planSteps } from './loop';
-import { TICK_DT, TICK_RATE } from '../physics/constants';
+import { MAX_STEPS_PER_FRAME, planSteps } from './loop.js';
+import { TICK_DT, TICK_RATE } from '../physics/constants.js';
 
 function simulate(frameRate: number, seconds: number): { ticks: number; alphas: number[] } {
   let acc = 0;

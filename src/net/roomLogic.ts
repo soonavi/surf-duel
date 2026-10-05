@@ -2,7 +2,7 @@
  * Pure room rules: codes, names, colours, host election, capacity, send-rate
  * budgeting and live ranking. No networking here, so it's all unit-tested.
  */
-import { cleanName } from '../util/text';
+import { cleanName } from '../util/text.js';
 
 export const MAX_PLAYERS = 8;
 export const NAME_MAX = 16;

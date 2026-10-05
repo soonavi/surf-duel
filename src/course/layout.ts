@@ -11,9 +11,9 @@
  *    if needed.
  */
 import { MathUtils, Vector3 } from 'three';
-import { PLAYER_RADIUS } from '../physics/constants';
-import type { Course, RampSegment, RampSide, Segment } from './schema';
-import { TrackPath } from './path';
+import { PLAYER_RADIUS } from '../physics/constants.js';
+import type { Course, RampSegment, RampSide, Segment } from './schema.js';
+import { TrackPath } from './path.js';
 import {
   DIFFICULTY,
   PLAN_GRAVITY,
@@ -23,7 +23,7 @@ import {
   afterFall,
   afterRamp,
   type SpeedRange,
-} from './tuning';
+} from './tuning.js';
 
 export interface RidePoint {
   pos: Vector3;

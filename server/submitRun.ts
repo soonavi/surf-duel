@@ -10,13 +10,13 @@
  * rate limits, in one locked step (submit_run).
  */
 import { z } from 'zod';
-import { buildCourse, type BuiltCourse } from '../src/course/builder';
-import { courseKey } from '../src/course/courseKey';
-import { findCourse } from '../src/course/courses';
-import { checkRun, type RunProblem } from '../src/course/runCheck';
-import { normalizeShareCode } from '../src/course/shareCode';
-import { decodeGhost } from '../src/game/ghost';
-import { sanitizeName } from '../src/net/roomLogic';
+import { buildCourse, type BuiltCourse } from '../src/course/builder.js';
+import { courseKey } from '../src/course/courseKey.js';
+import { findCourse } from '../src/course/courses/index.js';
+import { checkRun, type RunProblem } from '../src/course/runCheck.js';
+import { normalizeShareCode } from '../src/course/shareCode.js';
+import { decodeGhost } from '../src/game/ghost.js';
+import { sanitizeName } from '../src/net/roomLogic.js';
 
 /** Submissions per IP (every finished run can post, so this is generous), and for everyone per day. */
 export const SUBMIT_LIMITS = { perIpWindow: 30, windowMs: 10 * 60_000, globalPerDay: 20_000 } as const;

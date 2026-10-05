@@ -1,5 +1,5 @@
-import { formatDelta, formatTime } from '../game/time';
-import { CoachPanel } from './coachPanel';
+import { formatDelta, formatTime } from '../game/time.js';
+import { CoachPanel } from './coachPanel.js';
 
 export interface HudMarker {
   label: string;

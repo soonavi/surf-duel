@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { MemoryHub } from './memoryTransport';
-import { Room, RoomJoinError, type RoomOptions } from './room';
-import { MAX_PLAYERS } from './roomLogic';
-import type { CourseRef } from './protocol';
-import { createRng } from '../util/rng';
+import { MemoryHub } from './memoryTransport.js';
+import { Room, RoomJoinError, type RoomOptions } from './room.js';
+import { MAX_PLAYERS } from './roomLogic.js';
+import type { CourseRef } from './protocol.js';
+import { createRng } from '../util/rng.js';
 
 const COURSE: { course: CourseRef; courseKey: string } = { course: { kind: 'shipped', id: 'tutorial' }, courseKey: 'c3-abc' };
 

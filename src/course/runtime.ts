@@ -4,10 +4,10 @@
  * headless playability tests, so both see exactly the same course.
  */
 import { Vector3 } from 'three';
-import type { BuiltCourse, SpawnPoint, Trigger } from './builder';
-import { forwardOf } from './layout';
-import { PLAYER_HEIGHT } from '../physics/constants';
-import type { PlayerState } from '../physics/player';
+import type { BuiltCourse, SpawnPoint, Trigger } from './builder.js';
+import { forwardOf } from './layout.js';
+import { PLAYER_HEIGHT } from '../physics/constants.js';
+import type { PlayerState } from '../physics/player.js';
 
 export type CourseEvent =
   | { type: 'start' }

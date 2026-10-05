@@ -9,14 +9,14 @@ import {
   type CoachKeys,
   type CoachPrompt,
   type CoachRamp,
-} from './tutorialCoach';
-import { buildCourse } from '../course/builder';
-import { findCourse } from '../course/courses';
-import { simulateRun } from '../course/simulate';
-import { CourseRuntime, placeAtSpawn, type CourseEvent } from '../course/runtime';
-import { BvhWorld } from '../physics/collision';
-import { DEFAULT_PHYSICS, TICK_DT } from '../physics/constants';
-import { createPlayer, stepPlayer } from '../physics/player';
+} from './tutorialCoach.js';
+import { buildCourse } from '../course/builder.js';
+import { findCourse } from '../course/courses/index.js';
+import { simulateRun } from '../course/simulate.js';
+import { CourseRuntime, placeAtSpawn, type CourseEvent } from '../course/runtime.js';
+import { BvhWorld } from '../physics/collision.js';
+import { DEFAULT_PHYSICS, TICK_DT } from '../physics/constants.js';
+import { createPlayer, stepPlayer } from '../physics/player.js';
 
 // Mirrors the Tutorial: start pad, R, gate, L, gate, R (bends left), booster, L (bends right), finish.
 const RIDGE = { right: 200, left: -200, both: 0 } as const;

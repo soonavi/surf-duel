@@ -1,7 +1,7 @@
 import { Box3, BufferGeometry, Line3, Mesh, Vector3, type Object3D } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { MeshBVH } from 'three-mesh-bvh';
-import { PLAYER_HEIGHT, PLAYER_RADIUS } from './constants';
+import { PLAYER_HEIGHT, PLAYER_RADIUS } from './constants.js';
 
 /**
  * Bake every mesh under `root` into one world-space, position-only geometry

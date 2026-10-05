@@ -5,8 +5,8 @@
  *  - `boardId`, kept in localStorage, for the leaderboards: it keeps one
  *    entry (your best) per course. It's random, not a secret, and not shown.
  */
-import { sanitizeName } from '../net/roomLogic';
-import { browserStorage, type KeyValueStorage } from './records';
+import { sanitizeName } from '../net/roomLogic.js';
+import { browserStorage, type KeyValueStorage } from './records.js';
 
 const NAME_KEY = 'surfduel.name.v1';
 const BOARD_ID_KEY = 'surfduel.player.v1';

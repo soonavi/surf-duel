@@ -6,11 +6,11 @@
  * game never dead-ends.
  */
 import { z } from 'zod';
-import { PROMPT_MAX_CHARS, preparePrompt } from '../course/aiSchema';
-import type { Course } from '../course/schema';
-import { normalizeShareCode } from '../course/shareCode';
-import { validateCourse } from '../course/validator';
-import { cleanText, containsBlocked, containsLink } from '../util/text';
+import { PROMPT_MAX_CHARS, preparePrompt } from '../course/aiSchema.js';
+import type { Course } from '../course/schema.js';
+import { normalizeShareCode } from '../course/shareCode.js';
+import { validateCourse } from '../course/validator.js';
+import { cleanText, containsBlocked, containsLink } from '../util/text.js';
 
 export interface GeneratedCourse {
   course: Course;
@@ -108,7 +108,7 @@ export type CourseQuery = (code: string) => Promise<{ data: unknown; error: { me
 const Row = z.object({ code: z.string(), prompt: z.string(), spec: z.unknown() });
 
 const supabaseQuery: CourseQuery = async (code) => {
-  const { supabaseClient } = await import('./supabase'); // keeps supabase-js out of the main bundle
+  const { supabaseClient } = await import('./supabase.js'); // keeps supabase-js out of the main bundle
   const { data, error } = await supabaseClient().from('courses').select('code, prompt, spec').eq('code', code).maybeSingle();
   return { data, error };
 };

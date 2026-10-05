@@ -6,7 +6,7 @@
  *    prompt and share code, and Race / Regenerate / New prompt.
  * Pure DOM; the App decides what each button does.
  */
-import { PROMPT_MAX_CHARS } from '../course/aiSchema';
+import { PROMPT_MAX_CHARS } from '../course/aiSchema.js';
 
 export const EXAMPLE_PROMPTS: readonly string[] = [
   'long sweeping ramps over lava, one huge drop, medium difficulty',

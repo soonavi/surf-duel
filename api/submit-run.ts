@@ -5,8 +5,8 @@
  *
  * The logic lives in server/submitRun.ts; this is only HTTP plumbing.
  */
-import { handleSubmitRun, MAX_GHOST_CHARS } from '../server/submitRun';
-import { clientIp, json, submitDeps } from '../server/env';
+import { handleSubmitRun, MAX_GHOST_CHARS } from '../server/submitRun.js';
+import { clientIp, json, submitDeps } from '../server/env.js';
 
 export const config = { maxDuration: 10 };
 

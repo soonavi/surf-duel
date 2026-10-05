@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { TrackPath } from './path';
+import { TrackPath } from './path.js';
 
 /** A straight line down -Z, then a 90° left turn heading -X. */
 function lPath(): TrackPath {

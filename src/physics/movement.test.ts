@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { DEFAULT_PHYSICS } from './constants';
-import { accelerate, applyFriction, clipVelocity, clipVelocityToPlanes, wishFromInput } from './movement';
+import { DEFAULT_PHYSICS } from './constants.js';
+import { accelerate, applyFriction, clipVelocity, clipVelocityToPlanes, wishFromInput } from './movement.js';
 
 const DT = 0.01;
 

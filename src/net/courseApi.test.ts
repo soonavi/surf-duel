@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fetchSharedCourse, requestCourse, type CourseQuery } from './courseApi';
+import { fetchSharedCourse, requestCourse, type CourseQuery } from './courseApi.js';
 
 const SPEC = {
   name: 'Ice Ribbon',

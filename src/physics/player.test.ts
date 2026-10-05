@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { BufferGeometry, Vector3 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { BvhWorld, EMPTY_WORLD, type CollisionWorld } from './collision';
-import { DEFAULT_PHYSICS, PLAYER_RADIUS, TICK_DT, type PhysicsParams } from './constants';
-import { createPlayer, stepPlayer, type MoveCmd, type PlayerState } from './player';
-import { feetOnLeftFace, floorWorld, rampGeometry, rampWorld, sphereDistanceToLeftFace } from './testWorlds';
+import { BvhWorld, EMPTY_WORLD, type CollisionWorld } from './collision.js';
+import { DEFAULT_PHYSICS, PLAYER_RADIUS, TICK_DT, type PhysicsParams } from './constants.js';
+import { createPlayer, stepPlayer, type MoveCmd, type PlayerState } from './player.js';
+import { feetOnLeftFace, floorWorld, rampGeometry, rampWorld, sphereDistanceToLeftFace } from './testWorlds.js';
 
 const P: PhysicsParams = { ...DEFAULT_PHYSICS };
 const idle = (yaw = 0): MoveCmd => ({ forward: 0, side: 0, jump: false, yaw });

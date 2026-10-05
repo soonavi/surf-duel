@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { buildCourse } from '../course/builder';
-import { SHIPPED_COURSES } from '../course/courses';
-import { courseKey } from '../course/courseKey';
-import { encodeGhost, sampleGhost } from './ghost';
-import { parseDevGhostFile, recordBotGhost } from './devGhosts';
+import { buildCourse } from '../course/builder.js';
+import { SHIPPED_COURSES } from '../course/courses/index.js';
+import { courseKey } from '../course/courseKey.js';
+import { encodeGhost, sampleGhost } from './ghost.js';
+import { parseDevGhostFile, recordBotGhost } from './devGhosts.js';
 
 const tutorial = buildCourse(SHIPPED_COURSES[0]!.spec);
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './settings';
-import type { KeyValueStorage } from './records';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './settings.js';
+import type { KeyValueStorage } from './records.js';
 
 class MemoryStorage implements KeyValueStorage {
   readonly data = new Map<string, string>();

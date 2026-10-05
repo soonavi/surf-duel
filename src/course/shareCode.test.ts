@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SHARE_CODE_LENGTH, generateShareCode, normalizeShareCode } from './shareCode';
-import { createRng } from '../util/rng';
+import { SHARE_CODE_LENGTH, generateShareCode, normalizeShareCode } from './shareCode.js';
+import { createRng } from '../util/rng.js';
 
 describe('share codes', () => {
   it('are six characters with no look-alikes (I, O, 0, 1)', () => {

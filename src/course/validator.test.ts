@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Course, LIMITS, type Segment } from './schema';
-import { validateCourse } from './validator';
-import { createRng } from '../util/rng';
+import { Course, LIMITS, type Segment } from './schema.js';
+import { validateCourse } from './validator.js';
+import { createRng } from '../util/rng.js';
 
 const ramp = (over: Partial<Extract<Segment, { type: 'ramp' }>> = {}): Segment => ({
   type: 'ramp',

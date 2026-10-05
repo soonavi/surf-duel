@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { buildCourse } from '../course/builder';
-import { SHIPPED_COURSES, findCourse } from '../course/courses';
-import { randomCourse } from '../course/random';
-import type { TrackPath } from '../course/path';
-import { FADE_SECONDS, flyoverDuration, flyoverFade, flyoverPose } from './flyover';
+import { buildCourse } from '../course/builder.js';
+import { SHIPPED_COURSES, findCourse } from '../course/courses/index.js';
+import { randomCourse } from '../course/random.js';
+import type { TrackPath } from '../course/path.js';
+import { FADE_SECONDS, flyoverDuration, flyoverFade, flyoverPose } from './flyover.js';
 
 const built = buildCourse(findCourse('easy-cruise')!.spec);
 const path = built.path;

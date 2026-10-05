@@ -6,8 +6,8 @@
  * anything the model gets wrong (gaps too long for the speed, two drops in a
  * row, a course that loops back on itself...).
  */
-import { DIFFICULTIES, DIFFICULTY_STYLE, LIMITS, RAMP_SIDES, THEMES } from './schema';
-import { cleanText, containsBlocked, containsLink } from '../util/text';
+import { DIFFICULTIES, DIFFICULTY_STYLE, LIMITS, RAMP_SIDES, THEMES } from './schema.js';
+import { cleanText, containsBlocked, containsLink } from '../util/text.js';
 
 /** Longest prompt a player can send (characters). */
 export const PROMPT_MAX_CHARS = 200;

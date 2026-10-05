@@ -2,12 +2,12 @@
  * Run a bot through a course in the real physics, headless. Used by the
  * playability tests, and handy for tuning layouts from the console.
  */
-import { BvhWorld } from '../physics/collision';
-import { DEFAULT_PHYSICS, TICK_DT, TICK_RATE } from '../physics/constants';
-import { createPlayer, stepPlayer, type MoveCmd, type PlayerState } from '../physics/player';
-import type { BuiltCourse } from './builder';
-import { SurfBot, type BotStyle } from './bot';
-import { CourseRuntime, placeAtSpawn, type CourseEvent } from './runtime';
+import { BvhWorld } from '../physics/collision.js';
+import { DEFAULT_PHYSICS, TICK_DT, TICK_RATE } from '../physics/constants.js';
+import { createPlayer, stepPlayer, type MoveCmd, type PlayerState } from '../physics/player.js';
+import type { BuiltCourse } from './builder.js';
+import { SurfBot, type BotStyle } from './bot.js';
+import { CourseRuntime, placeAtSpawn, type CourseEvent } from './runtime.js';
 
 export interface RunResult {
   finished: boolean;

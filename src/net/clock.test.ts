@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClockSync } from './clock';
+import { ClockSync } from './clock.js';
 
 /** One ping: host clock = local + skew; one-way latencies out/back. */
 function ping(clock: ClockSync, t0: number, skew: number, out: number, back: number): void {

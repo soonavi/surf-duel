@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { Vector3 } from 'three';
-import { buildCourse, type BuiltCourse } from './builder';
-import { SHIPPED_COURSES } from './courses';
-import { randomCourse } from './random';
-import { checkRun, minRunTimeMs, type RunClaim } from './runCheck';
-import { SurfBot } from './bot';
-import { CourseRuntime, placeAtSpawn } from './runtime';
-import { simulateRun } from './simulate';
-import { BvhWorld } from '../physics/collision';
-import { DEFAULT_PHYSICS, TICK_DT, TICK_RATE } from '../physics/constants';
-import { createPlayer, stepPlayer } from '../physics/player';
-import { GhostRecorder, decodeGhost, encodeGhost, type GhostData, type GhostSample } from '../game/ghost';
+import { buildCourse, type BuiltCourse } from './builder.js';
+import { SHIPPED_COURSES } from './courses/index.js';
+import { randomCourse } from './random.js';
+import { checkRun, minRunTimeMs, type RunClaim } from './runCheck.js';
+import { SurfBot } from './bot.js';
+import { CourseRuntime, placeAtSpawn } from './runtime.js';
+import { simulateRun } from './simulate.js';
+import { BvhWorld } from '../physics/collision.js';
+import { DEFAULT_PHYSICS, TICK_DT, TICK_RATE } from '../physics/constants.js';
+import { createPlayer, stepPlayer } from '../physics/player.js';
+import { GhostRecorder, decodeGhost, encodeGhost, type GhostData, type GhostSample } from '../game/ghost.js';
 
 /**
  * Ride `built` with the bot the way the game records a run: a sample at the

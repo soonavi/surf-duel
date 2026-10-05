@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { COURSE_JSON_SCHEMA, COURSE_SYSTEM_PROMPT, PROMPT_MAX_CHARS, courseUserMessage, preparePrompt } from './aiSchema';
-import { Course, DIFFICULTIES, LIMITS, RAMP_SIDES, THEMES } from './schema';
-import { validateCourse } from './validator';
+import { COURSE_JSON_SCHEMA, COURSE_SYSTEM_PROMPT, PROMPT_MAX_CHARS, courseUserMessage, preparePrompt } from './aiSchema.js';
+import { Course, DIFFICULTIES, LIMITS, RAMP_SIDES, THEMES } from './schema.js';
+import { validateCourse } from './validator.js';
 
 type Json = Record<string, unknown>;
 

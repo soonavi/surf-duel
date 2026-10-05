@@ -4,9 +4,9 @@
  * along the course for live standings.
  */
 import * as THREE from 'three';
-import type { Room, RoomPlayer } from '../net/room';
-import type { TrackPath } from '../course/path';
-import { GhostView } from '../render/ghostView';
+import type { Room, RoomPlayer } from '../net/room.js';
+import type { TrackPath } from '../course/path.js';
+import { GhostView } from '../render/ghostView.js';
 
 /** No new samples for this long while racing: show them as lagging. */
 const STALE_MS = 3000;

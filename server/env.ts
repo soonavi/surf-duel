@@ -10,12 +10,12 @@
 import { createHmac } from 'node:crypto';
 import OpenAI from 'openai';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { GenerateDeps } from './generateCourse';
-import type { SubmitDeps } from './submitRun';
-import { supabaseRunStore } from './supabaseRunStore';
-import { openAiDesigner } from './openaiDesigner';
-import { openAiModerator } from './openaiModerator';
-import { supabaseStore } from './supabaseStore';
+import type { GenerateDeps } from './generateCourse.js';
+import type { SubmitDeps } from './submitRun.js';
+import { supabaseRunStore } from './supabaseRunStore.js';
+import { openAiDesigner } from './openaiDesigner.js';
+import { openAiModerator } from './openaiModerator.js';
+import { supabaseStore } from './supabaseStore.js';
 
 let cached: { key: string; deps: GenerateDeps } | null = null;
 let cachedDb: { key: string; db: SupabaseClient } | null = null;

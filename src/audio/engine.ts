@@ -11,9 +11,9 @@
  * unlock() is called from one. Every call is safe before that (and in
  * browsers without Web Audio): it just does nothing.
  */
-import type { ThemeName } from '../course/schema';
-import { THEME_MOODS, composeSong, stepSeconds, type Mood, type Note, type Song } from './music';
-import { bassLevel, followPulse, mixLevels, spectrumBars } from './levels';
+import type { ThemeName } from '../course/schema.js';
+import { THEME_MOODS, composeSong, stepSeconds, type Mood, type Note, type Song } from './music.js';
+import { bassLevel, followPulse, mixLevels, spectrumBars } from './levels.js';
 
 export type MusicSource = 'generated' | 'file' | 'off';
 
