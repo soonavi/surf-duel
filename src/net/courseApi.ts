@@ -6,18 +6,21 @@
  * game never dead-ends.
  */
 import { z } from 'zod';
+import { PROMPT_MAX_CHARS, preparePrompt } from '../course/aiSchema';
 import type { Course } from '../course/schema';
 import { normalizeShareCode } from '../course/shareCode';
 import { validateCourse } from '../course/validator';
+import { cleanText, containsBlocked, containsLink } from '../util/text';
 
 export interface GeneratedCourse {
   course: Course;
   /** null when the server couldn't save it (the course is still playable). */
   code: string | null;
-  prompt: string;
+  /** The description it was made from, ready to show; null if there's nothing suitable to show. */
+  prompt: string | null;
 }
 
-export type GenerateFailure = 'bad-request' | 'rate-limited' | 'budget' | 'timeout' | 'ai-failed' | 'unavailable' | 'network';
+export type GenerateFailure = 'bad-request' | 'rejected' | 'rate-limited' | 'budget' | 'timeout' | 'ai-failed' | 'unavailable' | 'network';
 
 export type GenerateOutcome = { ok: true; value: GeneratedCourse } | { ok: false; reason: GenerateFailure; message: string };
 
@@ -30,10 +33,11 @@ const CODE = /^[A-HJ-NP-Z2-9]{6}$/;
 const Success = z.object({ ok: z.literal(true), code: z.string().regex(CODE).nullable(), course: z.unknown(), prompt: z.string().max(400) });
 const Failure = z.object({ ok: z.literal(false), reason: z.string().max(40), error: z.string().max(300) });
 
-const KNOWN: readonly GenerateFailure[] = ['bad-request', 'rate-limited', 'budget', 'timeout', 'ai-failed', 'unavailable', 'network'];
+const KNOWN: readonly GenerateFailure[] = ['bad-request', 'rejected', 'rate-limited', 'budget', 'timeout', 'ai-failed', 'unavailable', 'network'];
 
 const DEFAULT_MESSAGE: Record<GenerateFailure, string> = {
   'bad-request': 'Try describing the course a different way.',
+  rejected: "Let's keep it friendly: describe a course instead.",
   'rate-limited': "You're generating courses fast! Give it a few minutes.",
   budget: "Today's AI course budget is used up. Race a random course instead!",
   timeout: 'The course designer took too long.',
@@ -44,7 +48,21 @@ const DEFAULT_MESSAGE: Record<GenerateFailure, string> = {
 
 const failure = (reason: GenerateFailure, message = DEFAULT_MESSAGE[reason]): GenerateOutcome => ({ ok: false, reason, message });
 
-export async function requestCourse(prompt: string, opts: { fetch?: typeof fetch; timeoutMs?: number } = {}): Promise<GenerateOutcome> {
+/**
+ * A saved prompt, ready to show other players: cleaned, and hidden entirely
+ * if it holds a link or a blocked word. The server already refuses those;
+ * this is defence in depth for anything read back from the database.
+ */
+export function displayPrompt(raw: string): string | null {
+  const text = cleanText(raw, PROMPT_MAX_CHARS);
+  return text.length > 0 && !containsLink(text) && !containsBlocked(text) ? text : null;
+}
+
+export async function requestCourse(rawPrompt: string, opts: { fetch?: typeof fetch; timeoutMs?: number } = {}): Promise<GenerateOutcome> {
+  // Same check the server makes, for instant feedback (the server's is the one that counts).
+  const checked = preparePrompt(rawPrompt);
+  if (!checked.ok) return failure(checked.reason === 'link' || checked.reason === 'blocked' ? 'rejected' : 'bad-request', checked.message);
+  const prompt = checked.prompt;
   const doFetch = opts.fetch ?? fetch;
   const controller = new AbortController();
   let timedOut = false;
@@ -74,7 +92,7 @@ export async function requestCourse(prompt: string, opts: { fetch?: typeof fetch
   }
   const ok = Success.safeParse(body);
   if (ok.success) {
-    return { ok: true, value: { course: validateCourse(ok.data.course).course, code: ok.data.code, prompt: ok.data.prompt } };
+    return { ok: true, value: { course: validateCourse(ok.data.course).course, code: ok.data.code, prompt: displayPrompt(ok.data.prompt) } };
   }
   const bad = Failure.safeParse(body);
   if (bad.success) {
@@ -109,5 +127,5 @@ export async function fetchSharedCourse(input: string, query: CourseQuery = supa
   if (result.data === null) return { ok: false, reason: 'not-found' };
   const row = Row.safeParse(result.data);
   if (!row.success) return { ok: false, reason: 'not-found' };
-  return { ok: true, value: { course: validateCourse(row.data.spec).course, code, prompt: row.data.prompt } };
+  return { ok: true, value: { course: validateCourse(row.data.spec).course, code, prompt: displayPrompt(row.data.prompt) } };
 }

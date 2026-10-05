@@ -75,6 +75,14 @@ describe('validateCourse', () => {
     expect(course.difficulty).toBe('hard');
   });
 
+  it('replaces names other players should not see: links, blocked words, hidden text', () => {
+    for (const name of ['Free robux at robux-gift.xyz', 'Sh1t Canyon', '\u202E\u200B']) {
+      const { course, repairs } = validateCourse({ ...valid(), name });
+      expect(course.name, name).toBe('Untitled Course');
+      expect(repairs.some((r) => r.startsWith('name:'))).toBe(true);
+    }
+  });
+
   it('truncates long names and strips control characters', () => {
     const { course } = validateCourse({ ...valid(), name: 'A\u0000B\nC' + 'x'.repeat(100) });
     expect(course.name.startsWith('AB C')).toBe(true);

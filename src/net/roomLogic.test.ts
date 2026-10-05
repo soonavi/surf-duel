@@ -46,6 +46,7 @@ describe('sanitizeName', () => {
 
   it('masks a few obvious slurs', () => {
     expect(sanitizeName('xX_fuck_Xx')).not.toMatch(/fuck/i);
+    expect(sanitizeName('join evil.com', 'Surfer 12')).toBe('Surfer 12');
   });
 });
 

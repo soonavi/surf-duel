@@ -80,3 +80,50 @@ describe('fetchSharedCourse', () => {
     expect(await fetchSharedCourse('K7M2QX', query({ data: null, error: { message: 'boom' } }))).toEqual({ ok: false, reason: 'network' });
   });
 });
+
+describe('requestCourse: prompt checks in the browser', () => {
+  it('refuses links and blocked words without contacting the server', async () => {
+    let fetched = false;
+    const fetchSpy = (async () => {
+      fetched = true;
+      throw new Error('should not be called');
+    }) as unknown as typeof fetch;
+    for (const prompt of ['free robux at robux-gift.xyz', 'sh1t canyon']) {
+      const out = await requestCourse(prompt, { fetch: fetchSpy });
+      expect(out).toMatchObject({ ok: false, reason: 'rejected' });
+    }
+    expect(fetched).toBe(false);
+  });
+
+  it('sends the cleaned prompt', async () => {
+    let sent: unknown = null;
+    const fetchSpy = (async (_url: string, init: RequestInit) => {
+      sent = JSON.parse(String(init.body));
+      return new Response(JSON.stringify({ ok: false, reason: 'unavailable', error: 'x' }), { status: 503 });
+    }) as unknown as typeof fetch;
+    await requestCourse('  icy \u202Erun\u202C <b>', { fetch: fetchSpy });
+    expect(sent).toEqual({ prompt: 'icy run b' });
+  });
+
+  it("understands the server's 'rejected' reason", async () => {
+    const fetchSpy = (async () =>
+      new Response(JSON.stringify({ ok: false, reason: 'rejected', error: "Let's keep it friendly." }), { status: 422 })) as unknown as typeof fetch;
+    expect(await requestCourse('ice', { fetch: fetchSpy })).toEqual({ ok: false, reason: 'rejected', message: "Let's keep it friendly." });
+  });
+});
+
+describe('fetchSharedCourse: the saved prompt', () => {
+  const row = (prompt: string) => async () => ({ data: { code: 'ABCDEF', prompt, spec: {} }, error: null });
+
+  it('is cleaned before it is shown', async () => {
+    const out = await fetchSharedCourse('ABCDEF', row('icy \u202Erun\u202C\u200B'));
+    expect(out.ok && out.value.prompt).toBe('icy run');
+  });
+
+  it('is hidden if it holds a link or a blocked word (defence in depth: the server refuses those)', async () => {
+    for (const prompt of ['visit evil.com', 'sh1t canyon']) {
+      const out = await fetchSharedCourse('ABCDEF', row(prompt));
+      expect(out.ok && out.value.prompt, prompt).toBeNull();
+    }
+  });
+});

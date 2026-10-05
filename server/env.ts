@@ -2,7 +2,7 @@
  * Server-side wiring from environment variables. Only ever imported by /api
  * functions (and the dev server's /api middleware), never by the client.
  *
- *   OPENAI_API_KEY, OPENAI_MODEL      required for generation
+ *   OPENAI_API_KEY, OPENAI_MODEL      required for generation (and the free moderation check)
  *   SUPABASE_SERVICE_ROLE_KEY         required too: the spending caps live in
  *   VITE_SUPABASE_URL                 the database, and without them we refuse
  */
@@ -11,6 +11,7 @@ import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import type { GenerateDeps } from './generateCourse';
 import { openAiDesigner } from './openaiDesigner';
+import { openAiModerator } from './openaiModerator';
 import { supabaseStore } from './supabaseStore';
 
 let cached: { key: string; deps: GenerateDeps } | null = null;
@@ -32,6 +33,7 @@ export function generateDeps(): GenerateDeps | null {
   const hmacKey = serviceKey ?? apiKey;
   const deps: GenerateDeps = {
     design: openAiDesigner(openai, model),
+    moderate: openAiModerator(openai),
     store: db ? supabaseStore(db) : null,
     hashIp: (ip) => createHmac('sha256', hmacKey).update(ip).digest('hex').slice(0, 32),
     random: Math.random,

@@ -1,21 +1,36 @@
 /**
- * POST /api/generate-course, minus the HTTP plumbing: validate the prompt,
- * claim a slot under the rate limits and spending caps, ask the AI for a
- * course (with a hard timeout), repair it with the same validator the game
- * uses, and save it under a share code.
+ * POST /api/generate-course, minus the HTTP plumbing: check and clean the
+ * prompt, claim a slot under the rate limits and spending caps, run the
+ * (free) moderation check on it, ask the AI for a course (with a hard
+ * timeout), repair it with the same validator the game uses, check its name,
+ * and save it under a share code.
+ *
+ * Defences against malicious prompts, in order:
+ *  1. preparePrompt: hidden/invisible text stripped, markup characters
+ *     dropped, links and blocked words refused (before anything is spent);
+ *  2. the moderation check refuses hateful, sexual, self-harm, graphic or
+ *     illicit descriptions before the course model sees them (fails closed);
+ *  3. the prompt goes to the model as a JSON string, labelled as a
+ *     description and never instructions, and the reply is forced into the
+ *     course schema (Structured Outputs), so the worst a prompt injection
+ *     can do is shape a course;
+ *  4. every number is clamped by validateCourse, and the one free-text field
+ *     (the name) is cleaned, link/word-checked and moderated too.
  *
  * Everything with side effects (the AI, the database) is passed in, so every
  * failure path is unit-tested. The game never dead-ends on a failure here:
  * the client offers a random course instead.
  */
 import { z } from 'zod';
-import { PROMPT_MAX_CHARS } from '../src/course/aiSchema';
+import { preparePrompt } from '../src/course/aiSchema';
 import { generateShareCode } from '../src/course/shareCode';
 import type { Course } from '../src/course/schema';
-import { validateCourse } from '../src/course/validator';
-import { cleanText } from '../src/util/text';
+import { DEFAULT_NAME, validateCourse } from '../src/course/validator';
+import type { Moderator } from './openaiModerator';
 
 export const GENERATE_TIMEOUT_MS = 15_000;
+/** Each moderation check usually takes well under a second. */
+export const MODERATION_TIMEOUT_MS = 5_000;
 
 /** Generations per IP: a burst limit and a daily cap. Failed attempts count too (they still cost an AI call). */
 export const RATE_LIMIT = { perWindow: 6, windowMs: 10 * 60_000, perDay: 40 } as const;
@@ -63,18 +78,23 @@ export type CourseDesigner = (prompt: string, signal: AbortSignal) => Promise<un
 
 export interface GenerateDeps {
   design: CourseDesigner;
+  /** Flags texts other players shouldn't see. Required: without it we don't generate. */
+  moderate: Moderator;
   /** Without a database the caps can't be checked, so generation is refused. */
   store: CourseStore | null;
   hashIp: (ip: string) => string;
   random: () => number;
   timeoutMs?: number;
+  moderationTimeoutMs?: number;
 }
 
-export type FailureReason = 'bad-request' | 'rate-limited' | 'budget' | 'unavailable' | 'timeout' | 'ai-failed';
+export type FailureReason = 'bad-request' | 'rejected' | 'rate-limited' | 'budget' | 'unavailable' | 'timeout' | 'ai-failed';
+
+type FailureStatus = 400 | 422 | 429 | 502 | 503 | 504;
 
 export type GenerateResult =
   | { status: 200; body: { ok: true; code: string | null; course: Course; prompt: string; repairs: number } }
-  | { status: 400 | 429 | 502 | 503 | 504; body: { ok: false; reason: FailureReason; error: string } };
+  | { status: FailureStatus; body: { ok: false; reason: FailureReason; error: string } };
 
 const Request = z.object({ prompt: z.string() });
 const CODE_ATTEMPTS = 5;
@@ -87,12 +107,30 @@ const LIMITS: ClaimLimits = {
   lifetime: BUDGET.lifetime,
 };
 
-const fail = (status: 400 | 429 | 502 | 503 | 504, reason: FailureReason, error: string): GenerateResult => ({
+const fail = (status: FailureStatus, reason: FailureReason, error: string): GenerateResult => ({
   status,
   body: { ok: false, reason, error },
 });
 
 const UNAVAILABLE = 'AI course generation is resting right now. Race a random course instead!';
+const REJECTED = "Let's keep it friendly: describe a course instead.";
+
+/** Run `fn` with an abort signal that fires after `ms`; rejects at the deadline even if `fn` ignores it. */
+async function withTimeout<T>(fn: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error('timed out'));
+    }, ms);
+  });
+  try {
+    return await Promise.race([fn(controller.signal), deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 const REFUSED: Record<Exclude<ClaimResult, 'ok'>, GenerateResult> = {
   'ip-window': fail(429, 'rate-limited', "You're generating courses fast! Give it a few minutes, or race a random course meanwhile."),
@@ -104,10 +142,12 @@ const REFUSED: Record<Exclude<ClaimResult, 'ok'>, GenerateResult> = {
 export async function handleGenerate(body: unknown, ip: string, deps: GenerateDeps): Promise<GenerateResult> {
   const parsed = Request.safeParse(body);
   if (!parsed.success) return fail(400, 'bad-request', 'Type a description of the course you want.');
-  const raw = parsed.data.prompt.trim();
-  if (raw.length === 0) return fail(400, 'bad-request', 'Type a description of the course you want.');
-  if (Array.from(raw).length > PROMPT_MAX_CHARS) return fail(400, 'bad-request', `Keep it under ${PROMPT_MAX_CHARS} characters.`);
-  const prompt = cleanText(raw, PROMPT_MAX_CHARS);
+  // Clean it and refuse links and blocked words before anything is spent.
+  const checked = preparePrompt(parsed.data.prompt);
+  if (!checked.ok) {
+    return checked.reason === 'link' || checked.reason === 'blocked' ? fail(422, 'rejected', checked.message) : fail(400, 'bad-request', checked.message);
+  }
+  const prompt = checked.prompt;
 
   // Claim a slot before spending anything. If the caps can't be checked, don't spend at all.
   if (!deps.store) return fail(503, 'unavailable', UNAVAILABLE);
@@ -118,6 +158,16 @@ export async function handleGenerate(body: unknown, ip: string, deps: GenerateDe
     return fail(503, 'unavailable', UNAVAILABLE);
   }
   if (claim !== 'ok') return REFUSED[claim];
+
+  // The moderation check sees the prompt before the course designer does. If it can't run, don't go on.
+  const moderationMs = deps.moderationTimeoutMs ?? MODERATION_TIMEOUT_MS;
+  let flagged: boolean[];
+  try {
+    flagged = await withTimeout((signal) => deps.moderate([prompt], signal), moderationMs);
+  } catch {
+    return fail(503, 'unavailable', UNAVAILABLE);
+  }
+  if (flagged[0] !== false) return fail(422, 'rejected', REJECTED);
 
   // Ask the AI, giving up at the timeout.
   const controller = new AbortController();
@@ -141,7 +191,21 @@ export async function handleGenerate(body: unknown, ip: string, deps: GenerateDe
     return fail(502, 'ai-failed', "The course designer couldn't make that one.");
   }
 
-  const { course, repairs } = validateCourse(output);
+  const validated = validateCourse(output);
+  const repairs = validated.repairs;
+  let course = validated.course;
+
+  // The name is the one free-text field in the reply: check it like the prompt (the validator already
+  // replaced links and blocked words). Flagged, or the check failed: use the default name.
+  if (course.name !== DEFAULT_NAME) {
+    let nameOk = false;
+    try {
+      nameOk = (await withTimeout((signal) => deps.moderate([course.name], signal), moderationMs))[0] === false;
+    } catch {
+      nameOk = false;
+    }
+    if (!nameOk) course = { ...course, name: DEFAULT_NAME };
+  }
 
   // Save it under a fresh share code. If saving fails, the player still gets to race it.
   let code: string | null = null;

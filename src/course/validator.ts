@@ -15,7 +15,7 @@ import {
   type Segment,
   type ThemeName,
 } from './schema';
-import { cleanText } from '../util/text';
+import { cleanName as cleanPublicName } from '../util/text';
 import { START_SPEED, afterBooster, afterFall, afterRamp, maxGapLength, type SpeedRange } from './tuning';
 
 export interface ValidationResult {
@@ -24,7 +24,8 @@ export interface ValidationResult {
   repairs: string[];
 }
 
-const DEFAULT_NAME = 'Untitled Course';
+/** Used when a course has no name, or one other players shouldn't see. */
+export const DEFAULT_NAME = 'Untitled Course';
 const DEFAULT_RAMP: Omit<RampSegment, 'side'> = { type: 'ramp', length: 4000, angle: 60, curve: 0 };
 
 type Range = { readonly min: number; readonly max: number };
@@ -68,10 +69,11 @@ function cleanName(value: unknown, r: Repairer): string {
     r.note('name: missing, used a default');
     return DEFAULT_NAME;
   }
-  // Names are shown to other players (share codes, rooms), so they get the same cleaning as player names.
-  const cleaned = cleanText(value, LIMITS.name.max);
-  if (cleaned.length === 0) {
-    r.note('name: empty, used a default');
+  // Names are shown to other players (share codes, rooms), so they get the same checks as player names:
+  // no hidden text, links or blocked words.
+  const cleaned = cleanPublicName(value, LIMITS.name.max, DEFAULT_NAME);
+  if (cleaned === DEFAULT_NAME && value !== DEFAULT_NAME) {
+    r.note('name: empty or not suitable, used a default');
     return DEFAULT_NAME;
   }
   if (cleaned !== value) r.note('name: cleaned up');

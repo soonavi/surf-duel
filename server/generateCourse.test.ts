@@ -49,20 +49,25 @@ class FakeStore implements CourseStore {
   }
 }
 
-function setup(design: GenerateDeps['design'] = async () => GOOD) {
+function setup(design: GenerateDeps['design'] = async () => GOOD, moderate: GenerateDeps['moderate'] = async (texts) => texts.map(() => false)) {
   let t = 1_000_000;
   const store = new FakeStore(() => t);
   const calls: string[] = [];
+  const moderated: string[] = [];
   const deps: GenerateDeps = {
     design: async (prompt, signal) => {
       calls.push(prompt);
       return design(prompt, signal);
     },
+    moderate: async (texts, signal) => {
+      moderated.push(...texts);
+      return moderate(texts, signal);
+    },
     store,
     hashIp: (ip) => `h:${ip}`,
     random: createRng(1),
   };
-  return { deps, store, calls, advance: (ms: number) => (t += ms) };
+  return { deps, store, calls, moderated, advance: (ms: number) => (t += ms) };
 }
 
 describe('handleGenerate: the request', () => {
@@ -121,6 +126,80 @@ describe('handleGenerate: success', () => {
     expect(res.status).toBe(200);
     if (!res.body.ok) throw new Error('expected success');
     expect(res.body.code).toBeNull();
+  });
+});
+
+describe('handleGenerate: malicious or unsuitable prompts', () => {
+  it('refuses links and blocked words before claiming anything or asking any AI', async () => {
+    const { deps, store, calls, moderated } = setup();
+    for (const prompt of ['free robux at robux-gift.xyz', 'sh1t canyon', 'f\u200Buck ramps']) {
+      const res = await handleGenerate({ prompt }, '1.2.3.4', deps);
+      expect(res.status, prompt).toBe(422);
+      expect(res.body).toMatchObject({ ok: false, reason: 'rejected' });
+    }
+    expect(store.lifetimeTotal).toBe(0);
+    expect(calls).toEqual([]);
+    expect(moderated).toEqual([]);
+  });
+
+  it('strips hidden text and markup before any AI sees the prompt, and stores the cleaned one', async () => {
+    const { deps, store, calls, moderated } = setup();
+    const res = await handleGenerate({ prompt: 'icy \u202Erun\u202C <script>\u200B' }, '1.2.3.4', deps);
+    expect(res.status).toBe(200);
+    expect(moderated[0]).toBe('icy run script');
+    expect(calls).toEqual(['icy run script']);
+    expect(store.rows[0]!.prompt).toBe('icy run script');
+  });
+
+  it('runs the moderation check on the prompt before the course designer sees it', async () => {
+    const { deps, store, calls } = setup(undefined, async (texts) => texts.map((t) => t.includes('massacre')));
+    const res = await handleGenerate({ prompt: 'bloody massacre canyon' }, '1.2.3.4', deps);
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({ ok: false, reason: 'rejected' });
+    expect(calls).toEqual([]);
+    expect(store.lifetimeTotal).toBe(1); // it was claimed, so the moderation check can't be spammed past the rate limit
+  });
+
+  it('fails closed when the moderation check errors or hangs', async () => {
+    const broken = setup(undefined, async () => {
+      throw new Error('moderation down');
+    });
+    const res = await handleGenerate({ prompt: 'ice' }, '1.2.3.4', broken.deps);
+    expect(res.status).toBe(503);
+    expect(broken.calls).toEqual([]);
+
+    const hung = setup(undefined, () => new Promise(() => {}));
+    const late = await handleGenerate({ prompt: 'ice' }, '1.2.3.4', { ...hung.deps, moderationTimeoutMs: 20 });
+    expect(late.status).toBe(503);
+    expect(hung.calls).toEqual([]);
+  });
+
+  it('checks the AI-made course name too, and replaces it if flagged', async () => {
+    const { deps, store, moderated } = setup(undefined, async (texts) => texts.map((t) => t === 'Molten Mile'));
+    const res = await handleGenerate({ prompt: 'lava' }, '1.2.3.4', deps);
+    if (!res.body.ok) throw new Error('expected success');
+    expect(moderated).toEqual(['lava', 'Molten Mile']);
+    expect(res.body.course.name).toBe('Untitled Course');
+    expect(store.rows[0]!.spec.name).toBe('Untitled Course');
+  });
+
+  it('replaces the name if the name check fails (still fails closed)', async () => {
+    let n = 0;
+    const { deps } = setup(undefined, async (texts) => {
+      if (n++ > 0) throw new Error('moderation down');
+      return texts.map(() => false);
+    });
+    const res = await handleGenerate({ prompt: 'lava' }, '1.2.3.4', deps);
+    if (!res.body.ok) throw new Error('expected success');
+    expect(res.body.course.name).toBe('Untitled Course');
+  });
+
+  it('replaces an AI name with a link or blocked word even without asking', async () => {
+    const { deps, moderated } = setup(async () => ({ ...GOOD, name: 'Free robux at evil.com' }));
+    const res = await handleGenerate({ prompt: 'lava' }, '1.2.3.4', deps);
+    if (!res.body.ok) throw new Error('expected success');
+    expect(res.body.course.name).toBe('Untitled Course');
+    expect(moderated).toEqual(['lava']);
   });
 });
 

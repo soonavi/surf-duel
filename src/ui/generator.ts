@@ -168,7 +168,7 @@ export class GeneratorUi {
       this.onLoadCode?.(this.codeInput.value);
     });
 
-    const note = el('p', 'Courses are designed by the OpenAI API, then checked by the game so they are always beatable. Your prompt is saved with the course so friends can see what it was made from.', 'hint gen__note');
+    const note = el('p', 'Courses are designed by the OpenAI API, then checked by the game so they are always beatable. Your prompt is saved with the course so friends can see what it was made from, so keep it friendly: links and rude words are turned away.', 'hint gen__note');
 
     card.append(heading, form, this.examples, actions, this.status, codeForm, note);
     this.generateScreen.append(card);

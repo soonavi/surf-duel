@@ -2,7 +2,7 @@
  * Pure room rules: codes, names, colours, host election, capacity, send-rate
  * budgeting and live ranking. No networking here, so it's all unit-tested.
  */
-import { cleanText } from '../util/text';
+import { cleanName } from '../util/text';
 
 export const MAX_PLAYERS = 8;
 export const NAME_MAX = 16;
@@ -34,10 +34,9 @@ export function normalizeRoomCode(input: string): string | null {
   return /^[A-HJ-NP-Z]{4}$/.test(code) ? code : null;
 }
 
+/** A player name others will see: cleaned, or `fallback` if it's empty or not suitable (links, blocked words). */
 export function sanitizeName(raw: unknown, fallback = 'Surfer'): string {
-  if (typeof raw !== 'string') return fallback;
-  const name = cleanText(raw, NAME_MAX);
-  return name.length > 0 ? name : fallback;
+  return cleanName(raw, NAME_MAX, fallback);
 }
 
 export interface Member {
