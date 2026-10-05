@@ -1,4 +1,5 @@
 import { formatDelta, formatTime } from '../game/time';
+import { MAX_PLAYERS } from '../net/roomLogic';
 
 export type OverlayScreen = 'start' | 'loading' | 'lobby' | 'pause' | 'results' | 'unsupported' | 'generate' | 'preview' | 'none';
 
@@ -6,10 +7,14 @@ export interface CourseCard {
   id: string;
   name: string;
   difficulty: string;
+  /** Theme label ("Lava"), plus the source and share code for custom courses. */
+  meta: string;
   blurb: string;
   swatch: [string, string];
   /** Your best time on this course, if any. */
   bestMs: number | null;
+  /** A short callout on the card ("Start here"), if any. */
+  badge: string | null;
 }
 
 export interface ResultsRow {
@@ -132,6 +137,8 @@ export class Overlay {
   private readonly debugHud: HTMLElement;
   private readonly crosshair: HTMLElement;
   private readonly courseList: HTMLElement;
+  private readonly raceCourse: HTMLElement;
+  private courseNames = new Map<string, string>();
   private readonly toastEl: HTMLElement;
   private readonly banner: HTMLElement;
   private readonly loadingText: HTMLElement;
@@ -157,31 +164,67 @@ export class Overlay {
       <div class="banner" role="status" aria-live="polite" hidden></div>
 
       <section class="overlay overlay--start" data-screen="start">
-        <div class="card card--hero">
-          <h1 class="title">SURF DUEL</h1>
-          <p class="pitch">Slide the ramps. Race your friends. Build courses with AI.</p>
-          <div class="course-list" role="group" aria-label="Choose a course"></div>
-          <button class="btn btn--primary" data-action="engage" type="button">Play solo</button>
-          <button class="btn btn--ai" data-action="open-generator" type="button">Design a course with AI</button>
-          <div class="mp-block">
-            <span class="mp-block__label">Multiplayer</span>
-            <button class="btn btn--ghost btn--small" data-action="create-room" type="button">Create room</button>
-            <form class="join-form" autocomplete="off">
-              <label class="visually-hidden" for="join-code">Room code</label>
-              <input id="join-code" class="input input--code" maxlength="6" placeholder="CODE" spellcheck="false" />
-              <button class="btn btn--ghost btn--small" type="submit">Join</button>
-            </form>
+        <div class="home">
+          <header class="home__brand">
+            <h1 class="title">SURF DUEL</h1>
+            <p class="pitch">Slide the ramps. Race your friends. Build courses with AI.</p>
+          </header>
+
+          <div class="home__main">
+            <section class="panel home__courses" aria-labelledby="home-courses-title">
+              <h2 class="panel__title" id="home-courses-title">Choose a course</h2>
+              <div class="course-list" role="group" aria-labelledby="home-courses-title"></div>
+              <button class="btn btn--primary btn--race" data-action="engage" type="button">
+                <span class="btn--race__go" aria-hidden="true"></span>
+                <span class="btn--race__label">Race</span>
+                <span class="btn--race__course"></span>
+              </button>
+              <p class="home__keyhint"><kbd>↑</kbd><kbd>↓</kbd> pick a course &nbsp;·&nbsp; <kbd>Enter</kbd> race</p>
+            </section>
+
+            <div class="home__side">
+              <button class="feature" data-action="open-generator" type="button">
+                <span class="feature__icon" aria-hidden="true">✨</span>
+                <span class="feature__text">
+                  <span class="feature__title">Design a course with AI</span>
+                  <span class="feature__sub">Describe it in a sentence. It's built in seconds.</span>
+                </span>
+                <span class="feature__arrow" aria-hidden="true">→</span>
+              </button>
+
+              <section class="panel mp-block" aria-labelledby="home-mp-title">
+                <h2 class="panel__title" id="home-mp-title">Race friends</h2>
+                <p class="panel__sub">Up to ${MAX_PLAYERS} players, live. Share the link to invite.</p>
+                <div class="mp-row">
+                  <button class="btn btn--ghost btn--small" data-action="create-room" type="button">Create room</button>
+                  <span class="mp-row__or">or</span>
+                  <form class="join-form" autocomplete="off">
+                    <label class="visually-hidden" for="join-code">Room code</label>
+                    <input id="join-code" class="input input--code" maxlength="6" placeholder="CODE" spellcheck="false" />
+                    <button class="btn btn--ghost btn--small" type="submit">Join</button>
+                  </form>
+                </div>
+              </section>
+
+              <section class="panel howto" aria-labelledby="home-howto-title">
+                <h2 class="panel__title" id="home-howto-title">How to surf</h2>
+                <div class="howto__keys">
+                  <div class="howto__key"><kbd class="howto__kbd howto__kbd--a">A</kbd><span>ramp on your <strong>left</strong></span></div>
+                  <div class="howto__key"><kbd class="howto__kbd howto__kbd--d">D</kbd><span>ramp on your <strong>right</strong></span></div>
+                </div>
+                <p class="howto__text">Hold the key toward the ramp and steer with the mouse. Don't press <kbd>W</kbd>: your speed comes from the slope.</p>
+                <ul class="howto__controls">
+                  <li><kbd>Space</kbd> hop</li>
+                  <li><kbd>R</kbd> last checkpoint</li>
+                  <li><kbd>Shift</kbd><kbd>R</kbd> restart</li>
+                  <li><kbd>Esc</kbd> pause</li>
+                </ul>
+              </section>
+            </div>
           </div>
-          <p class="message" role="status" aria-live="polite"></p>
-          <p class="hint hint--howto">
-            On a ramp to your <em>right</em>, hold <kbd>D</kbd>. To your <em>left</em>, hold <kbd>A</kbd>.
-            Steer with the mouse, and don't press <kbd>W</kbd>.
-          </p>
-          <p class="hint">
-            <span><kbd>Space</kbd> jump (hold to bunny-hop) &nbsp;·&nbsp; <kbd>R</kbd> last checkpoint &nbsp;·&nbsp;
-            <kbd>Shift</kbd><kbd>R</kbd> restart &nbsp;·&nbsp; <kbd>Esc</kbd> pause</span>
-          </p>
-          <p class="phase-tag">Phase 5 · AI course generator</p>
+
+          <p class="message home__message" role="status" aria-live="polite"></p>
+          <p class="phase-tag">Phase 6 · Leaderboards</p>
         </div>
       </section>
 
@@ -241,6 +284,7 @@ export class Overlay {
     this.debugHud = q('.debug-hud');
     this.crosshair = q('.crosshair');
     this.courseList = q('.course-list');
+    this.raceCourse = q('.btn--race__course');
     this.toastEl = q('.toast');
     this.banner = q('.banner');
     this.loadingText = q('.loading-text');
@@ -264,6 +308,7 @@ export class Overlay {
 
   show(screen: OverlayScreen): void {
     this.current = screen;
+    this.root.dataset.screen = screen;
     for (const [name, element] of Object.entries(this.screens)) element.hidden = name !== screen;
     this.crosshair.hidden = screen !== 'none';
     if (screen !== 'none') this.setMessage('');
@@ -316,26 +361,47 @@ export class Overlay {
   }
 
   setCourses(cards: readonly CourseCard[], selected: string): void {
+    this.courseNames = new Map(cards.map((c) => [c.id, c.name]));
     this.courseList.replaceChildren(
       ...cards.map((c) => {
         const btn = el('button', undefined, 'course-card');
         btn.type = 'button';
         btn.dataset.id = c.id;
-        btn.setAttribute('aria-pressed', String(c.id === selected));
         btn.style.setProperty('--swatch-a', c.swatch[0]);
         btn.style.setProperty('--swatch-b', c.swatch[1]);
-        const meta = c.bestMs !== null ? `${c.difficulty} · best ${formatTime(c.bestMs)}` : c.difficulty;
-        btn.append(el('span', c.name, 'course-card__name'), el('span', meta, 'course-card__meta'), el('span', c.blurb, 'course-card__blurb'));
+        const head = el('span', undefined, 'course-card__head');
+        head.append(el('span', c.name, 'course-card__name'));
+        if (c.badge) head.append(el('span', c.badge, 'course-card__badge'));
+        const meta = el('span', undefined, 'course-card__meta');
+        const diff = el('span', c.difficulty, 'diff');
+        diff.dataset.level = c.difficulty;
+        meta.append(diff, el('span', c.meta));
+        const best = el('span', undefined, 'course-card__best');
+        if (c.bestMs !== null) best.append(el('span', 'your best', 'course-card__best-label'), el('span', formatTime(c.bestMs)));
+        btn.append(head, best, meta, el('span', c.blurb, 'course-card__blurb'));
         btn.addEventListener('click', () => this.onSelectCourse?.(c.id));
         return btn;
       }),
     );
+    this.setSelectedCourse(selected);
   }
 
   setSelectedCourse(id: string): void {
     for (const btn of this.courseList.querySelectorAll<HTMLButtonElement>('.course-card')) {
       btn.setAttribute('aria-pressed', String(btn.dataset.id === id));
     }
+    this.raceCourse.textContent = this.courseNames.get(id) ?? '';
+  }
+
+  /** Ids of the start-screen course cards, in order (for arrow-key picking). */
+  courseIds(): string[] {
+    return [...this.courseNames.keys()];
+  }
+
+  /** Colour the A/D keys in "How to surf" like the selected course's ramps. */
+  setRampColors(right: string, left: string): void {
+    this.root.style.setProperty('--ramp-right', right);
+    this.root.style.setProperty('--ramp-left', left);
   }
 
   // --- lobby -----------------------------------------------------------------

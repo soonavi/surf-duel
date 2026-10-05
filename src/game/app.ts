@@ -96,6 +96,8 @@ interface CustomCourse {
   seed: number | null;
 }
 const NO_KEYS: CoachKeys = { w: false, a: false, s: false, d: false, space: false };
+/** The start screen's background flyover runs at this fraction of the preview's speed. */
+const MENU_FLYOVER_PACE = 0.55;
 
 export class App {
   readonly settings: Settings = loadSettings();
@@ -309,6 +311,7 @@ export class App {
     this.view.scene.add(this.courseView.group);
     this.view.applyTheme(theme);
     this.hud.coach.setRampColors(theme.rampRight.line, theme.rampLeft.line);
+    this.overlay.setRampColors(theme.rampRight.line, theme.rampLeft.line);
   }
 
   private refreshCourseCards(): void {
@@ -318,9 +321,11 @@ export class App {
         id: c.id,
         name: spec.name,
         difficulty: spec.difficulty,
+        meta: THEME_DEFS[spec.theme].label,
         blurb: c.blurb,
         swatch: THEME_DEFS[spec.theme].swatch,
         bestMs: this.records.best(courseKey(spec))?.timeMs ?? null,
+        badge: null,
       };
     });
     const custom = this.custom;
@@ -329,13 +334,27 @@ export class App {
       cards.push({
         id: CUSTOM_ID,
         name: custom.course.name,
-        difficulty: custom.code ? `${custom.course.difficulty} · ${custom.code}` : custom.course.difficulty,
-        blurb: custom.prompt ? `${label}: “${custom.prompt}”` : label,
+        difficulty: custom.course.difficulty,
+        meta: [THEME_DEFS[custom.course.theme].label, label, custom.code].filter(Boolean).join(' · '),
+        blurb: custom.prompt ? `“${custom.prompt}”` : 'Made from a random seed.',
         swatch: THEME_DEFS[custom.course.theme].swatch,
         bestMs: this.records.best(courseKey(custom.course))?.timeMs ?? null,
+        badge: null,
       });
     }
+    // First time here (no finished runs anywhere): point at the Tutorial.
+    const tutorial = cards.find((c) => c.id === TUTORIAL_ID);
+    if (tutorial && cards.every((c) => c.bestMs === null)) tutorial.badge = 'Start here';
     this.overlay.setCourses(cards, this.selectedCourseId);
+  }
+
+  /** Arrow keys on the start screen: pick the previous/next course card. */
+  private stepCourse(delta: number): void {
+    const ids = this.overlay.courseIds();
+    if (ids.length === 0) return;
+    const at = Math.max(0, ids.indexOf(this.selectedCourseId));
+    const next = ids[(at + delta + ids.length) % ids.length]!;
+    if (next !== this.selectedCourseId) this.selectCourse(next);
   }
 
   private checkpointFractions(): number[] {
@@ -495,10 +514,18 @@ export class App {
     for (const g of this.ghosts) g.view.hide();
     this.runtime.reset();
     this.respawnAt(this.built.spawn);
+    this.flyoverStart = performance.now();
     this.overlay.show('start');
   }
 
   private handleMenuKeys(e: KeyboardEvent): void {
+    if (this.state === 'menu' && this.overlay.screen === 'start' && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
+      const target = e.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
+      e.preventDefault();
+      this.stepCourse(e.code === 'ArrowUp' ? -1 : 1);
+      return;
+    }
     if (e.repeat) return;
     if ((this.state === 'generate' || this.state === 'preview') && e.code === 'Escape') {
       e.preventDefault();
@@ -1366,8 +1393,10 @@ export class App {
     const cam = this.view.camera;
     if (this.state === 'spectating') {
       this.renderSpectator();
-    } else if (this.state === 'preview') {
-      flyoverPose(this.built.path, (performance.now() - this.flyoverStart) / 1000, cam.position, this.flyTarget);
+    } else if (this.state === 'preview' || this.state === 'menu') {
+      // The menu drifts over the selected course at a calmer pace than the preview.
+      const pace = this.state === 'menu' ? MENU_FLYOVER_PACE : 1;
+      flyoverPose(this.built.path, ((performance.now() - this.flyoverStart) / 1000) * pace, cam.position, this.flyTarget);
       cam.lookAt(this.flyTarget);
     } else {
       this.camPos.lerpVectors(this.prevPos, this.player.pos, alpha);
