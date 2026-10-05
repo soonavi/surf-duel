@@ -4,7 +4,7 @@
 
 **Tagline:** Surf AI-built courses. Race your friends live.
 
-**Play:** _link added when deployed_ · **Code:** _repository link_
+**Play:** https://surf-duel-dun.vercel.app · **Code:** https://github.com/soonavi/surf-duel
 
 ## Project description
 

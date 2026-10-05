@@ -2,7 +2,7 @@
 
 **Browser multiplayer surf racing.** Slide along steep ramps, build speed by air-strafing, and race your friends live, on hand-made courses or on courses the OpenAI API designs from a sentence you type. Inspired by the "surf" game mode from Source-engine games.
 
-> **Play:** _link added when deployed_ · Best on a computer with a mouse and keyboard (phones get a view-only mode).
+> **Play: [surf-duel-dun.vercel.app](https://surf-duel-dun.vercel.app)** · Best on a computer with a mouse and keyboard (phones get a view-only mode).
 
 > **Uses the OpenAI API.** The AI course designer sends the description a player types to the OpenAI API: a free moderation check first, then a course designed with Structured Outputs (`gpt-5.4-nano`). See [AI course generator](#ai-course-generator) for how prompts are checked and how spending is capped.
 
