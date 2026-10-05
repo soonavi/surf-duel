@@ -12,12 +12,13 @@ export interface ResponsesClient {
     create(
       body: OpenAI.Responses.ResponseCreateParamsNonStreaming,
       options?: { signal?: AbortSignal; maxRetries?: number },
-    ): PromiseLike<{ output_text: string }>;
+    ): PromiseLike<{ output_text: string; usage?: { input_tokens: number; output_tokens: number } | null }>;
   };
 }
 
 export function openAiDesigner(client: ResponsesClient, model: string): CourseDesigner {
   return async (prompt, signal) => {
+    const started = Date.now();
     const response = await client.responses.create(
       {
         model,
@@ -32,6 +33,12 @@ export function openAiDesigner(client: ResponsesClient, model: string): CourseDe
       // One attempt: the whole request has a 15 s budget, and the client falls back to a random course.
       { signal, maxRetries: 0 },
     );
+    // Token counts and timing only (never the prompt): enough to check real costs against BUDGET.
+    if (response.usage) {
+      console.info(
+        `[generate-course] ${model} ${Date.now() - started}ms in=${response.usage.input_tokens} out=${response.usage.output_tokens}`,
+      );
+    }
     const text = response.output_text;
     if (!text) throw new Error('The model returned no course (refused or empty).');
     return JSON.parse(text) as unknown;

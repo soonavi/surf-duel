@@ -59,7 +59,7 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - [x] Phase 2 — course schema, builder, validator, 3 courses, themes
 - [x] Phase 3 — single-player race loop (dev ghosts: only speed-demon.json has arrived; tutorial / easy-cruise still use the bot)
 - [x] Phase 4 — multiplayer rooms (user: "the 2 player works")
-- [~] Phase 5 — AI course generator (built; live OpenAI call untested until the user adds OPENAI_API_KEY / OPENAI_MODEL / SUPABASE_SERVICE_ROLE_KEY to .env.local)
+- [~] Phase 5 — AI course generator (built and verified live with gpt-5.4-nano on Oct 5 2026: ~2–7 s, ~1,125 tokens in / ~210 out ≈ $0.0005 per course; awaiting user playtest)
 - [ ] Phase 6 — leaderboards
 - [ ] Phase 7 — polish
 - [ ] Phase 8 — deploy + submission assets
