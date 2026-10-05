@@ -39,6 +39,8 @@ export interface RunRow {
   timeMs: number;
   splits: number[];
   ghost: string;
+  /** Set with assist mode on: shown as a badge on the leaderboard. */
+  assist: boolean;
 }
 
 export type StoreOutcome =
@@ -74,6 +76,7 @@ const Body = z.object({
   timeMs: z.number().int().min(1).max(3_600_000),
   splits: z.array(z.number().int().min(0).nullable()).max(64),
   ghost: z.string().min(1).max(MAX_GHOST_CHARS),
+  assist: z.boolean().default(false),
 });
 
 const LIMITS: SubmitLimits = { windowMs: SUBMIT_LIMITS.windowMs, perIpWindow: SUBMIT_LIMITS.perIpWindow, globalPerDay: SUBMIT_LIMITS.globalPerDay };
@@ -143,6 +146,7 @@ export async function handleSubmitRun(body: unknown, ip: string, deps: SubmitDep
         timeMs: run.timeMs,
         splits: run.splits as number[], // checkRun refuses missing splits
         ghost: run.ghost,
+        assist: run.assist,
       },
       deps.hashIp(ip),
       LIMITS,

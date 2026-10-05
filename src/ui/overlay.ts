@@ -27,6 +27,8 @@ export interface BoardRowView {
   isMe: boolean;
   /** The ghost you've picked to race. */
   selected: boolean;
+  /** Set with assist mode on. */
+  assist: boolean;
 }
 
 export interface BoardView {
@@ -134,6 +136,16 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
   return b;
 }
 
+function boardName(row: BoardRowView): HTMLElement {
+  const name = el('span', row.isMe ? `${row.name} (you)` : row.name, 'board__name');
+  if (row.assist) {
+    const badge = el('span', 'A', 'board__assist');
+    badge.title = 'Set with assist mode';
+    name.append(badge);
+  }
+  return name;
+}
+
 /** A leaderboard list: home rows pick a ghost (toggle), results rows race one. */
 function boardList(view: BoardView, where: 'home' | 'results', onRow: (row: BoardRowView) => void): HTMLElement {
   const list = el('ol', undefined, `board board--${where}`);
@@ -151,7 +163,7 @@ function boardList(view: BoardView, where: 'home' | 'results', onRow: (row: Boar
     b.title = where === 'home' ? `Race ${row.name}'s ghost` : `Race ${row.name}'s ghost now`;
     b.append(
       el('span', String(row.place), 'board__place'),
-      el('span', row.isMe ? `${row.name} (you)` : row.name, 'board__name'),
+      boardName(row),
       el('span', formatTime(row.timeMs), 'board__time'),
       el('span', where === 'home' ? (row.selected ? 'picked' : 'ghost') : 'race', 'board__ghost'),
     );

@@ -65,6 +65,7 @@ export class Hud {
         <div class="hud__timer" aria-label="Run time">0:00.00</div>
         <div class="hud__position" hidden></div>
         <div class="hud__cps"></div>
+        <div class="hud__assist" hidden>Assist on</div>
         <div class="hud__bar" aria-hidden="true">
           <div class="hud__fill"></div>
           <div class="hud__ticks"></div>
@@ -173,6 +174,11 @@ export class Hud {
       this.timer.textContent = text;
       this.lastTimerText = text;
     }
+  }
+
+  /** The "Assist on" tag under the timer. */
+  setAssist(on: boolean): void {
+    this.root.querySelector<HTMLElement>('.hud__assist')!.hidden = !on;
   }
 
   setCheckpoints(reached: number, total: number): void {

@@ -16,6 +16,8 @@ export interface BoardEntry {
   id: string;
   name: string;
   timeMs: number;
+  /** Set with assist mode on. */
+  assist: boolean;
 }
 
 export type BoardOutcome = { ok: true; entries: BoardEntry[] } | { ok: false };
@@ -37,7 +39,7 @@ async function client() {
 const supabaseBoardQuery: BoardQuery = async (courseKey, limit) => {
   const { data, error } = await (await client())
     .from('runs')
-    .select('id, player_name, time_ms')
+    .select('id, player_name, time_ms, assist')
     .eq('course_key', courseKey)
     .order('time_ms', { ascending: true })
     .order('updated_at', { ascending: true })
@@ -50,7 +52,7 @@ const supabaseGhostQuery: GhostQuery = async (runId) => {
   return { data, error };
 };
 
-const Entry = z.object({ id: z.string().min(1).max(64), player_name: z.string(), time_ms: z.number().int().positive() });
+const Entry = z.object({ id: z.string().min(1).max(64), player_name: z.string(), time_ms: z.number().int().positive(), assist: z.boolean().catch(false) });
 
 export async function fetchLeaderboard(courseKey: string, limit = BOARD_SIZE, query: BoardQuery = supabaseBoardQuery): Promise<BoardOutcome> {
   let result: Awaited<ReturnType<BoardQuery>>;
@@ -63,7 +65,7 @@ export async function fetchLeaderboard(courseKey: string, limit = BOARD_SIZE, qu
   const entries: BoardEntry[] = [];
   for (const raw of result.data) {
     const row = Entry.safeParse(raw);
-    if (row.success) entries.push({ id: row.data.id, name: sanitizeName(row.data.player_name, FALLBACK_NAME), timeMs: row.data.time_ms });
+    if (row.success) entries.push({ id: row.data.id, name: sanitizeName(row.data.player_name, FALLBACK_NAME), timeMs: row.data.time_ms, assist: row.data.assist });
   }
   return { ok: true, entries };
 }
@@ -96,6 +98,8 @@ export interface SubmitPayload {
   splits: (number | null)[];
   /** Encoded ghost (ghost.ts). */
   ghost: string;
+  /** Set with assist mode on. */
+  assist: boolean;
 }
 
 export type SubmitOutcome =

@@ -7,6 +7,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   id: 'b8a4c6a4-1111-4aaa-8bbb-222233334444',
   player_name: 'Wave Rider',
   time_ms: 21570,
+  assist: false,
   checkpoint_splits: [5000, 12000],
   updated_at: '2026-10-06T10:00:00Z',
   ...over,
@@ -14,12 +15,12 @@ const row = (over: Record<string, unknown> = {}) => ({
 
 describe('fetchLeaderboard', () => {
   it('reads the top runs in order', async () => {
-    const out = await fetchLeaderboard('c3-abc', 10, ok([row(), row({ id: 'x2', player_name: 'Bob', time_ms: 23000 })]));
+    const out = await fetchLeaderboard('c3-abc', 10, ok([row(), row({ id: 'x2', player_name: 'Bob', time_ms: 23000, assist: true })]));
     expect(out).toEqual({
       ok: true,
       entries: [
-        { id: 'b8a4c6a4-1111-4aaa-8bbb-222233334444', name: 'Wave Rider', timeMs: 21570 },
-        { id: 'x2', name: 'Bob', timeMs: 23000 },
+        { id: 'b8a4c6a4-1111-4aaa-8bbb-222233334444', name: 'Wave Rider', timeMs: 21570, assist: false },
+        { id: 'x2', name: 'Bob', timeMs: 23000, assist: true },
       ],
     });
   });
@@ -72,6 +73,7 @@ describe('submitRun', () => {
     timeMs: 21570,
     splits: [5000, 12000],
     ghost: 'AQ',
+    assist: false,
   };
   const reply = (status: number, body: unknown) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 

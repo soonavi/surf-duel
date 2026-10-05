@@ -32,6 +32,7 @@ export function supabaseRunStore(db: SupabaseClient): RunStore {
         p_time_ms: row.timeMs,
         p_splits: row.splits,
         p_ghost: row.ghost,
+        p_assist: row.assist,
         p_ip_hash: ipHash,
         p_window_seconds: Math.round(limits.windowMs / 1000),
         p_per_ip_window: limits.perIpWindow,

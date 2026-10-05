@@ -56,7 +56,7 @@ class FakeRunStore implements RunStore {
       this.rows.push(mine);
     } else {
       mine.playerName = row.playerName;
-      if (row.timeMs < mine.timeMs) Object.assign(mine, { timeMs: row.timeMs, splits: row.splits, ghost: row.ghost });
+      if (row.timeMs < mine.timeMs) Object.assign(mine, { timeMs: row.timeMs, splits: row.splits, ghost: row.ghost, assist: row.assist });
     }
     const board = this.rows.filter((r) => r.courseKey === row.courseKey);
     return {
@@ -100,6 +100,15 @@ describe('handleSubmitRun: accepted runs', () => {
     const res = await handleSubmitRun({ ...goodBody(), name: 'New Name' }, '1.2.3.4', deps);
     expect(res.body).toMatchObject({ ok: true, improved: false, bestMs: botRun.timeMs - 1000, name: 'New Name' });
     expect(store.rows[0]!.playerName).toBe('New Name');
+  });
+
+  it('records whether assist mode was on (unassisted when the client does not say)', async () => {
+    const { store, deps } = setup();
+    await handleSubmitRun(goodBody(), '1.2.3.4', deps);
+    expect(store.rows[0]!.assist).toBe(false);
+    await handleSubmitRun({ ...goodBody(), playerId: '7f1c1d2e-8a4b-4c3d-9e2f-1a2b3c4d5e6f', assist: true }, '1.2.3.4', deps);
+    expect(store.rows[1]!.assist).toBe(true);
+    expect((await handleSubmitRun({ ...goodBody(), assist: 'yes' }, '1.2.3.4', deps)).status).toBe(400);
   });
 
   it('loads shared (AI) courses by share code', async () => {

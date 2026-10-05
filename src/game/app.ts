@@ -50,6 +50,10 @@ import { GeneratorUi } from '../ui/generator';
 import { flyoverFade, flyoverPose } from '../render/flyover';
 import { BEAT_PULSE } from '../render/materials';
 import { AudioEngine } from '../audio/engine';
+import { assistCommand, assistedPhysics } from './assist';
+import { approachRoll, speedFov, speedLines } from './feel';
+import { SpeedLines } from '../render/speedLines';
+import { ParticleBurst } from '../render/particles';
 import { speedIntensity } from '../audio/levels';
 import { hashString } from '../util/rng';
 import { SettingsUi } from '../ui/settingsPanel';
@@ -176,6 +180,14 @@ export class App {
   private readonly sceneFade: HTMLElement;
   private sceneFadeOpacity = 0;
 
+  // Game feel.
+  private fovNow = 75;
+  private roll = 0;
+  private readonly speedLinesFx: SpeedLines;
+  private readonly burst: ParticleBurst;
+  /** Assist mode was on at some point during this run. */
+  private usedAssist = false;
+
   // Sound and settings.
   private readonly audio = new AudioEngine();
   private readonly settingsUi: SettingsUi;
@@ -248,6 +260,9 @@ export class App {
     root.appendChild(this.sceneFade);
     this.view.setFov(this.settings.fov);
     this.view.setQuality(this.settings.graphics);
+    this.fovNow = this.settings.fov;
+    this.speedLinesFx = new SpeedLines(root);
+    this.burst = new ParticleBurst(this.view.scene);
     this.input = new Input(this.view.canvas);
     this.overlay = new Overlay(document.body);
     this.hud = new Hud(document.body);
@@ -441,6 +456,7 @@ export class App {
 
   /** Push changed settings into the renderer and persist them. */
   applySettings(): void {
+    this.fovNow = this.settings.fov;
     this.view.setFov(this.settings.fov);
     this.view.setQuality(this.settings.graphics);
     this.audio.setVolumes(this.settings.musicVolume, this.settings.sfxVolume);
@@ -552,6 +568,8 @@ export class App {
     this.lostMs = 0;
     this.loop.droppedTime = 0;
     this.assisted = this.debug.autopilot || this.debug.noclip;
+    this.usedAssist = this.settings.assist;
+    this.hud.setAssist(this.settings.assist);
     this.lastFinish = null;
     this.goShowing = false;
     this.lastCountdownShown = 0;
@@ -701,6 +719,7 @@ export class App {
       timeMs: e.timeMs,
       isMe: e.id === mine,
       selected: e.id === picked,
+      assist: e.assist,
     }));
     return { state: 'ready', rows, note: rows.length === 0 ? 'No times yet: set the first!' : '' };
   }
@@ -781,6 +800,7 @@ export class App {
         timeMs: payloadFrom.timeMs,
         splits: payloadFrom.splits,
         ghost: payloadFrom.ghost,
+        assist: payloadFrom.assist === true,
       };
       void this.sendRun(key, payload);
     } else if (!this.boards.has(key)) {
@@ -1427,6 +1447,11 @@ export class App {
         break;
       case 'checkpoint':
         this.audio.checkpoint();
+        if (this.fancyEffects) {
+          const at = forwardOf(this.angles.yaw, this.tmp).multiplyScalar(260).add(this.player.pos);
+          at.y += EYE_HEIGHT;
+          this.burst.fire(at, this.player.vel, THEME_DEFS[this.built.course.theme].accent);
+        }
         if (session) {
           const split = session.checkpoint(event.index);
           this.hud.showSplit({ label: `Checkpoint ${event.index}`, timeMs: split.timeMs, deltaMs: split.deltaMs });
@@ -1470,6 +1495,7 @@ export class App {
         topSpeed: result.topSpeed,
         ghost: encodeGhost(ghost),
         at: Date.now(),
+        assist: this.usedAssist,
       });
       this.lastFinish = { timeMs: Math.round(result.timeMs), splits: result.splits, ghost };
       this.refreshCourseCards();
@@ -1633,7 +1659,11 @@ export class App {
         this.yawFrom = cmd.yaw;
         this.yawDelta = 0;
       }
-      stepPlayer(this.player, cmd, physics, this.world, dt);
+      else if (this.settings.assist) {
+        cmd = assistCommand(cmd, this.player);
+        this.usedAssist = true;
+      }
+      stepPlayer(this.player, cmd, this.settings.assist && !this.debug.autopilot ? assistedPhysics(physics) : physics, this.world, dt);
       keys = { w: cmd.forward > 0, s: cmd.forward < 0, d: cmd.side > 0, a: cmd.side < 0, space: cmd.jump };
     }
 
@@ -1699,10 +1729,13 @@ export class App {
       this.camPos.lerpVectors(this.prevPos, this.player.pos, alpha);
       this.camPos.y += EYE_HEIGHT;
       cam.position.copy(this.camPos);
-      cam.rotation.set(this.angles.pitch, this.angles.yaw, 0);
       const racing = this.session !== null && (this.state === 'countdown' || this.state === 'racing');
+      this.updateFeel(racing && this.loop.simulating, frameDt);
+      cam.rotation.set(this.angles.pitch, this.angles.yaw, this.roll);
       if (racing) this.updateGhostsAndHud(alpha);
     }
+    if (this.state !== 'racing' && this.state !== 'countdown') this.resetFeel();
+    this.burst.update(frameDt);
     this.updateSound(frameDt);
     this.view.render();
     this.updateStats(frameDt);
@@ -1723,6 +1756,32 @@ export class App {
     const theme = THEME_DEFS[this.built.course.theme];
     if (this.overlay.screen === 'start') drawEqualizer(this.overlay.equalizerCanvas, this.audio.bars(48), theme.swatch);
     else if (racing || this.state === 'countdown') drawEqualizer(this.hud.equalizerCanvas, this.audio.bars(16), ['#ffffff', '#ffffff']);
+  }
+
+  /** Extra effects (speed lines, bursts, view sway) are for high graphics, and off with reduced motion. */
+  private get fancyEffects(): boolean {
+    return this.settings.graphics === 'high' && !this.reducedMotion;
+  }
+
+  /** Speed widens the view, strafing leans it a touch, and speed lines rush past at full tilt. */
+  private updateFeel(live: boolean, dt: number): void {
+    const speed = Math.hypot(this.player.vel.x, this.player.vel.z);
+    const motion = !this.reducedMotion;
+    const targetFov = live && motion ? speedFov(this.settings.fov, speed) : this.settings.fov;
+    this.fovNow += (targetFov - this.fovNow) * Math.min(1, dt * 4);
+    if (Math.abs(this.view.camera.fov - this.fovNow) > 0.01) this.view.setFov(this.fovNow);
+    const side = this.coachKeys.d ? 1 : this.coachKeys.a ? -1 : 0;
+    this.roll = motion ? approachRoll(this.roll, live ? side : 0, dt) : 0;
+    this.speedLinesFx.draw(live && this.fancyEffects ? speedLines(speed) : 0, dt);
+  }
+
+  private resetFeel(): void {
+    this.roll = 0;
+    this.speedLinesFx.draw(0, 0);
+    if (this.fovNow !== this.settings.fov) {
+      this.fovNow = this.settings.fov;
+      this.view.setFov(this.fovNow);
+    }
   }
 
   private setSceneFade(opacity: number): void {

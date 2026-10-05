@@ -18,6 +18,8 @@ export interface RunRecord {
   ghost: string;
   /** Epoch ms. */
   at: number;
+  /** Set with assist mode on (shown as a badge on the leaderboard). */
+  assist?: boolean;
 }
 
 export interface SaveOutcome {
@@ -36,6 +38,7 @@ const StoredRun = z.object({
   topSpeed: z.number().nonnegative(),
   ghost: z.string().max(400_000),
   at: z.number(),
+  assist: z.boolean().optional(),
 });
 
 const StoredHistory = z.array(z.number().int().positive()).max(MAX_HISTORY * 2);

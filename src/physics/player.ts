@@ -17,6 +17,8 @@ export interface PlayerState {
   groundNormal: Vector3;
   /** Touched a surfable (steep) surface during the last tick. */
   surfing: boolean;
+  /** The surf face's normal, from the last tick spent surfing (points away from the ramp, toward the rider). */
+  surfNormal: Vector3;
 }
 
 export interface MoveCmd {
@@ -45,7 +47,7 @@ const RESOLVE_ITERATIONS = 4;
 const MIN_SURF_NORMAL_Y = 0.05;
 
 export function createPlayer(pos = new Vector3()): PlayerState {
-  return { pos: pos.clone(), vel: new Vector3(), onGround: false, groundNormal: new Vector3(0, 1, 0), surfing: false };
+  return { pos: pos.clone(), vel: new Vector3(), onGround: false, groundNormal: new Vector3(0, 1, 0), surfing: false, surfNormal: new Vector3(0, 1, 0) };
 }
 
 // Scratch state, reused every tick.
@@ -122,7 +124,10 @@ function moveAndSlide(state: PlayerState, world: CollisionWorld, dt: number): vo
       if (world.resolveCapsule(pos, contacts) === 0) break;
       for (let i = 0; i < contacts.count; i++) {
         const n = contacts.normals[i]!;
-        if (n.y < FLOOR_NORMAL_Y && n.y > MIN_SURF_NORMAL_Y) state.surfing = true;
+        if (n.y < FLOOR_NORMAL_Y && n.y > MIN_SURF_NORMAL_Y) {
+          state.surfing = true;
+          state.surfNormal.copy(n);
+        }
         if (vel.dot(n) < 0) addPlane(n);
       }
       clipVelocityToPlanes(vel, planes.normals, planes.count);
