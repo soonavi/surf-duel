@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { browserStorage, type KeyValueStorage } from './records';
+
+export type MusicChoice = 'generated' | 'file' | 'off';
+export type GraphicsQuality = 'high' | 'low';
 
 /** Player-facing settings, persisted to localStorage when available. */
 export interface Settings {
@@ -9,6 +13,16 @@ export interface Settings {
   rawInput: boolean;
   /** Vertical field of view in degrees. */
   fov: number;
+  /** 0–1. */
+  musicVolume: number;
+  /** 0–1. */
+  sfxVolume: number;
+  /** The generated soundtrack, the player's own music file, or none. */
+  music: MusicChoice;
+  /** 'low' renders fewer pixels and skips extra effects, for slower machines. */
+  graphics: GraphicsQuality;
+  /** Assist mode: steadier on ramps and in the air, for trackpads and new players. */
+  assist: boolean;
 }
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
@@ -16,6 +30,11 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   invertY: false,
   rawInput: true,
   fov: 75,
+  musicVolume: 0.6,
+  sfxVolume: 0.8,
+  music: 'generated',
+  graphics: 'high',
+  assist: false,
 });
 
 export const SETTINGS_LIMITS = {
@@ -25,18 +44,25 @@ export const SETTINGS_LIMITS = {
 
 const STORAGE_KEY = 'surfduel.settings.v1';
 
+const volume = z.number().min(0).max(1);
+
 const StoredSettings = z
   .object({
     sensitivity: z.number().min(SETTINGS_LIMITS.sensitivity.min).max(SETTINGS_LIMITS.sensitivity.max),
     invertY: z.boolean(),
     rawInput: z.boolean(),
     fov: z.number().min(SETTINGS_LIMITS.fov.min).max(SETTINGS_LIMITS.fov.max),
+    musicVolume: volume,
+    sfxVolume: volume,
+    music: z.enum(['generated', 'file', 'off']),
+    graphics: z.enum(['high', 'low']),
+    assist: z.boolean(),
   })
   .partial();
 
-export function loadSettings(): Settings {
+export function loadSettings(storage: KeyValueStorage | null = browserStorage()): Settings {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = storage?.getItem(STORAGE_KEY) ?? null;
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = StoredSettings.safeParse(JSON.parse(raw));
     return parsed.success ? { ...DEFAULT_SETTINGS, ...parsed.data } : { ...DEFAULT_SETTINGS };
@@ -45,9 +71,9 @@ export function loadSettings(): Settings {
   }
 }
 
-export function saveSettings(settings: Settings): void {
+export function saveSettings(settings: Settings, storage: KeyValueStorage | null = browserStorage()): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+    storage?.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {
     // Storage unavailable (private mode, blocked cookies). Settings still apply for this session.
   }

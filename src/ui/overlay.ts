@@ -1,7 +1,7 @@
 import { formatDelta, formatTime } from '../game/time';
 import { MAX_PLAYERS } from '../net/roomLogic';
 
-export type OverlayScreen = 'start' | 'loading' | 'lobby' | 'pause' | 'results' | 'unsupported' | 'generate' | 'preview' | 'none';
+export type OverlayScreen = 'start' | 'loading' | 'lobby' | 'pause' | 'results' | 'unsupported' | 'generate' | 'preview' | 'settings' | 'none';
 
 export interface CourseCard {
   id: string;
@@ -172,6 +172,7 @@ function boardList(view: BoardView, where: 'home' | 'results', onRow: (row: Boar
 export class Overlay {
   onEngage: (() => void) | null = null;
   onOpenGenerator: (() => void) | null = null;
+  onOpenSettings: (() => void) | null = null;
   onSelectCourse: ((id: string) => void) | null = null;
   onRestart: (() => void) | null = null;
   onMenu: (() => void) | null = null;
@@ -235,6 +236,8 @@ export class Overlay {
       <div class="banner" role="status" aria-live="polite" hidden></div>
 
       <section class="overlay overlay--start" data-screen="start">
+        <canvas class="home__eq" aria-hidden="true"></canvas>
+        <button class="btn btn--ghost btn--small home__settings" data-action="settings" type="button">⚙ Settings</button>
         <div class="home">
           <header class="home__brand">
             <h1 class="title">SURF DUEL</h1>
@@ -319,6 +322,7 @@ export class Overlay {
             <button class="btn btn--primary" data-action="engage" type="button">Resume</button>
             <button class="btn btn--ghost" data-action="restart" data-mode="solo" type="button">Restart run</button>
             <button class="btn btn--ghost" data-action="menu" data-mode="solo" type="button">Menu</button>
+            <button class="btn btn--ghost" data-action="settings" type="button">Settings</button>
             <button class="btn btn--ghost" data-action="leave-race" data-mode="room" type="button">Leave race</button>
           </div>
           <p class="message" role="status" aria-live="polite"></p>
@@ -390,8 +394,13 @@ export class Overlay {
     primary?.focus({ preventScroll: true });
   }
 
-  /** Add a screen built elsewhere (the AI generator's), so show() manages it with the rest. */
-  registerScreen(name: 'generate' | 'preview', element: HTMLElement): void {
+  /** The start screen's equalizer canvas (drawn by the App from the music). */
+  get equalizerCanvas(): HTMLCanvasElement {
+    return this.root.querySelector<HTMLCanvasElement>('.home__eq')!;
+  }
+
+  /** Add a screen built elsewhere (the AI generator's, settings), so show() manages it with the rest. */
+  registerScreen(name: 'generate' | 'preview' | 'settings', element: HTMLElement): void {
     element.hidden = this.current !== name;
     this.root.append(element);
     this.screens[name] = element;
@@ -819,6 +828,7 @@ export class Overlay {
       'leave-race': () => this.onLeaveRace?.(),
       'create-room': () => this.onCreateRoom?.(),
       'open-generator': () => this.onOpenGenerator?.(),
+      settings: () => this.onOpenSettings?.(),
     };
     for (const btn of scope.querySelectorAll<HTMLButtonElement>('[data-action]')) {
       if (btn.dataset.bound) continue;

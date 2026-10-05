@@ -15,6 +15,8 @@ const GROUND_MARGIN = 250_000;
 export class CourseView {
   readonly group = new THREE.Group();
   private readonly disposables: { dispose(): void }[] = [];
+  /** Gates and boosters, with their resting colours, for the beat pulse. */
+  private readonly glowing: { material: THREE.MeshBasicMaterial; color: THREE.Color }[] = [];
 
   constructor(built: BuiltCourse, theme: Theme) {
     this.group.name = 'course';
@@ -24,11 +26,11 @@ export class CourseView {
     this.add(visuals.rampLeft, createRampMaterial(theme.rampLeft));
     this.add(visuals.pads, createGridMaterial({ base: theme.pad.base, line: theme.pad.line, cell: 64 }));
     this.add(visuals.finish, createGridMaterial({ base: theme.finish.base, line: theme.finish.line, cell: 128 }));
-    this.add(visuals.gates, new THREE.MeshBasicMaterial({ color: theme.accent }));
-    this.add(
-      visuals.boosters,
-      new THREE.MeshBasicMaterial({ color: theme.booster, transparent: true, opacity: 0.9, depthWrite: false }),
-    );
+    const gates = new THREE.MeshBasicMaterial({ color: theme.accent });
+    const boosters = new THREE.MeshBasicMaterial({ color: theme.booster, transparent: true, opacity: 0.9, depthWrite: false });
+    this.add(visuals.gates, gates);
+    this.add(visuals.boosters, boosters);
+    for (const material of [gates, boosters]) this.glowing.push({ material, color: material.color.clone() });
 
     if (theme.ground) {
       const b = built.bounds;
@@ -41,6 +43,11 @@ export class CourseView {
       geo.translate(center.x, b.min.y - GROUND_DEPTH, center.z);
       this.add(geo, createGridMaterial({ base: theme.ground.base, line: theme.ground.line, cell: 512, lineWidth: 1 }));
     }
+  }
+
+  /** Gates and boosters brighten with the music's beat (0–1). */
+  setPulse(pulse: number): void {
+    for (const g of this.glowing) g.material.color.copy(g.color).multiplyScalar(1 + 0.6 * pulse);
   }
 
   dispose(): void {

@@ -32,6 +32,8 @@ const FEED_MS = 5000;
  * an explicit +/− sign as well as colour, so they read for colour-blind players.
  */
 export class Hud {
+  /** Each time the countdown shows a new number (or GO): for the beeps. */
+  onCountdown: ((value: number | 'GO') => void) | null = null;
   /** The Tutorial coach (hidden on other courses). */
   readonly coach: CoachPanel;
   private readonly root: HTMLElement;
@@ -75,6 +77,7 @@ export class Hud {
       <ol class="hud__standings" aria-label="Live standings" hidden></ol>
       <ul class="hud__feed" aria-live="polite"></ul>
       <div class="hud__speedo" aria-hidden="true"><span class="hud__speed">0</span><span class="hud__unit">u/s</span></div>
+      <canvas class="hud__eq" width="96" height="22" aria-hidden="true"></canvas>
     `;
     parent.appendChild(this.root);
     const q = (sel: string): HTMLElement => {
@@ -141,6 +144,11 @@ export class Hud {
     this.feed.append(li);
     while (this.feed.children.length > FEED_MAX) this.feed.firstElementChild?.remove();
     window.setTimeout(() => li.remove(), FEED_MS);
+  }
+
+  /** The small equalizer under the speedometer. */
+  get equalizerCanvas(): HTMLCanvasElement {
+    return this.root.querySelector<HTMLCanvasElement>('.hud__eq')!;
   }
 
   setVisible(visible: boolean): void {
@@ -232,6 +240,7 @@ export class Hud {
     this.countdown.textContent = text;
     this.countdown.dataset.go = String(value === 'GO');
     this.countdown.hidden = false;
+    this.onCountdown?.(value);
     this.countdown.classList.remove('hud__countdown--pop');
     void this.countdown.offsetWidth; // restart the animation
     this.countdown.classList.add('hud__countdown--pop');

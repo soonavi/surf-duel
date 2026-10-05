@@ -44,10 +44,16 @@ async function roomTransport(): Promise<RoomTransport> {
   const { supabaseTransport } = await import('../net/supabase');
   return supabaseTransport();
 }
-import { Overlay, type BoardView, type CourseCard, type LobbyView, type ResultsBoardView, type ResultsView, type StandingRow } from '../ui/overlay';
+import { Overlay, type OverlayScreen, type BoardView, type CourseCard, type LobbyView, type ResultsBoardView, type ResultsView, type StandingRow } from '../ui/overlay';
 import { Hud, type HudMarker, type HudStanding } from '../ui/hud';
 import { GeneratorUi } from '../ui/generator';
 import { flyoverFade, flyoverPose } from '../render/flyover';
+import { BEAT_PULSE } from '../render/materials';
+import { AudioEngine } from '../audio/engine';
+import { speedIntensity } from '../audio/levels';
+import { hashString } from '../util/rng';
+import { SettingsUi } from '../ui/settingsPanel';
+import { drawEqualizer } from '../ui/equalizer';
 
 type AppState = 'menu' | 'loading' | 'lobby' | 'countdown' | 'racing' | 'results' | 'spectating' | 'generate' | 'preview';
 type StartKind = 'full' | 'quick';
@@ -170,6 +176,14 @@ export class App {
   private readonly sceneFade: HTMLElement;
   private sceneFadeOpacity = 0;
 
+  // Sound and settings.
+  private readonly audio = new AudioEngine();
+  private readonly settingsUi: SettingsUi;
+  /** The screen to go back to when settings close. */
+  private settingsReturn: OverlayScreen = 'start';
+  private musicFileProblem = '';
+  private readonly reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   // Leaderboards.
   /** How the server finds the loaded course; null for courses without a board (random ones). */
   private boardRef: BoardRef | null = null;
@@ -233,12 +247,31 @@ export class App {
     this.sceneFade.className = 'scene-fade';
     root.appendChild(this.sceneFade);
     this.view.setFov(this.settings.fov);
+    this.view.setQuality(this.settings.graphics);
     this.input = new Input(this.view.canvas);
     this.overlay = new Overlay(document.body);
     this.hud = new Hud(document.body);
     this.remotes = new RemotePlayers(this.view.scene);
     this.overlay.setDebugVisible(this.debug.showHud);
     this.overlay.setMultiplayerAvailable(multiplayerConfigured());
+
+    this.settingsUi = new SettingsUi(this.settings);
+    this.overlay.registerScreen('settings', this.settingsUi.screen);
+    this.settingsUi.onChange = () => {
+      // Picking "My music" with no file yet opens the file picker (still inside the click).
+      if (this.settings.music === 'file' && !this.audio.hasFile) this.settingsUi.pickFile();
+      this.applySettings();
+    };
+    this.settingsUi.onPickMusicFile = (file) => void this.useMusicFile(file);
+    this.settingsUi.onBack = () => this.closeSettings();
+    this.overlay.onOpenSettings = () => this.openSettings();
+    // Browsers only allow sound after a user gesture: start it on the first one.
+    const unlock = (): void => this.audio.unlock();
+    window.addEventListener('pointerdown', unlock, true);
+    window.addEventListener('keydown', unlock, true);
+    this.hud.onCountdown = (value) => this.audio.countdown(value === 'GO' ? 0 : value);
+    this.audio.setVolumes(this.settings.musicVolume, this.settings.sfxVolume);
+    this.audio.setSource(this.settings.music === 'off' ? 'off' : 'generated');
 
     // The loop must exist before the first course loads (loading resets to the menu, which pauses it).
     this.loop = new FixedStepLoop({
@@ -350,6 +383,8 @@ export class App {
     this.view.applyTheme(theme);
     this.hud.coach.setRampColors(theme.rampRight.ui, theme.rampLeft.ui);
     this.overlay.setRampColors(theme.rampRight.ui, theme.rampLeft.ui);
+    // Every course gets its own tune in its theme's mood; the same course always sounds the same.
+    this.audio.playSong(this.debug.themeOverride === 'auto' ? this.built.course.theme : this.debug.themeOverride, hashString(this.key));
   }
 
   private refreshCourseCards(): void {
@@ -407,7 +442,31 @@ export class App {
   /** Push changed settings into the renderer and persist them. */
   applySettings(): void {
     this.view.setFov(this.settings.fov);
+    this.view.setQuality(this.settings.graphics);
+    this.audio.setVolumes(this.settings.musicVolume, this.settings.sfxVolume);
+    // "My music" with no file picked this visit plays the generated music until one is.
+    this.audio.setSource(this.settings.music === 'file' && !this.audio.hasFile ? 'generated' : this.settings.music);
     saveSettings(this.settings);
+    this.settingsUi?.refresh(this.audio.fileName, this.musicFileProblem);
+  }
+
+  private openSettings(): void {
+    if (this.overlay.screen !== 'settings') this.settingsReturn = this.overlay.screen;
+    this.settingsUi.refresh(this.audio.fileName, this.musicFileProblem);
+    this.overlay.show('settings');
+  }
+
+  private closeSettings(): void {
+    this.overlay.show(this.settingsReturn === 'none' ? 'start' : this.settingsReturn);
+  }
+
+  /** The player's own music: played from their disk, never uploaded. */
+  private async useMusicFile(file: File): Promise<void> {
+    const ok = await this.audio.loadFile(file);
+    this.musicFileProblem = ok ? '' : "Couldn't play that file. Try an MP3, OGG, WAV or M4A.";
+    if (ok) this.settings.music = 'file';
+    else if (!this.audio.hasFile && this.settings.music === 'file') this.settings.music = 'generated';
+    this.applySettings();
   }
 
   applyDebug(): void {
@@ -563,6 +622,11 @@ export class App {
   }
 
   private handleMenuKeys(e: KeyboardEvent): void {
+    if (this.overlay.screen === 'settings' && e.code === 'Escape') {
+      e.preventDefault();
+      this.closeSettings();
+      return;
+    }
     if (this.state === 'menu' && this.overlay.screen === 'start' && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
       const target = e.target as HTMLElement | null;
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
@@ -1359,8 +1423,10 @@ export class App {
     switch (event.type) {
       case 'kill':
         this.respawn();
+        this.audio.respawn();
         break;
       case 'checkpoint':
+        this.audio.checkpoint();
         if (session) {
           const split = session.checkpoint(event.index);
           this.hud.showSplit({ label: `Checkpoint ${event.index}`, timeMs: split.timeMs, deltaMs: split.deltaMs });
@@ -1369,6 +1435,7 @@ export class App {
         break;
       case 'booster':
         this.overlay.toast('Boost!', 900);
+        this.audio.boost();
         break;
       case 'finish':
         this.finishRun();
@@ -1408,6 +1475,7 @@ export class App {
       this.refreshCourseCards();
     }
 
+    this.audio.finish(outcome?.isBest === true);
     const best = outcome?.previousBest ?? null;
     const view: ResultsView = {
       courseName: this.built.course.name,
@@ -1498,6 +1566,7 @@ export class App {
         }
       } else if (session.phase === 'racing') {
         this.respawn();
+        this.audio.respawn();
         this.coachEvents.push({ type: 'respawn' });
         return;
       }
@@ -1634,8 +1703,26 @@ export class App {
       const racing = this.session !== null && (this.state === 'countdown' || this.state === 'racing');
       if (racing) this.updateGhostsAndHud(alpha);
     }
+    this.updateSound(frameDt);
     this.view.render();
     this.updateStats(frameDt);
+  }
+
+  /** Music intensity and wind from what's happening; the beat pulse and equalizers from the music. */
+  private updateSound(frameDt: number): void {
+    const racing = this.state === 'racing' && this.session !== null && !this.paused;
+    const speed = Math.hypot(this.player.vel.x, this.player.vel.z);
+    this.audio.setIntensity(racing ? speedIntensity(speed) : this.state === 'countdown' ? 0.25 : this.state === 'results' ? 0.45 : 0.35);
+    this.audio.setWind(racing ? speed : 0);
+    this.audio.frame(frameDt);
+
+    const pulse = this.reducedMotion ? 0 : this.audio.pulse;
+    BEAT_PULSE.value = pulse;
+    this.courseView?.setPulse(pulse);
+    if (this.reducedMotion || !this.audio.ready) return;
+    const theme = THEME_DEFS[this.built.course.theme];
+    if (this.overlay.screen === 'start') drawEqualizer(this.overlay.equalizerCanvas, this.audio.bars(48), theme.swatch);
+    else if (racing || this.state === 'countdown') drawEqualizer(this.hud.equalizerCanvas, this.audio.bars(16), ['#ffffff', '#ffffff']);
   }
 
   private setSceneFade(opacity: number): void {

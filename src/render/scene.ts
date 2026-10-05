@@ -50,6 +50,14 @@ export class SceneView {
     return this.renderer.domElement;
   }
 
+  private maxPixelRatio = MAX_PIXEL_RATIO;
+
+  /** 'low' renders fewer pixels, for slower machines. */
+  setQuality(quality: 'high' | 'low'): void {
+    this.maxPixelRatio = quality === 'low' ? 0.8 : MAX_PIXEL_RATIO;
+    this.resize();
+  }
+
   setFov(fov: number): void {
     this.camera.fov = fov;
     this.camera.updateProjectionMatrix();
@@ -58,7 +66,7 @@ export class SceneView {
   resize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.maxPixelRatio));
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();

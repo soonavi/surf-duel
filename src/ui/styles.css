@@ -952,6 +952,163 @@ kbd {
   }
 }
 
+/* --- Settings ---------------------------------------------------------------------- */
+
+.home__settings {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+}
+
+.settings {
+  width: min(820px, 100%);
+  text-align: left;
+}
+
+.settings h2 {
+  text-align: center;
+}
+
+.settings__columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px 28px;
+}
+
+.settings__section {
+  margin-bottom: 18px;
+}
+
+.settings__row {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.settings__label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings__value {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.settings__slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.settings__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 14px;
+  cursor: pointer;
+}
+
+.settings__check input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.settings__check-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip[aria-checked='true'] {
+  border-color: var(--accent);
+  background: rgba(62, 230, 255, 0.14);
+}
+
+.settings__file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.settings__file {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.settings__note {
+  display: block;
+  margin: 2px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings__keys {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.settings__keys dt {
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+.settings__keys dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.settings__actions {
+  margin-top: 6px;
+}
+
+/* --- Equalizers ------------------------------------------------------------------------ */
+
+.home__eq {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 110px;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.hud__eq {
+  position: absolute;
+  left: 50%;
+  bottom: calc(9vh - 30px);
+  width: 96px;
+  height: 22px;
+  transform: translateX(-50%);
+  opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home__eq,
+  .hud__eq {
+    display: none;
+  }
+}
+
 /* --- HUD ------------------------------------------------------------------ */
 
 .hud {

@@ -9,6 +9,12 @@ export interface GridMaterialOptions {
   lineWidth?: number;
 }
 
+/**
+ * The music's beat pulse (0–1), shared by every course material: grid and
+ * ramp lines brighten on the beat. One uniform object, set once per frame.
+ */
+export const BEAT_PULSE: { value: number } = { value: 0 };
+
 /** Normalised direction the faux sun comes from. */
 const LIGHT_DIR = new THREE.Vector3(0.35, 0.85, 0.4).normalize();
 
@@ -35,6 +41,7 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uLightDir;
   uniform float uCell;
   uniform float uLineWidth;
+  uniform float uPulse;
   varying vec3 vWorldPos;
   varying vec3 vWorldNormal;
 
@@ -58,6 +65,7 @@ const fragmentShader = /* glsl */ `
     float light = 0.45 + 0.55 * max(dot(n, uLightDir), 0.0);
     vec3 col = uBase * light;
     col = mix(col, uLine, max(minor * 0.35, major * 0.85));
+    col += uLine * uPulse * 0.45 * major;
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -67,7 +75,7 @@ const fragmentShader = /* glsl */ `
 
 /** Flat-shaded surface with world-space grid lines, so speed is readable at a glance. */
 export function createGridMaterial(opts: GridMaterialOptions): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return withPulse(new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
       {
@@ -81,7 +89,13 @@ export function createGridMaterial(opts: GridMaterialOptions): THREE.ShaderMater
     vertexShader,
     fragmentShader,
     fog: true,
-  });
+  }));
+}
+
+/** Share BEAT_PULSE with a material (after uniforms are merged, which would copy it). */
+function withPulse(material: THREE.ShaderMaterial): THREE.ShaderMaterial {
+  material.uniforms.uPulse = BEAT_PULSE;
+  return material;
 }
 
 const rampVertexShader = /* glsl */ `
@@ -104,6 +118,7 @@ const rampFragmentShader = /* glsl */ `
   uniform vec3 uBase;
   uniform vec3 uLine;
   uniform vec3 uLightDir;
+  uniform float uPulse;
   varying vec2 vUv;
   varying vec3 vNormal;
 
@@ -127,6 +142,7 @@ const rampFragmentShader = /* glsl */ `
     vec3 col = uBase * light;
     col = mix(col, uLine, max(rungs * 0.9, rails * 0.35));
     col = mix(col, uLine, ridge);
+    col += uLine * uPulse * 0.35 * max(rungs, ridge);
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
@@ -139,7 +155,7 @@ const rampFragmentShader = /* glsl */ `
  * ramp, v = distance down the face), so lines follow the ramp around curves.
  */
 export function createRampMaterial(colors: { base: THREE.ColorRepresentation; line: THREE.ColorRepresentation }): THREE.ShaderMaterial {
-  return new THREE.ShaderMaterial({
+  return withPulse(new THREE.ShaderMaterial({
     uniforms: THREE.UniformsUtils.merge([
       THREE.UniformsLib.fog,
       {
@@ -151,7 +167,7 @@ export function createRampMaterial(colors: { base: THREE.ColorRepresentation; li
     vertexShader: rampVertexShader,
     fragmentShader: rampFragmentShader,
     fog: true,
-  });
+  }));
 }
 
 export interface SkyColors {
