@@ -1768,12 +1768,11 @@ export class App {
     this.updateStats(frameDt);
   }
 
-  /** Music intensity and wind from what's happening; the beat pulse and equalizers from the music. */
+  /** Music intensity from what's happening; the beat pulse and equalizers from the music. */
   private updateSound(frameDt: number): void {
     const racing = this.state === 'racing' && this.session !== null && !this.paused;
     const speed = Math.hypot(this.player.vel.x, this.player.vel.z);
     this.audio.setIntensity(racing ? speedIntensity(speed) : this.state === 'countdown' ? 0.25 : this.state === 'results' ? 0.45 : 0.35);
-    this.audio.setWind(racing ? speed : 0);
     this.audio.frame(frameDt);
 
     const pulse = this.reducedMotion ? 0 : this.audio.pulse;

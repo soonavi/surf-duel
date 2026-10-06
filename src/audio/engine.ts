@@ -3,8 +3,8 @@
  *  - the procedural soundtrack (music.ts), scheduled a little ahead of time
  *    on the audio clock and built up layer by layer with intensity (speed);
  *  - or the player's own music file, which never leaves their machine;
- *  - sound effects: countdown, checkpoint chime, finish fanfare, boost,
- *    respawn, and wind that rises with speed;
+ *  - sound effects: countdown, checkpoint chime, finish fanfare, boost and
+ *    respawn (no wind: the user found its rising hiss too much, Oct 2026);
  *  - an analyser tap on the music, for the equalizer and the beat pulse.
  *
  * Browsers only start audio after a user gesture, so nothing happens until
@@ -85,8 +85,6 @@ export class AudioEngine {
   private fileNode: MediaElementAudioSourceNode | null = null;
   private fileUrl: string | null = null;
   fileName: string | null = null;
-
-  private wind: { gain: GainNode; filter: BiquadFilterNode } | null = null;
 
   /** True once audio is running. */
   get ready(): boolean {
@@ -483,30 +481,6 @@ export class AudioEngine {
     osc.connect(g).connect(this.sfxBus);
     osc.start(t);
     osc.stop(t + 0.4);
-  }
-
-  /** Wind in your ears, rising with speed (u/s); 0 or less stops it. */
-  setWind(speed: number): void {
-    if (!this.sfxReady) return;
-    const ctx = this.ctx!;
-    if (!this.wind) {
-      if (speed <= 0) return;
-      const src = ctx.createBufferSource();
-      src.buffer = this.noise;
-      src.loop = true;
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.Q.value = 0.8;
-      const gain = ctx.createGain();
-      gain.gain.value = 0;
-      src.connect(filter).connect(gain).connect(this.sfxBus);
-      src.start();
-      this.wind = { gain, filter };
-    }
-    const x = Math.min(1, Math.max(0, speed / 3500));
-    const t = ctx.currentTime;
-    this.wind.gain.gain.setTargetAtTime(0.32 * x * x, t, 0.15);
-    this.wind.filter.frequency.setTargetAtTime(250 + 1800 * x, t, 0.15);
   }
 
   // --- per frame ----------------------------------------------------------------------

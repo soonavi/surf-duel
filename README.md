@@ -187,7 +187,7 @@ Everything is made live with the Web Audio API: no sound files, nothing to licen
 
 - **Generated soundtrack.** Every course gets its own 8-bar synthwave loop (`music.ts`), composed from its theme's mood and its course key, so the same course always sounds the same. Neon is classic synthwave, lava drives at 128 BPM in a Phrygian key, ice floats in Lydian, desert sways in harmonic minor, void broods half-time in Dorian. It builds with your speed (`levels.ts`): pads on the start pad, then bass and kick, the arpeggio, hats and snare, with a low-pass filter opening up as you go faster.
 - **Your own music.** Settings → Music → My music plays an audio file you pick. It's played straight from your disk and never uploaded; pick it again on your next visit.
-- **Effects:** countdown beeps and a GO chord, a checkpoint chime and finish fanfare in the song's key, a boost whoosh, a respawn sweep, and wind that rises with speed.
+- **Effects:** countdown beeps and a GO chord, a checkpoint chime and finish fanfare in the song's key, a boost whoosh and a respawn sweep.
 - **Equalizers.** An analyser on the music drives bars along the bottom of the start screen and under the speedometer, and ramp lines, grids, gates and boosters pulse with the bass (with your own music too).
 - Audio starts on your first click or key press (browsers require one) and pauses in background tabs.
 
