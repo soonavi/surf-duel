@@ -4,7 +4,7 @@
  * Planning always uses DEFAULT_PHYSICS, never the live tuning values, so a
  * course spec builds the same geometry for everyone.
  */
-import { DEFAULT_PHYSICS } from '../physics/constants.js';
+import { DEFAULT_PHYSICS, TICK_RATE } from '../physics/constants.js';
 import type { Difficulty } from './schema.js';
 
 export const PLAN_GRAVITY = DEFAULT_PHYSICS.gravity;
@@ -14,13 +14,38 @@ export interface DifficultyParams {
   pitchDeg: number;
   /** Horizontal width of each ramp face (peak to base edge). Wider is more forgiving. */
   faceWidth: number;
+  /**
+   * Sideways transfers: each ramp sits off to the side of the last one's
+   * line, by this fraction of the most a perfect air-strafe could cover in
+   * the air (landing parallel again; see AIR_STRAFE_REACH). 0 = straight on.
+   */
+  transferReach: number;
+  /** Least time in the air on a sideways transfer (s): drops are deepened to give it. */
+  transferAirTime: number;
+  /** A checkpoint at least every this many ramps. Fewer checkpoints punish mistakes. */
+  rampsPerCheckpoint: number;
 }
 
 export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyParams>> = {
-  easy: { pitchDeg: 6, faceWidth: 850 },
-  medium: { pitchDeg: 8, faceWidth: 750 },
-  hard: { pitchDeg: 10, faceWidth: 650 },
+  easy: { pitchDeg: 6, faceWidth: 850, transferReach: 0, transferAirTime: 0, rampsPerCheckpoint: 3 },
+  medium: { pitchDeg: 8, faceWidth: 750, transferReach: 0, transferAirTime: 0, rampsPerCheckpoint: 3 },
+  hard: { pitchDeg: 10, faceWidth: 600, transferReach: 0.45, transferAirTime: 1.3, rampsPerCheckpoint: 4 },
+  expert: { pitchDeg: 11, faceWidth: 480, transferReach: 0.6, transferAirTime: 1.2, rampsPerCheckpoint: 5 },
 };
+
+/**
+ * Air-strafing (looking along your velocity, holding A or D) pushes you
+ * sideways at airWishSpeedCap per tick: 3000 u/s² whatever your speed. Push
+ * one way for half the flight and back for the other half and you land
+ * parallel, AIR_STRAFE_REACH·t² to the side after t seconds in the air.
+ * Holding a key without turning only reaches airWishSpeedCap (30 u/s) sideways.
+ */
+export const AIR_STRAFE_REACH = (DEFAULT_PHYSICS.airWishSpeedCap * TICK_RATE) / 4;
+
+/** Courses whose transfers take air-strafing: a rider who only holds into the ramp can't finish them. */
+export function needsAirStrafe(difficulty: Difficulty): boolean {
+  return DIFFICULTY[difficulty].transferReach > 0;
+}
 
 /**
  * Riders are modelled as a speed range: `lo` is a cautious rider who never

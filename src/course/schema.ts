@@ -7,7 +7,7 @@
 import { z } from 'zod';
 
 export const THEMES = ['neon', 'desert', 'ice', 'lava', 'void'] as const;
-export const DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+export const DIFFICULTIES = ['easy', 'medium', 'hard', 'expert'] as const;
 export const RAMP_SIDES = ['left', 'right', 'both'] as const;
 
 export type ThemeName = (typeof THEMES)[number];
@@ -40,13 +40,19 @@ export const LIMITS = {
 } as const;
 
 /**
- * What each difficulty looks like: ramp angles and the most a single ramp
- * bends. Used by the random generator and the AI system prompt.
+ * What each difficulty looks like: ramp angles, the most a single ramp bends,
+ * and ramp lengths (hard maps have short ramps: less time to settle before
+ * the next transfer). Used by the random generator and the AI system prompt.
+ * The layout adds the rest (tuning.ts): on hard and expert, every ramp sits
+ * off to the side of the last, so you must air-strafe across.
  */
-export const DIFFICULTY_STYLE: Readonly<Record<Difficulty, { angle: readonly [number, number]; maxCurve: number }>> = {
-  easy: { angle: [46, 52], maxCurve: 15 },
-  medium: { angle: [50, 56], maxCurve: 30 },
-  hard: { angle: [54, 60], maxCurve: 45 },
+export const DIFFICULTY_STYLE: Readonly<
+  Record<Difficulty, { angle: readonly [number, number]; maxCurve: number; length: readonly [number, number] }>
+> = {
+  easy: { angle: [46, 52], maxCurve: 15, length: [3000, 6000] },
+  medium: { angle: [50, 56], maxCurve: 30, length: [2500, 6000] },
+  hard: { angle: [54, 60], maxCurve: 45, length: [2000, 4500] },
+  expert: { angle: [56, 60], maxCurve: 45, length: [1500, 3500] },
 };
 
 export const RampSegment = z.object({

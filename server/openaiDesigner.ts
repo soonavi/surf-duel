@@ -17,13 +17,13 @@ export interface ResponsesClient {
 }
 
 export function openAiDesigner(client: ResponsesClient, model: string): CourseDesigner {
-  return async (prompt, signal) => {
+  return async (prompt, difficulty, signal) => {
     const started = Date.now();
     const response = await client.responses.create(
       {
         model,
         instructions: COURSE_SYSTEM_PROMPT,
-        input: courseUserMessage(prompt),
+        input: courseUserMessage(prompt, difficulty),
         text: { format: { type: 'json_schema', name: COURSE_SCHEMA_NAME, schema: COURSE_JSON_SCHEMA, strict: true } },
         // Players' prompts don't need to live on OpenAI's side.
         store: false,

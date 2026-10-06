@@ -23,6 +23,7 @@ export function randomCourse(seed: number, opts: RandomCourseOptions = {}): Cour
   const difficulty = opts.difficulty ?? pick(DIFFICULTIES);
   const theme = opts.theme ?? pick(THEMES);
   const [angleLo, angleHi] = DIFFICULTY_STYLE[difficulty].angle;
+  const [lengthLo, lengthHi] = DIFFICULTY_STYLE[difficulty].length;
   const segments: Segment[] = [];
   const ramps = between(4, 8);
   let side: RampSide = rng() < 0.5 ? 'left' : 'right';
@@ -39,7 +40,7 @@ export function randomCourse(seed: number, opts: RandomCourseOptions = {}): Cour
     side = sideRoll < 0.1 ? 'both' : sideRoll < 0.25 ? side === 'both' ? 'right' : side : side === 'left' ? 'right' : 'left';
     segments.push({
       type: 'ramp',
-      length: between(2500, 6000),
+      length: between(lengthLo, lengthHi),
       angle: between(angleLo, angleHi),
       side,
       curve: rng() < 0.5 ? 0 : between(-DIFFICULTY_STYLE[difficulty].maxCurve, DIFFICULTY_STYLE[difficulty].maxCurve),

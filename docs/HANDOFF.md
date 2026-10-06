@@ -48,6 +48,24 @@ After the wind went, the user still reported the song "almost painfully loud" an
 - **Leading theory:** an older Surf Duel tab or window, still running pre-fix code with the song loaded. Old code played the file ~11 dB louder, and it doesn't sync settings, so the new tab's slider can't touch it.
 - **Root cause (found):** the user's "Audio Equalizer" Firefox extension. It patches `Audio.prototype.play` and captures every played audio element into its own AudioContext, straight to the speakers. Firefox allows a second `createMediaElementSource`. A copy of its hook in the hidden Firefox reproduced it exactly: the extension's copy played at the full source level whatever the slider. **Fixed:** the song is now decoded and played as an AudioBufferSourceNode, with no media element. Verified in Firefox with the hook installed (it's never called; the song follows the slider). `engine.test.ts` covers the routing, pause and resume, bad files and the size cap.
 
+## Phase 9 (user-requested, Oct 6): harder courses, difficulty picker, likes
+
+**Done, awaiting the user's playtest:**
+- There are four difficulties: easy, medium, hard and expert.
+- Hard and Expert need air-strafing, through sideways transfers sized from the physics. See CLAUDE.md, "Course layout invariants".
+- **Research basis:** surf map tiers 1–6+. Hard maps have fewer checkpoints, shorter ramps, transfers that demand speed and air control, and clean landings.
+- A skilled bot (`BotStyle.airStrafe`) proves Hard and Expert courses beatable. The cautious bot must die on every one.
+- Speed Demon was redesigned as Hard and Event Horizon as Expert. `LAYOUT_VERSION` is now 4, so the old PBs, boards and Speed Demon's dev ghost are retired.
+- The AI generator has difficulty chips. The server enforces the player's pick.
+- The flyover camera smoothing is wider, and its glide bound now scales with each course's own descent.
+
+**Next, queued by the user:** thumbs up on generated courses, and a **Popular** section listing the most-liked ones. Agreed plan:
+- one like per player (`Profile.boardId`) per course, which they can undo;
+- counted server-side with the service role, like `submit_run`, with an IP-hash rate limit;
+- a Popular list on the home screen with one-click play by share code.
+
+The user picked "hard courses first, then likes" (Oct 6).
+
 ## Phase status
 
 | Phase | State |

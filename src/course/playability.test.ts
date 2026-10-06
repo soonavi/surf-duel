@@ -1,19 +1,53 @@
 /**
  * The strongest guarantee the builder makes: every course it produces can be
- * finished. A simple bot runs each course in the real physics — once riding
- * cautiously (walks across pads, stalling its speed), once aggressively
- * (bunny-hops across pads, keeping it) — and must finish without dying.
+ * finished. A bot runs each course in the real physics and must finish
+ * without dying, from the start and from every checkpoint.
+ *
+ * Easy and medium courses are guaranteed for a *cautious* bot that never
+ * air-strafes: it only holds into the ramp (walking or bunny-hopping across
+ * pads). Hard and expert courses must need real skill (user, Oct 6 2026: the
+ * old hard maps were easy): their ramps sit off to the side, so the cautious
+ * bot dies on every one, and a *skilled* bot that air-strafes across the
+ * transfers, like a player, must finish them all.
  */
 import { describe, expect, it } from 'vitest';
 import { buildCourse } from './builder.js';
+import type { BotStyle } from './bot.js';
 import { SHIPPED_COURSES } from './courses/index.js';
 import { randomCourse } from './random.js';
+import type { Difficulty } from './schema.js';
 import { simulateRun } from './simulate.js';
+import { needsAirStrafe } from './tuning.js';
 
-const STYLES = [
-  { name: 'cautious', hop: false },
-  { name: 'aggressive', hop: true },
-] as const;
+type NamedStyle = BotStyle & { name: string };
+
+const CAUTIOUS: readonly NamedStyle[] = [
+  { name: 'cautious', hop: false, airStrafe: false },
+  { name: 'aggressive', hop: true, airStrafe: false },
+];
+const SKILLED: readonly NamedStyle[] = [
+  { name: 'skilled', hop: false, airStrafe: true },
+  { name: 'skilled hopper', hop: true, airStrafe: true },
+];
+
+/** The bots a course of this difficulty must be finishable by. The first one also restarts from every checkpoint. */
+const stylesFor = (difficulty: Difficulty): readonly NamedStyle[] => (needsAirStrafe(difficulty) ? SKILLED : CAUTIOUS);
+
+/** Every way the bots for this course fail to finish cleanly, from the start and from each checkpoint. */
+function failuresOn(spec: unknown, label: string, maxSeconds = 180): string[] {
+  const built = buildCourse(spec);
+  const styles = stylesFor(built.course.difficulty);
+  const failures: string[] = [];
+  for (const style of styles) {
+    const r = simulateRun(built, style, maxSeconds);
+    if (!r.finished || r.deaths > 0) failures.push(`${label} ${style.name}: finished=${r.finished} deaths=${r.deaths}`);
+  }
+  for (let cp = 1; cp < built.checkpoints.length; cp++) {
+    const r = simulateRun(built, styles[0]!, maxSeconds, cp);
+    if (!r.finished || r.deaths > 0) failures.push(`${label} from cp ${cp}: finished=${r.finished} deaths=${r.deaths}`);
+  }
+  return failures;
+}
 
 describe('shipped courses', () => {
   for (const shipped of SHIPPED_COURSES) {
@@ -21,39 +55,41 @@ describe('shipped courses', () => {
       expect(buildCourse(shipped.spec).repairs).toEqual([]);
     });
 
-    for (const style of STYLES) {
-      it(`${shipped.id} is finished by a ${style.name} bot without dying`, () => {
-        const result = simulateRun(buildCourse(shipped.spec), { hop: style.hop }, 180);
-        expect(result).toMatchObject({ finished: true, deaths: 0 });
+    it(`${shipped.id} is finished without dying, from the start and every checkpoint`, () => {
+      expect(failuresOn(shipped.spec, shipped.id)).toEqual([]);
+    }, 60_000);
+
+    if (needsAirStrafe(buildCourse(shipped.spec).course.difficulty)) {
+      it(`${shipped.id} kills a rider who never air-strafes`, () => {
+        for (const style of CAUTIOUS) {
+          expect(simulateRun(buildCourse(shipped.spec), style, 180).deaths, style.name).toBeGreaterThan(0);
+        }
       });
     }
-
-    it(`${shipped.id} can be finished from every checkpoint respawn`, () => {
-      const built = buildCourse(shipped.spec);
-      for (let cp = 1; cp < built.checkpoints.length; cp++) {
-        const result = simulateRun(built, { hop: false }, 180, cp);
-        expect({ cp, ...result }).toMatchObject({ cp, finished: true, deaths: 0 });
-      }
-    });
   }
 });
 
 describe('random courses', () => {
-  it('every seed builds a course both bots finish without dying, from the start and every checkpoint', () => {
+  it('every seed builds a course its bots finish without dying, from the start and every checkpoint', () => {
     const failures: string[] = [];
-    for (let seed = 1; seed <= 40; seed++) {
-      const built = buildCourse(randomCourse(seed));
-      for (const style of STYLES) {
-        const r = simulateRun(built, { hop: style.hop }, 180);
-        if (!r.finished || r.deaths > 0) failures.push(`seed ${seed} ${style.name}: finished=${r.finished} deaths=${r.deaths}`);
-      }
-      for (let cp = 1; cp < built.checkpoints.length; cp++) {
-        const r = simulateRun(built, { hop: false }, 180, cp);
-        if (!r.finished || r.deaths > 0) failures.push(`seed ${seed} from cp ${cp}: finished=${r.finished} deaths=${r.deaths}`);
-      }
-    }
+    for (let seed = 1; seed <= 40; seed++) failures.push(...failuresOn(randomCourse(seed), `seed ${seed}`));
     expect(failures).toEqual([]);
-  }, 180_000);
+  }, 300_000);
+
+  for (const difficulty of ['hard', 'expert'] as const) {
+    it(`every ${difficulty} seed is finished by the skilled bot, and kills a rider who never air-strafes`, () => {
+      const failures: string[] = [];
+      for (let seed = 1; seed <= 25; seed++) {
+        const spec = randomCourse(seed, { difficulty });
+        failures.push(...failuresOn(spec, `${difficulty} seed ${seed}`));
+        for (const style of CAUTIOUS) {
+          const r = simulateRun(buildCourse(spec), style, 180);
+          if (r.deaths === 0) failures.push(`${difficulty} seed ${seed}: the ${style.name} bot never died`);
+        }
+      }
+      expect(failures).toEqual([]);
+    }, 300_000);
+  }
 });
 
 /**
@@ -95,17 +131,7 @@ describe('extreme AI-style courses', () => {
 
   for (const [label, spec] of Object.entries(extremes)) {
     it(`${label}: beatable from the start and every checkpoint`, () => {
-      const built = buildCourse(spec);
-      const failures: string[] = [];
-      for (const style of STYLES) {
-        const r = simulateRun(built, { hop: style.hop }, 240);
-        if (!r.finished || r.deaths > 0) failures.push(`${style.name}: finished=${r.finished} deaths=${r.deaths}`);
-      }
-      for (let cp = 1; cp < built.checkpoints.length; cp++) {
-        const r = simulateRun(built, { hop: false }, 240, cp);
-        if (!r.finished || r.deaths > 0) failures.push(`from cp ${cp}: finished=${r.finished} deaths=${r.deaths}`);
-      }
-      expect(failures).toEqual([]);
+      expect(failuresOn(spec, label, 240)).toEqual([]);
     }, 120_000);
   }
 });

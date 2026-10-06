@@ -1,22 +1,21 @@
 {
   "name": "Event Horizon",
   "theme": "void",
-  "difficulty": "hard",
+  "difficulty": "expert",
   "segments": [
-    { "type": "ramp", "length": 5000, "angle": 56, "side": "both", "curve": 0 },
-    { "type": "gap", "length": 1500 },
-    { "type": "ramp", "length": 6500, "angle": 58, "side": "left", "curve": 35 },
+    { "type": "ramp", "length": 3000, "angle": 57, "side": "both", "curve": 0 },
+    { "type": "gap", "length": 1200 },
+    { "type": "ramp", "length": 2500, "angle": 59, "side": "left", "curve": 30 },
+    { "type": "ramp", "length": 2000, "angle": 60, "side": "right", "curve": -35 },
+    { "type": "drop", "height": 1500 },
+    { "type": "ramp", "length": 2500, "angle": 60, "side": "left", "curve": 40 },
     { "type": "booster", "strength": 500 },
-    { "type": "ramp", "length": 6000, "angle": 59, "side": "right", "curve": -40 },
-    { "type": "checkpoint" },
-    { "type": "ramp", "length": 4000, "angle": 60, "side": "left", "curve": 0 },
-    { "type": "drop", "height": 1800 },
-    { "type": "ramp", "length": 7000, "angle": 58, "side": "right", "curve": -30 },
-    { "type": "gap", "length": 2200 },
-    { "type": "ramp", "length": 6000, "angle": 59, "side": "both", "curve": 0 },
-    { "type": "checkpoint" },
-    { "type": "ramp", "length": 7500, "angle": 60, "side": "left", "curve": 40 },
-    { "type": "booster", "strength": 700 },
-    { "type": "ramp", "length": 9000, "angle": 59, "side": "right", "curve": -25 }
+    { "type": "ramp", "length": 2000, "angle": 59, "side": "both", "curve": 0 },
+    { "type": "gap", "length": 1800 },
+    { "type": "ramp", "length": 2500, "angle": 60, "side": "right", "curve": -45 },
+    { "type": "ramp", "length": 2000, "angle": 60, "side": "left", "curve": 35 },
+    { "type": "drop", "height": 2000 },
+    { "type": "ramp", "length": 3000, "angle": 60, "side": "right", "curve": -30 },
+    { "type": "ramp", "length": 3500, "angle": 59, "side": "left", "curve": 20 }
   ]
 }

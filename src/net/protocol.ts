@@ -4,13 +4,15 @@
  * match is dropped.
  */
 import { z } from 'zod';
+import { DIFFICULTIES } from '../course/schema.js';
 
 /** Bump when any message or presence shape changes incompatibly. */
 export const PROTOCOL_VERSION = 1;
 
 export const CourseRef = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('shipped'), id: z.string().regex(/^[a-z0-9-]{1,40}$/) }),
-  z.object({ kind: z.literal('random'), seed: z.number().int().min(0).max(2_000_000_000) }),
+  // A random course travels as its seed, plus its difficulty if the player picked one (it changes the course).
+  z.object({ kind: z.literal('random'), seed: z.number().int().min(0).max(2_000_000_000), difficulty: z.enum(DIFFICULTIES).optional() }),
   // AI-generated or shared specs (Phase 5); always re-validated with validateCourse before use.
   z.object({ kind: z.literal('spec'), spec: z.unknown(), code: z.string().regex(/^[A-HJ-NP-Z2-9]{6}$/).nullable().optional() }),
 ]);

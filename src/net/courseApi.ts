@@ -7,7 +7,7 @@
  */
 import { z } from 'zod';
 import { PROMPT_MAX_CHARS, preparePrompt } from '../course/aiSchema.js';
-import type { Course } from '../course/schema.js';
+import type { Course, Difficulty } from '../course/schema.js';
 import { normalizeShareCode } from '../course/shareCode.js';
 import { validateCourse } from '../course/validator.js';
 import { cleanText, containsBlocked, containsLink } from '../util/text.js';
@@ -58,7 +58,10 @@ export function displayPrompt(raw: string): string | null {
   return text.length > 0 && !containsLink(text) && !containsBlocked(text) ? text : null;
 }
 
-export async function requestCourse(rawPrompt: string, opts: { fetch?: typeof fetch; timeoutMs?: number } = {}): Promise<GenerateOutcome> {
+export async function requestCourse(
+  rawPrompt: string,
+  opts: { difficulty?: Difficulty; fetch?: typeof fetch; timeoutMs?: number } = {},
+): Promise<GenerateOutcome> {
   // Same check the server makes, for instant feedback (the server's is the one that counts).
   const checked = preparePrompt(rawPrompt);
   if (!checked.ok) return failure(checked.reason === 'link' || checked.reason === 'blocked' ? 'rejected' : 'bad-request', checked.message);
@@ -75,7 +78,7 @@ export async function requestCourse(rawPrompt: string, opts: { fetch?: typeof fe
     response = await doFetch('/api/generate-course', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, difficulty: opts.difficulty ?? 'medium' }),
       signal: controller.signal,
     });
   } catch {

@@ -11,7 +11,7 @@ export function resolveCourseRef(ref: CourseRef): unknown {
     case 'shipped':
       return findCourse(ref.id)?.spec ?? null;
     case 'random':
-      return randomCourse(ref.seed);
+      return randomCourse(ref.seed, ref.difficulty ? { difficulty: ref.difficulty } : {});
     case 'spec':
       return ref.spec;
   }

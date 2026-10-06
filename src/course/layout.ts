@@ -15,6 +15,7 @@ import { PLAYER_RADIUS } from '../physics/constants.js';
 import type { Course, RampSegment, RampSide, Segment } from './schema.js';
 import { TrackPath } from './path.js';
 import {
+  AIR_STRAFE_REACH,
   DIFFICULTY,
   PLAN_GRAVITY,
   START_SPEED,
@@ -129,6 +130,12 @@ const RIDGE_CLEARANCE = 80;
  * slide·tanθ — so those transitions get extra drop to cover it.
  */
 const SLIDE_TOLERANCE = 100;
+/** Finish pad left past the fastest rider's landing point. */
+const FINISH_OVERRUN = 900;
+/** A sideways transfer clears the face by this much for a rider who flies straight on. */
+const TRANSFER_MISS_MARGIN = 150;
+/** Sideways transfers never shift a ramp further than this, however long the fall. */
+const MAX_TRANSFER_SHIFT = 2500;
 /** Ramps after a pad start this far back, tucked under the pad, so there's no gap to fall through. */
 const PAD_LEAD_IN = 300;
 /** Vertical gap kept between a pad's underside and the ramp tucked beneath it. */
@@ -152,7 +159,6 @@ const MAX_RAMP_HEIGHT = 2400;
 const RIDE_FRACTION = 0.28;
 const SECTION_SPACING = 250;
 const MAX_SECTION_TURN_DEG = 2;
-export const RAMPS_PER_CHECKPOINT = 3;
 const PATH_SPACING = 150;
 const KILL_WINDOW = 1500;
 const KILL_MARGIN = 700;
@@ -179,6 +185,18 @@ interface Cursor {
   prevRamp: { side: RampSide; tanTheta: number } | null;
   speed: SpeedRange;
   floorY: number;
+}
+
+/**
+ * Which way (+1 right, −1 left) the next ramp is shifted on a course with
+ * sideways transfers: toward the side you fly off the last ramp, like the
+ * zig-zag of a surf map. A ramp on your right (hold D) has its face sloping
+ * away to the left, so you leave it leftward. Two-sided ridges alternate.
+ */
+function transferSide(prev: RampSide, count: number): number {
+  if (prev === 'right') return -1;
+  if (prev === 'left') return 1;
+  return count % 2 === 0 ? 1 : -1;
 }
 
 export function planCourse(course: Course): CourseLayout {
@@ -219,28 +237,31 @@ export function planCourse(course: Course): CourseLayout {
   /** A checkpoint is waiting for the next ramp: its gate spans the flight into it. */
   let pendingCheckpoint = false;
   let rampsSinceCheckpoint = 0;
+  /** Sideways transfers so far (two-sided ridges alternate their direction). */
+  let transfers = 0;
 
   /**
    * Size the flight from the cursor to the next piece and consume pending
    * gaps/drops. `minDrop` is how far below the exit the next piece's entry
    * must be for its highest point to stay clear of a cautious rider.
    */
-  const transition = (minDrop: number): { drop: number; front: number; fastLanding: number } => {
+  const transition = (minDrop: number, minAirTime = 0): { drop: number; front: number; fastLanding: number; airTime: number } => {
     const fromPad = cursor.from === 'pad';
     const vLo = fromPad ? WALK_SPEED : cursor.speed.lo;
     const vyLo = fromPad ? 0 : vLo * Math.sin(pitch);
+    const vHi = Math.max(cursor.speed.hi, vLo);
+    const vyHi = fromPad ? 0 : vHi * Math.sin(pitch);
     const base = Math.max(fromPad ? DROP_FROM_PAD : DROP_FROM_RAMP, minDrop);
-    const drop = base + pendingDrop + fallAfter(vLo, vyLo, pendingGap);
+    // Deep enough that even the fastest rider (who starts falling fastest) gets minAirTime.
+    const drop = Math.max(base + pendingDrop + fallAfter(vLo, vyLo, pendingGap), vyHi * minAirTime + 0.5 * PLAN_GRAVITY * minAirTime ** 2);
     // From a pad the next piece starts right at the edge (ramps tuck under it);
     // from a ramp there's a short lead so the exit and entry never overlap.
     const front = pendingGap + (fromPad ? 0 : LEAD_FROM_RAMP);
-    const vHi = Math.max(cursor.speed.hi, vLo);
-    const vyHi = fromPad ? 0 : vHi * Math.sin(pitch);
     const t = (-vyHi + Math.sqrt(vyHi * vyHi + 2 * PLAN_GRAVITY * drop)) / PLAN_GRAVITY;
     pendingGap = 0;
     pendingDrop = 0;
     cursor.speed = afterFall(cursor.speed, drop);
-    return { drop, front, fastLanding: vHi * t };
+    return { drop, front, fastLanding: vHi * t, airTime: t };
   };
 
   /** Path samples for the flight from the cursor to `to` (exclusive of both ends). */
@@ -278,10 +299,23 @@ export function planCourse(course: Course): CourseLayout {
       ? peakAboveRide + leadIn * tanPitch + PAD_THICKNESS + PAD_UNDER_CLEARANCE
       : peakAboveRide + RIDGE_CLEARANCE + slideDrop;
     const entrySpeed = cursor.speed.lo;
-    const { drop, front, fastLanding } = transition(minDrop);
+    // Hard courses: the ramp sits off to the side, so you air-strafe across to it. Far
+    // enough that a rider who doesn't misses the whole face; near enough to be a fixed
+    // fraction of what a perfect air-strafe could cover in the time spent in the air.
+    const transfer = prev !== null && diff.transferReach > 0;
+    // In t seconds a perfect air-strafe moves you AIR_STRAFE_REACH·t² sideways, but never
+    // faster than you're going: a slow rider turning out and back again covers about v·t/2.
+    const vSlow = fromPad ? WALK_SPEED : cursor.speed.lo;
+    const reachIn = (t: number): number => diff.transferReach * Math.min(AIR_STRAFE_REACH * t * t, 0.5 * vSlow * t);
+    const missFace = (seg.side === 'both' ? faceWidth : faceWidth * (1 - RIDE_FRACTION)) + TRANSFER_MISS_MARGIN;
+    const airTime = transfer
+      ? Math.max(diff.transferAirTime, Math.sqrt(missFace / (diff.transferReach * AIR_STRAFE_REACH)), missFace / (diff.transferReach * 0.5 * vSlow))
+      : 0;
+    const { drop, front, fastLanding, airTime: flight } = transition(minDrop, airTime);
     const length = Math.min(MAX_RAMP_LENGTH, Math.max(seg.length, fastLanding - front + MIN_RIDE));
+    const shift = transfer ? transferSide(prev.side, transfers++) * Math.min(MAX_TRANSFER_SHIFT, Math.max(missFace, reachIn(flight))) : 0;
 
-    const entry = cursor.pos.clone().addScaledVector(forwardOf(cursor.heading, f), front);
+    const entry = cursor.pos.clone().addScaledVector(forwardOf(cursor.heading, f), front).addScaledVector(rightOf(cursor.heading, f), shift);
     entry.y = cursor.pos.y - drop;
 
     let respawnIndex = -1;
@@ -290,7 +324,7 @@ export function planCourse(course: Course): CourseLayout {
       // from a rider leaving the last ridge to one diving onto this ramp.
       const top = cursor.pos.y + GATE.above;
       const bottom = entry.y - GATE.below;
-      const center = cursor.pos.clone().addScaledVector(forwardOf(cursor.heading, f), front / 2);
+      const center = cursor.pos.clone().addScaledVector(forwardOf(cursor.heading, f), front / 2).addScaledVector(rightOf(cursor.heading, f), shift / 2);
       center.y = (top + bottom) / 2;
       pieces.push({
         kind: 'gate',
@@ -380,17 +414,19 @@ export function planCourse(course: Course): CourseLayout {
   const placeFinish = (): void => {
     // A rider who slid down the last ramp arrives low; keep the pad's front edge under them.
     const prev = cursor.prevRamp;
-    const { drop, front } = transition(prev ? SLIDE_TOLERANCE * prev.tanTheta + RIDGE_CLEARANCE : 0);
+    const { drop, front, fastLanding } = transition(prev ? SLIDE_TOLERANCE * prev.tanTheta + RIDGE_CLEARANCE : 0);
+    // Long enough that the fastest rider comes down on it, not over the far wall.
+    const length = Math.max(FINISH_PAD.length, fastLanding - front + FINISH_OVERRUN);
     const fwd = forwardOf(cursor.heading);
     const frontEdge = cursor.pos.clone().addScaledVector(fwd, front);
     frontEdge.y = cursor.pos.y - drop;
-    const center = frontEdge.clone().addScaledVector(fwd, FINISH_PAD.length / 2);
+    const center = frontEdge.clone().addScaledVector(fwd, length / 2);
     const pieceIndex = pieces.length;
-    pieces.push({ kind: 'pad', role: 'finish', center, heading: cursor.heading, width: FINISH_PAD.width, length: FINISH_PAD.length });
+    pieces.push({ kind: 'pad', role: 'finish', center, heading: cursor.heading, width: FINISH_PAD.width, length });
 
     const floorY = frontEdge.y - PAD_THICKNESS;
     addFlightPath(frontEdge, pieceIndex, floorY);
-    for (let d = 0; d <= FINISH_PAD.length; d += PATH_SPACING) {
+    for (let d = 0; d <= length; d += PATH_SPACING) {
       path.add(frontEdge.clone().addScaledVector(fwd, d), cursor.heading, pieceIndex, floorY);
     }
   };
@@ -438,7 +474,7 @@ export function planCourse(course: Course): CourseLayout {
         pendingCheckpoint = true;
         break;
       case 'ramp':
-        if (rampsSinceCheckpoint >= RAMPS_PER_CHECKPOINT) pendingCheckpoint = true;
+        if (rampsSinceCheckpoint >= diff.rampsPerCheckpoint) pendingCheckpoint = true;
         if (pendingCheckpoint) rampsSinceCheckpoint = 0;
         placeRamp(seg);
         rampsSinceCheckpoint++;

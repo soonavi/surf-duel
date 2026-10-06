@@ -26,7 +26,7 @@ import { SurfBot } from '../course/bot.js';
 import { courseKey } from '../course/courseKey.js';
 import { forwardOf } from '../course/layout.js';
 import { resolveCourseRef } from '../course/courseRef.js';
-import type { Course, ThemeName } from '../course/schema.js';
+import type { Course, Difficulty, ThemeName } from '../course/schema.js';
 import { validateCourse } from '../course/validator.js';
 import { SHIPPED_COURSES } from '../course/courses/index.js';
 import { randomCourse } from '../course/random.js';
@@ -958,7 +958,9 @@ export class App {
 
   /** Random courses travel as their seed; AI and shared ones as the full spec (plus share code). */
   private customRef(custom: CustomCourse): CourseRef {
-    return custom.seed !== null ? { kind: 'random', seed: custom.seed } : { kind: 'spec', spec: custom.course, code: custom.code };
+    return custom.seed !== null
+      ? { kind: 'random', seed: custom.seed, difficulty: custom.course.difficulty }
+      : { kind: 'spec', spec: custom.course, code: custom.code };
   }
 
   private async createRoom(): Promise<void> {
@@ -1291,13 +1293,13 @@ export class App {
     const g = this.generator;
     this.overlay.registerScreen('generate', g.generateScreen);
     this.overlay.registerScreen('preview', g.previewScreen);
-    g.onGenerate = (prompt) => void this.generate(prompt);
+    g.onGenerate = (prompt, difficulty) => void this.generate(prompt, difficulty);
     g.onLoadCode = (code) => void this.loadSharedCourse(code);
     g.onRandom = () => this.useRandomCourse();
     g.onBack = () => this.leaveGenerator();
     g.onPreviewBack = () => this.leaveGenerator();
     g.onNewPrompt = () => this.openGenerator(this.generatorFor);
-    g.onRegenerate = () => void this.generate(this.custom?.prompt ?? g.prompt);
+    g.onRegenerate = () => void this.generate(this.custom?.prompt ?? g.prompt, this.custom?.course.difficulty ?? g.difficulty);
     g.onCopyLink = () => void this.copyCourseLink();
     g.onRace = () => this.raceCustom();
   }
@@ -1324,14 +1326,15 @@ export class App {
     void this.loadSharedCourse(code);
   }
 
-  private async generate(prompt: string): Promise<void> {
+  private async generate(prompt: string, difficulty: Difficulty): Promise<void> {
     if (this.state !== 'generate' && this.state !== 'preview') return;
     const request = ++this.generateRequest;
     this.state = 'generate';
     this.overlay.show('generate');
     this.generator.setPrompt(prompt);
+    this.generator.setDifficulty(difficulty);
     this.generator.setBusy();
-    const out = await requestCourse(prompt);
+    const out = await requestCourse(prompt, { difficulty });
     if (request !== this.generateRequest || this.state !== 'generate') return; // moved on meanwhile
     if (!out.ok) {
       const canRetry = out.reason === 'timeout' || out.reason === 'ai-failed' || out.reason === 'network';
@@ -1368,7 +1371,7 @@ export class App {
     this.generateRequest++;
     this.generator.clearStatus();
     const seed = Math.floor(Math.random() * 1_000_000_000);
-    this.useCustom({ course: randomCourse(seed), source: 'random', code: null, prompt: null, seed });
+    this.useCustom({ course: randomCourse(seed, { difficulty: this.generator.difficulty }), source: 'random', code: null, prompt: null, seed });
   }
 
   private useCustom(custom: CustomCourse): void {

@@ -7,9 +7,18 @@
  * Pure DOM; the App decides what each button does.
  */
 import { PROMPT_MAX_CHARS } from '../course/aiSchema.js';
+import { DIFFICULTIES, type Difficulty } from '../course/schema.js';
+
+/** The difficulty picker: a label and what to expect from each. */
+const DIFFICULTY_CHOICES: Readonly<Record<Difficulty, { label: string; note: string }>> = {
+  easy: { label: 'Easy', note: 'Wide, gentle ramps. Good for a first run.' },
+  medium: { label: 'Medium', note: 'Steeper ramps and bigger bends.' },
+  hard: { label: 'Hard', note: 'Short ramps, each off to the side of the last: air-strafe across or fall. Fewer checkpoints.' },
+  expert: { label: 'Expert', note: 'Narrow ramps, long sideways transfers, few checkpoints. For surf veterans.' },
+};
 
 export const EXAMPLE_PROMPTS: readonly string[] = [
-  'long sweeping ramps over lava, one huge drop, medium difficulty',
+  'long sweeping ramps over lava, one huge drop',
   'a gentle icy run for beginners',
   'short and brutal: steep ramps, big gaps',
   'neon city highway with boosters everywhere',
@@ -58,7 +67,7 @@ function button(label: string, className: string, onClick: () => void): HTMLButt
 }
 
 export class GeneratorUi {
-  onGenerate: ((prompt: string) => void) | null = null;
+  onGenerate: ((prompt: string, difficulty: Difficulty) => void) | null = null;
   onLoadCode: ((code: string) => void) | null = null;
   onRandom: (() => void) | null = null;
   onBack: (() => void) | null = null;
@@ -81,6 +90,9 @@ export class GeneratorUi {
   private readonly examples: HTMLElement;
   private readonly backBtn: HTMLButtonElement;
   private readonly preview: HTMLElement;
+  private readonly difficultyChips: HTMLButtonElement[] = [];
+  private readonly difficultyNote: HTMLElement;
+  private difficultyValue: Difficulty = 'medium';
   private loadingTimer = 0;
 
   constructor() {
@@ -115,7 +127,25 @@ export class GeneratorUi {
     });
     this.generateBtn = el('button', 'Generate', 'btn btn--primary');
     this.generateBtn.type = 'submit';
-    form.append(label, this.promptBox, this.counter);
+
+    // The difficulty is the player's pick, not the AI's guess from the description.
+    const difficulty = el('div', undefined, 'gen__difficulty');
+    const difficultyLabel = el('span', 'Difficulty', 'gen__label');
+    difficultyLabel.id = 'gen-difficulty';
+    const chips = el('div', undefined, 'settings__choices');
+    chips.setAttribute('role', 'radiogroup');
+    chips.setAttribute('aria-labelledby', 'gen-difficulty');
+    for (const d of DIFFICULTIES) {
+      const chip = button(DIFFICULTY_CHOICES[d].label, 'chip', () => this.setDifficulty(d));
+      chip.setAttribute('role', 'radio');
+      chip.dataset.difficulty = d;
+      this.difficultyChips.push(chip);
+      chips.append(chip);
+    }
+    this.difficultyNote = el('p', '', 'hint gen__difficulty-note');
+    difficulty.append(difficultyLabel, chips, this.difficultyNote);
+
+    form.append(label, this.promptBox, this.counter, difficulty);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const prompt = this.promptBox.value.trim();
@@ -123,7 +153,7 @@ export class GeneratorUi {
         this.promptBox.value = this.promptBox.placeholder;
         this.updateCounter();
       }
-      this.onGenerate?.(this.promptBox.value.trim());
+      this.onGenerate?.(this.promptBox.value.trim(), this.difficultyValue);
     });
 
     this.examples = el('div', undefined, 'gen__examples');
@@ -183,10 +213,21 @@ export class GeneratorUi {
     this.preview.setAttribute('role', 'dialog');
     this.preview.setAttribute('aria-labelledby', 'preview-heading');
     this.previewScreen.append(this.preview);
+    this.setDifficulty(this.difficultyValue);
   }
 
   get prompt(): string {
     return this.promptBox.value.trim();
+  }
+
+  get difficulty(): Difficulty {
+    return this.difficultyValue;
+  }
+
+  setDifficulty(difficulty: Difficulty): void {
+    this.difficultyValue = difficulty;
+    for (const chip of this.difficultyChips) chip.setAttribute('aria-checked', String(chip.dataset.difficulty === difficulty));
+    this.difficultyNote.textContent = DIFFICULTY_CHOICES[difficulty].note;
   }
 
   setPrompt(text: string): void {
@@ -231,7 +272,7 @@ export class GeneratorUi {
     this.statusText.textContent = message;
     const random = button('Race a random course instead', 'btn btn--primary btn--small', () => this.onRandom?.());
     const row: HTMLElement[] = [random];
-    if (offerRetry) row.push(button('Try again', 'btn btn--ghost btn--small', () => this.onGenerate?.(this.prompt)));
+    if (offerRetry) row.push(button('Try again', 'btn btn--ghost btn--small', () => this.onGenerate?.(this.prompt, this.difficultyValue)));
     this.statusActions.replaceChildren(...row);
     random.focus({ preventScroll: true });
   }
@@ -272,6 +313,7 @@ export class GeneratorUi {
     this.generateBtn.disabled = busy;
     this.codeInput.disabled = busy;
     for (const chip of this.examples.querySelectorAll<HTMLButtonElement>('button')) chip.disabled = busy;
+    for (const chip of this.difficultyChips) chip.disabled = busy;
   }
 
   private updateCounter(): void {

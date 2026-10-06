@@ -15,8 +15,8 @@ export const SHIPPED_COURSES: readonly ShippedCourse[] = [
   { id: 'tutorial', spec: tutorial, blurb: 'Learn to surf in two minutes, with an on-screen coach.' },
   { id: 'easy-cruise', spec: easyCruise, blurb: 'Wide, gentle ramps through the dunes.' },
   { id: 'frostbite-flow', spec: frostbiteFlow, blurb: 'Sweeping S-bends down a frozen canyon.' },
-  { id: 'speed-demon', spec: speedDemon, blurb: 'Steep ramps, huge drops, no mercy.' },
-  { id: 'event-horizon', spec: eventHorizon, blurb: 'Big gaps and two-sided ridges over the void.' },
+  { id: 'speed-demon', spec: speedDemon, blurb: 'Zig-zag transfers over lava: air-strafe across or burn.' },
+  { id: 'event-horizon', spec: eventHorizon, blurb: 'Narrow ridges, long falls, few checkpoints. Expert only.' },
 ];
 
 export function findCourse(id: string): ShippedCourse | undefined {

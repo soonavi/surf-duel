@@ -123,7 +123,7 @@ Pick a course and press **Play**: a 3-2-1 countdown (you can look around but not
 Ghosts are recorded at 20 Hz and stored compactly (constant-velocity prediction + zigzag varints, ~5 KB a minute). You race your personal best (gold, **PB**) and a rival (mint):
 
 - **DEV** — a human-recorded dev ghost from `src/course/ghosts/<course-id>.json`, or
-- **BOT** — if there isn't one (or it was recorded on an older layout of the course), the cautious bot rides the course live and becomes the rival, so a solo player always has someone to race.
+- **BOT** — if there isn't one (or it was recorded on an older layout of the course), the bot rides the course live and becomes the rival, so a solo player always has someone to race. It air-strafes across the transfers on Hard and Expert.
 
 Records and ghosts are keyed by a fingerprint of the course spec, the layout version and the default physics (`courseKey.ts`), so a change to the course invalidates them instead of replaying ghosts through moved walls. Runs with autopilot, noclip or modified physics aren't saved.
 
@@ -135,7 +135,7 @@ Records and ghosts are keyed by a fingerprint of the course spec, the layout ver
 
 How it works:
 
-- `POST /api/generate-course` (`api/generate-course.ts` → `server/generateCourse.ts`) checks the prompt (≤ 200 chars), then claims a slot from the database before spending anything, then calls OpenAI with a hard 15 s timeout.
+- `POST /api/generate-course` (`api/generate-course.ts` → `server/generateCourse.ts`) checks the prompt (≤ 200 chars) and the difficulty the player picked (Easy, Medium, Hard or Expert), then claims a slot from the database before spending anything, then calls OpenAI with a hard 15 s timeout. The model is told the difficulty, and the saved course always carries the player's pick, whatever the model wrote.
 - **Malicious prompts.** Prompts are saved with shared courses and shown to other players, and they go to an AI, so they pass several layers:
   1. `preparePrompt` (`src/course/aiSchema.ts`, run in the browser for instant feedback and again on the server): invisible and disguised text is stripped (zero-width and direction-override characters, hidden "tag" characters, look-alike letters, stacked accents), characters a description never needs (angle brackets, braces, square brackets, backticks, backslashes) are dropped, and links, emails, @handles and blocked words (`src/util/text.ts`, which sees through leetspeak, spacing and repeated letters) are turned away before anything is spent.
   2. OpenAI's **moderation check** (`server/openaiModerator.ts`; free, so it doesn't touch the prepaid credit) screens the prompt before the course model sees it. Hate, harassment, sexual, self-harm, graphic-violence and illicit descriptions are refused; plain cartoon action ("shoot zombies") is allowed. If the check can't run, the server refuses (fails closed).
@@ -217,11 +217,29 @@ A course is a small JSON spec (`src/course/schema.ts`): a name, a theme (`neon`,
 Checkpoints are fly-through arches over the flight into the next ramp. Respawning at one (R, or falling off) puts you on that ramp's face already moving at the speed a cautious rider would have there, so every checkpoint is a fair restart.
 
 - `validator.ts` repairs anything (bad numbers, unknown types, two drops in a row, gaps too long for the speed riders will have, courses too long/short or looping back on themselves) and never throws.
-- `layout.ts` walks a track cursor along the *riding line* and sizes every transition from a speed model with a cautious and a fast rider: the cautious one must clear the next ramp's ridge, the fast one must still land on it (ramps are lengthened and kept straight through the landing zone). A checkpoint gate is added after every three ramps without one.
+- `layout.ts` walks a track cursor along the *riding line* and sizes every transition from a speed model with a cautious and a fast rider: the cautious one must clear the next ramp's ridge, the fast one must still land on it (ramps and the finish pad are lengthened, and ramps kept straight through the landing zone). A checkpoint gate is added every three ramps without one (four on Hard, five on Expert).
 - `builder.ts` turns the layout into merged geometry (a handful of draw calls), trigger volumes and a track path (progress, kill floor).
-- `playability.test.ts` runs a bot through every shipped course and 40 random ones in the real physics — riding cautiously and aggressively, and restarting from every checkpoint; every run must finish without dying.
+- `playability.test.ts` runs bots through every shipped course and 40 random ones in the real physics, from the start and from every checkpoint; every run must finish without dying.
 
-Shipped courses live in `src/course/courses/*.json`: **Tutorial** (neon, easy, with the coach), **Easy Cruise** (desert, easy), **Frostbite Flow** (ice, medium: sweeping S-bends), **Speed Demon** (lava, hard: steep, huge drops) and **Event Horizon** (void, hard: big gaps and two-sided ridges). Ramp colour tells you which key to hold: each theme uses one colour for ramps on your right (hold D) and another for ramps on your left (hold A).
+**Difficulty.** Easy and Medium are guaranteed for a cautious bot that only ever holds into the ramp. Hard and Expert are built to need real surf skill, the way high-tier surf maps do. Their ramps are shorter and narrower, there are fewer checkpoints, and every ramp sits **off to the side** of the last one, so you have to air-strafe across.
+
+The sideways jump follows the physics:
+- **Strafing without turning** reaches only 30 u/s sideways.
+- **A real air-strafe** (turning with the mouse while holding A or D) accelerates you sideways at 3,000 u/s², so a perfect one covers about 750·t² in t seconds of flight and still lands parallel.
+- **Each transfer** gets enough fall to be possible. Its shift is a fixed fraction of that best case: 45% on Hard, 60% on Expert. It's never less than the distance that makes a straight flight miss the ramp.
+- **The tests enforce both sides.** A skilled bot that air-strafes like a player must finish every Hard and Expert course. The cautious bot must die on every one.
+
+Shipped courses live in `src/course/courses/*.json`:
+
+| Course | Theme | Difficulty | Character |
+|---|---|---|---|
+| **Tutorial** | neon | easy | with the coach |
+| **Easy Cruise** | desert | easy | |
+| **Frostbite Flow** | ice | medium | sweeping S-bends |
+| **Speed Demon** | lava | hard | zig-zag transfers, drops and boosters |
+| **Event Horizon** | void | expert | narrow two-sided ridges, long falls, few checkpoints |
+
+Ramp colour tells you which key to hold: each theme uses one colour for ramps on your right (hold D) and another for ramps on your left (hold A).
 
 ### Movement model
 

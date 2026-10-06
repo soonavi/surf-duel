@@ -1,15 +1,38 @@
 /**
  * A simple surf bot: look down the track, hold the key that points into the
  * ramp whenever you've slid below the riding line, let go when you're above
- * it. Used to prove courses are beatable (playability tests) and, later, to
- * drive the menu's attract-mode camera.
+ * it. Used to prove courses are beatable (playability tests), to record the
+ * BOT ghost, and to drive the cover shot.
+ *
+ * A skilled bot (`airStrafe`) also steers in the air like a player: it holds
+ * A or D while turning to follow its velocity, which swings the velocity
+ * round toward the riding line ahead. That's what hard courses' sideways
+ * transfers take.
  */
+import { Vector3 } from 'three';
 import type { BuiltCourse } from './builder.js';
+import { needsAirStrafe } from './tuning.js';
 import type { MoveCmd, PlayerState } from '../physics/player.js';
 
 export interface BotStyle {
   /** Bunny-hop across pads (keeps speed) instead of walking (cautious). */
   hop: boolean;
+  /**
+   * Air-strafe toward the riding line between ramps (a skilled rider).
+   * Defaults to whether the course needs it (hard and expert courses).
+   */
+  airStrafe?: boolean;
+}
+
+/** Air-strafing aims at the riding line this far ahead: speed × time, at least the minimum. */
+const AIR_LOOKAHEAD_TIME = 0.4;
+const AIR_LOOKAHEAD_MIN = 400;
+/** Close enough in heading: stop turning (rad). */
+const AIR_DEADBAND = 0.01;
+const target = new Vector3();
+
+function wrapPi(a: number): number {
+  return Math.atan2(Math.sin(a), Math.cos(a));
 }
 
 /** Slack around the riding line before the bot corrects. */
@@ -21,11 +44,14 @@ const HOP_MIN_SPEED = 400;
 
 export class SurfBot {
   private hint = 0;
+  private readonly airStrafes: boolean;
 
   constructor(
     private readonly built: BuiltCourse,
     private readonly style: BotStyle = { hop: false },
-  ) {}
+  ) {
+    this.airStrafes = style.airStrafe ?? needsAirStrafe(built.course.difficulty);
+  }
 
   /** Call after teleporting the player (respawn). */
   resync(state: PlayerState): void {
@@ -53,6 +79,7 @@ export class SurfBot {
       return { forward: 1, side: 0, jump: this.style.hop && fast, yaw };
     }
 
+    if (this.airStrafes && !state.surfing) return this.airStrafe(state, hit.s);
     if (piece?.kind !== 'ramp') return { forward: 0, side: 0, jump: false, yaw };
 
     // Surf whichever face we're actually on — like a person who lands just
@@ -64,6 +91,21 @@ export class SurfBot {
     const outward = Math.abs(fromRidge) - targetRide;
     const side = outward > -RIDE_TOLERANCE ? ridgeDir : 0;
     return { forward: 0, side, jump: false, yaw };
+  }
+
+  /**
+   * In the air: swing the velocity toward the riding line ahead. Looking
+   * along the velocity and holding A (or D) pushes square to it, so it turns
+   * left (right) without braking: up to ~30 u/s of sideways velocity a tick.
+   */
+  private airStrafe(state: PlayerState, s: number): MoveCmd {
+    const speed = Math.hypot(state.vel.x, state.vel.z);
+    this.built.path.pointAt(s + Math.max(AIR_LOOKAHEAD_MIN, speed * AIR_LOOKAHEAD_TIME), target);
+    const want = Math.atan2(-(target.x - state.pos.x), -(target.z - state.pos.z));
+    const have = speed > 1 ? Math.atan2(-state.vel.x, -state.vel.z) : want;
+    const turn = wrapPi(want - have);
+    const side = Math.abs(turn) < AIR_DEADBAND ? 0 : turn > 0 ? -1 : 1;
+    return { forward: 0, side, jump: false, yaw: have };
   }
 
   /** Grounded and not on any pad: the only floor-like spot on a ramp is its ridge. */

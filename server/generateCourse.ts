@@ -24,7 +24,7 @@
 import { z } from 'zod';
 import { preparePrompt } from '../src/course/aiSchema.js';
 import { generateShareCode } from '../src/course/shareCode.js';
-import type { Course } from '../src/course/schema.js';
+import { DIFFICULTIES, type Course, type Difficulty } from '../src/course/schema.js';
 import { DEFAULT_NAME, validateCourse } from '../src/course/validator.js';
 import type { Moderator } from './openaiModerator.js';
 
@@ -73,8 +73,8 @@ export interface CourseStore {
   insertCourse(row: CourseRow): Promise<'ok' | 'duplicate'>;
 }
 
-/** Asks the AI for a course; returns its raw (unvalidated) JSON. Must stop when `signal` aborts. */
-export type CourseDesigner = (prompt: string, signal: AbortSignal) => Promise<unknown>;
+/** Asks the AI for a course at a difficulty; returns its raw (unvalidated) JSON. Must stop when `signal` aborts. */
+export type CourseDesigner = (prompt: string, difficulty: Difficulty, signal: AbortSignal) => Promise<unknown>;
 
 export interface GenerateDeps {
   design: CourseDesigner;
@@ -96,7 +96,8 @@ export type GenerateResult =
   | { status: 200; body: { ok: true; code: string | null; course: Course; prompt: string; repairs: number } }
   | { status: FailureStatus; body: { ok: false; reason: FailureReason; error: string } };
 
-const Request = z.object({ prompt: z.string() });
+/** The player picks the difficulty; clients from before the picker send none and get medium. */
+const Request = z.object({ prompt: z.string(), difficulty: z.enum(DIFFICULTIES).default('medium') });
 const CODE_ATTEMPTS = 5;
 
 const LIMITS: ClaimLimits = {
@@ -148,6 +149,7 @@ export async function handleGenerate(body: unknown, ip: string, deps: GenerateDe
     return checked.reason === 'link' || checked.reason === 'blocked' ? fail(422, 'rejected', checked.message) : fail(400, 'bad-request', checked.message);
   }
   const prompt = checked.prompt;
+  const difficulty = parsed.data.difficulty;
 
   // Claim a slot before spending anything. If the caps can't be checked, don't spend at all.
   if (!deps.store) return fail(503, 'unavailable', UNAVAILABLE);
@@ -178,7 +180,7 @@ export async function handleGenerate(body: unknown, ip: string, deps: GenerateDe
   }, deps.timeoutMs ?? GENERATE_TIMEOUT_MS);
   let output: unknown;
   try {
-    output = await deps.design(prompt, controller.signal);
+    output = await deps.design(prompt, difficulty, controller.signal);
   } catch {
     return timedOut
       ? fail(504, 'timeout', 'The course designer took too long.')
@@ -191,7 +193,8 @@ export async function handleGenerate(body: unknown, ip: string, deps: GenerateDe
     return fail(502, 'ai-failed', "The course designer couldn't make that one.");
   }
 
-  const validated = validateCourse(output);
+  // The player's pick, whatever the model wrote: the layout's sideways transfers and checkpoint spacing come from it.
+  const validated = validateCourse({ ...output, difficulty });
   const repairs = validated.repairs;
   let course = validated.course;
 

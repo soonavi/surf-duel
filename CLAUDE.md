@@ -29,7 +29,17 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - A cautious rider (speed model `lo`) must arrive above the next ramp's **ridge** + clearance; alternating-side transitions add `SLIDE_TOLERANCE·(tanθprev + tanθnext)` because sliding down one face moves you toward the next ridge.
 - Ramps after pads tuck under the pad (no gap to fall through). Ramps stay straight through the fast rider's landing zone, then curve.
 - Checkpoints are fly-through gates (user decision, Oct 4 2026 — no landing pads). Respawns put you on the next ramp's face at the cautious speed `lo`; tests restart from every checkpoint.
-- Ramp angles are capped at 60° (user: hard-mode 64–70° ramps were "much too steep"); difficulty comes from speed, curves, drops and narrower faces instead.
+- Ramp angles are capped at 60° (user: hard-mode 64–70° ramps were "much too steep"); difficulty comes from speed, curves, drops, narrower faces and sideways transfers instead.
+- **Four difficulties: easy, medium, hard, expert** (user, Oct 6 2026: the old hard maps were easy, and they must need real skill).
+  - **Easy and medium** are guaranteed for the *cautious* bot, which never air-strafes.
+  - **Hard and expert** have sideways transfers: `transferReach` and `transferAirTime` in `tuning.ts`.
+    - Each ramp shifts toward the side you fly off.
+    - The shift is a fraction of what a perfect air-strafe covers in the flight: `AIR_STRAFE_REACH·t²`, capped by `v·t/2` for slow riders.
+    - It's never less than what makes a straight flight miss the face. Drops deepen to give the air time.
+  - `playability.test.ts` requires two things on every hard and expert course: the *skilled* bot (`BotStyle.airStrafe`) finishes from the start and every checkpoint, **and** the cautious bot dies.
+  - `SurfBot` air-strafes by default on hard and expert, for ghosts, the cover shot and runCheck.
+  - Checkpoint spacing comes from the difficulty: 3, 3, 4, 5 ramps.
+- The finish pad is lengthened to the fastest rider's landing (fast riders used to fly clean over it).
 - Ramp colour is semantic: `rampRight` = ramp on your right (hold D), `rampLeft` = hold A.
 - The bot (`course/bot.ts`) faces the *local* track heading (looking ahead on curves makes its strafe brake) and surfs whichever face it's actually on.
 
@@ -53,6 +63,7 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - **Money (user, Oct 5 2026): "no chance of me being billed any more."** OpenAI runs on $5 of prepaid credit with auto-recharge off, model `gpt-5.4-nano`. `BUDGET` in `server/generateCourse.ts` (150/day, 1,800 lifetime, 1,500 output tokens per call) keeps the worst case under $5; the database enforces it atomically (`claim_generation`) and the server fails closed if it can't claim. Never add a path that calls OpenAI without a successful claim, never add retries, and re-check `BUDGET` (there's a test with the prices) before changing the model.
 - **Malicious prompts (user, Oct 5 2026: "ensure that nothing malicious can be injected").** Layers, all tested: `preparePrompt` (clean, drop markup chars, refuse links/blocked words: before the claim), the free OpenAI moderation check (`server/openaiModerator.ts`, after the claim so it's rate-limited; plain `violence` is allowed, everything else flagged refuses; fails closed), the prompt sent as a JSON string, Structured Outputs, `validateCourse`, and the course name checked by the validator (`cleanName`) and moderated. Any new player-visible text (leaderboard names!) goes through `cleanName`/`sanitizeName`. Render user text with `textContent` only.
 - Course share codes: 6 chars `[A-HJ-NP-Z2-9]` (`course/shareCode.ts`, enforced by a DB check). Room codes stay 4 letters.
+- **The player picks the difficulty** of an AI course (generator chips). The request carries `difficulty` (old clients default to medium). The model is told it in the user message, and the server overwrites the reply's difficulty with it before validating. A random fallback course uses the picked difficulty too, and travels to rooms as `{ kind: 'random', seed, difficulty }`.
 - Test rows TESTQA and DWLU69 were deleted from `courses` on Oct 6 2026 (user-approved) before launch.
 
 ## Audio (Phase 7)
@@ -65,7 +76,7 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Assist mode (`game/assist.ts`) must never raise `maxVelocity`: the leaderboard's `runCheck` assumes the default cap for every run.
 
 ## Flyover camera
-- `render/flyover.ts` follows a smoothed line (height: running max then blur; horizontal: blur), never the raw riding line: the raw line drops near-vertically and zigzags (user, Oct 5 2026: transitions must be smooth). Keep `flyover.test.ts` green: it bounds glide angle, acceleration, turn rate and pitch rate on every course. The loop seam fades through dark (`flyoverFade`, the `.scene-fade` div).
+- `render/flyover.ts` follows a smoothed line (height: running max then blur; horizontal: blur), never the raw riding line: the raw line drops near-vertically and zigzags (user, Oct 5 2026: transitions must be smooth). Keep `flyover.test.ts` green: it bounds glide angle, acceleration, turn rate and pitch rate on every course. The glide bound is 0.6, or 1.7× the course's own average descent on steeper (hard) courses. The loop seam fades through dark (`flyoverFade`, the `.scene-fade` div).
 - Theme `rampRight.ui` / `rampLeft.ui` are the ramp colours for UI (A/D keys, coach); `line` can be dark on light-surfaced themes.
 
 ## Leaderboards (Phase 6)

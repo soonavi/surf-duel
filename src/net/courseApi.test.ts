@@ -102,7 +102,17 @@ describe('requestCourse: prompt checks in the browser', () => {
       return new Response(JSON.stringify({ ok: false, reason: 'unavailable', error: 'x' }), { status: 503 });
     }) as unknown as typeof fetch;
     await requestCourse('  icy \u202Erun\u202C <b>', { fetch: fetchSpy });
-    expect(sent).toEqual({ prompt: 'icy run b' });
+    expect(sent).toEqual({ prompt: 'icy run b', difficulty: 'medium' });
+  });
+
+  it('sends the difficulty the player picked', async () => {
+    let sent: unknown = null;
+    const fetchSpy = (async (_url: string, init: RequestInit) => {
+      sent = JSON.parse(String(init.body));
+      return new Response(JSON.stringify({ ok: false, reason: 'unavailable', error: 'x' }), { status: 503 });
+    }) as unknown as typeof fetch;
+    await requestCourse('icy', { fetch: fetchSpy, difficulty: 'expert' });
+    expect(sent).toEqual({ prompt: 'icy', difficulty: 'expert' });
   });
 
   it("understands the server's 'rejected' reason", async () => {

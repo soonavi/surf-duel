@@ -53,11 +53,13 @@ function setup(design: GenerateDeps['design'] = async () => GOOD, moderate: Gene
   let t = 1_000_000;
   const store = new FakeStore(() => t);
   const calls: string[] = [];
+  const difficulties: string[] = [];
   const moderated: string[] = [];
   const deps: GenerateDeps = {
-    design: async (prompt, signal) => {
+    design: async (prompt, difficulty, signal) => {
       calls.push(prompt);
-      return design(prompt, signal);
+      difficulties.push(difficulty);
+      return design(prompt, difficulty, signal);
     },
     moderate: async (texts, signal) => {
       moderated.push(...texts);
@@ -67,8 +69,33 @@ function setup(design: GenerateDeps['design'] = async () => GOOD, moderate: Gene
     hashIp: (ip) => `h:${ip}`,
     random: createRng(1),
   };
-  return { deps, store, calls, moderated, advance: (ms: number) => (t += ms) };
+  return { deps, store, calls, difficulties, moderated, advance: (ms: number) => (t += ms) };
 }
+
+describe('handleGenerate: difficulty', () => {
+  it('designs at the difficulty the player picked, whatever the model answers', async () => {
+    const { deps, store, difficulties } = setup(async () => ({ ...GOOD, difficulty: 'easy' }));
+    const res = await handleGenerate({ prompt: 'lava', difficulty: 'expert' }, '1.2.3.4', deps);
+    expect(difficulties).toEqual(['expert']);
+    expect(res.body).toMatchObject({ ok: true, course: { difficulty: 'expert' } });
+    expect(store.rows[0]!.spec.difficulty).toBe('expert');
+  });
+
+  it('uses medium when an older client sends none', async () => {
+    const { deps, difficulties } = setup(async () => ({ ...GOOD, difficulty: 'hard' }));
+    const res = await handleGenerate({ prompt: 'lava' }, '1.2.3.4', deps);
+    expect(difficulties).toEqual(['medium']);
+    expect(res.body).toMatchObject({ ok: true, course: { difficulty: 'medium' } });
+  });
+
+  it("refuses a difficulty it doesn't know, before anything is spent", async () => {
+    const { deps, calls, store } = setup();
+    const res = await handleGenerate({ prompt: 'lava', difficulty: 'nightmare' }, '1.2.3.4', deps);
+    expect(res.status).toBe(400);
+    expect(calls).toEqual([]);
+    expect(store.lifetimeTotal).toBe(0);
+  });
+});
 
 describe('handleGenerate: the request', () => {
   it('needs a prompt', async () => {
@@ -222,7 +249,7 @@ describe('handleGenerate: failures', () => {
   it('gives up after the timeout and cancels the AI call', async () => {
     let aborted = false;
     const { deps } = setup(
-      (_prompt, signal) =>
+      (_prompt, _difficulty, signal) =>
         new Promise((_resolve, reject) => {
           signal.addEventListener('abort', () => {
             aborted = true;
@@ -295,7 +322,7 @@ describe('handleGenerate: spending caps (all players together)', () => {
 
   it('really does send fewer input tokens than the cost math assumes', () => {
     // Under 3 characters per token is a pessimistic count for English text and JSON.
-    const chars = COURSE_SYSTEM_PROMPT.length + JSON.stringify(COURSE_JSON_SCHEMA).length + courseUserMessage('x'.repeat(PROMPT_MAX_CHARS)).length;
+    const chars = COURSE_SYSTEM_PROMPT.length + JSON.stringify(COURSE_JSON_SCHEMA).length + courseUserMessage('x'.repeat(PROMPT_MAX_CHARS), 'expert').length;
     expect(chars / 3).toBeLessThan(BUDGET.maxInputTokens);
   });
 

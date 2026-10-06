@@ -34,9 +34,13 @@ export const FADE_SECONDS = 0.45;
 
 /** Spacing of the smoothed line's points (units of path distance). */
 const STEP = 50;
-/** Blur widths (one standard deviation, units of path distance). */
-const SIGMA_XZ = 1600;
-const SIGMA_Y = 2600;
+/**
+ * Blur widths (one standard deviation, units of path distance). Wide enough
+ * that a hard course's zig-zag transfers and deep drops become one steady
+ * dive down the middle, rather than a camera swinging from ramp to ramp.
+ */
+const SIGMA_XZ = 2400;
+const SIGMA_Y = 3800;
 /** The height envelope's reach each side: the blur's full reach, so the camera can't sink below the line. */
 const ENVELOPE = 3 * SIGMA_Y;
 
