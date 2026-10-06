@@ -37,7 +37,12 @@ The user then reported:
 
 Along the way, a real defect was fixed: two game windows in the *same* browser didn't follow each other's settings. They now sync through the `storage` event (`settingsFromOtherWindow`, tested, `427e2e7`).
 
-The user hasn't yet retested the audio with the pane closed. If something is still wrong, ask which browser they use, live or local, and the click sequence. Only Chromium has been tested.
+Then, still Oct 6:
+- The effects were "a little too loud": `SFX_TRIM` 0.7 → 0.5 (`725131f`).
+- The user asked to remove the wind that rose with speed (`d806588`). The wind is probably what they heard as "my song is much too loud and the slider doesn't control it", since it sat on the effects bus.
+- **Firefox 157 (the user's default browser) was checked through the real file input on the live site.** The song goes through the volume stage (gain 0.09 at 60%, 0.01 at 20%, 0.25 at 100%), the same as in Chromium.
+
+If the song is still too loud now, lower `FILE_TRIM` in `levels.ts`.
 
 ## Phase status
 
@@ -77,6 +82,7 @@ The user hasn't yet retested the audio with the pane closed. If something is sti
 
 - **Close the browser-pane tab when you finish testing anything with sound** (`tabs_close`). The pane keeps playing audio while hidden (`document.hidden` stays false), and the user hears it mixed into their own playtest. That cost a whole round of chasing audio bugs that weren't there.
 - **Don't pipe heredocs into `python` or run a bare `cat >` in the Bash tool here.** Both hung for the full two-minute timeout and had to be killed. Edit files with the Write and Edit tools. For long Python patch scripts, Write them to the scratchpad and run `python path/to/script.py`.
+- **To test in Firefox, start a hidden one you control.** Use `firefox.exe --headless --no-remote --profile <scratch dir> --remote-debugging-port 9333`, with `user.js` prefs `media.autoplay.default` 0 and `media.autoplay.blocking_policy` 0. Drive it over WebDriver BiDi from a Node script (Node 24 has `WebSocket` built in; `script.evaluate` takes `userActivation: true`). Kill the process afterwards. Keep test sounds inaudible (e.g. a −63 dBFS tone) and start with the music off: its audio reaches the user's speakers.
 - **Wrap long commands with `timeout N ... < /dev/null`** (e.g. `timeout 500 npm test < /dev/null`), so nothing waits on stdin.
 - **Commit messages go through a Bash heredoc into `git commit -F -`.** PowerShell adds a BOM and mangles quotes. End the message with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **The dev server is the `dev` entry in `.claude/launch.json`** (port 5173). After editing files outside the Edit tool, `touch` them: Vite sometimes serves a stale module.
