@@ -33,14 +33,11 @@ The user then reported:
 - the song routed through the volume stage, with gain 0.25 at 100% and 0.01 at 20%;
 - "Off" paused the file and stopped the scheduler.
 
-The one cause that explains all three symptoms is the game open in **two windows**, perhaps from the two-player test. Each window has its own AudioEngine, and settings only applied in the window where they were changed. Fixed: settings now sync across windows via the `storage` event (`settingsFromOtherWindow`, tested), and this was verified with a second instance in a frame.
+**The real cause was the agent's own browser pane.** The game the agent had opened there for testing kept playing the generated music, hidden, while the user tested in their own browser. So the user heard two copies at once, and "Off" or the slider in their browser couldn't touch the pane's copy: it has its own localStorage. The user spotted it ("claude is playing the music from the site in the app"); the tab was closed. See the first gotcha below.
 
-**Still unconfirmed:** whether the user really had two windows open. If they report the problem again with **one** window, ask:
-- which browser (Firefox, Edge, Chrome);
-- live site or local;
-- the exact click sequence.
+Along the way, a real defect was fixed: two game windows in the *same* browser didn't follow each other's settings. They now sync through the `storage` event (`settingsFromOtherWindow`, tested, `427e2e7`).
 
-Only Chromium has been tested.
+The user hasn't yet retested the audio with the pane closed. If something is still wrong, ask which browser they use, live or local, and the click sequence. Only Chromium has been tested.
 
 ## Phase status
 
@@ -78,6 +75,7 @@ Only Chromium has been tested.
 
 ## Working on this machine: things that bit us
 
+- **Close the browser-pane tab when you finish testing anything with sound** (`tabs_close`). The pane keeps playing audio while hidden (`document.hidden` stays false), and the user hears it mixed into their own playtest. That cost a whole round of chasing audio bugs that weren't there.
 - **Don't pipe heredocs into `python` or run a bare `cat >` in the Bash tool here.** Both hung for the full two-minute timeout and had to be killed. Edit files with the Write and Edit tools. For long Python patch scripts, Write them to the scratchpad and run `python path/to/script.py`.
 - **Wrap long commands with `timeout N ... < /dev/null`** (e.g. `timeout 500 npm test < /dev/null`), so nothing waits on stdin.
 - **Commit messages go through a Bash heredoc into `git commit -F -`.** PowerShell adds a BOM and mangles quotes. End the message with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
