@@ -40,6 +40,18 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
   - `SurfBot` air-strafes by default on hard and expert, for ghosts, the cover shot and runCheck.
   - Checkpoint spacing comes from the difficulty: 3, 3, 4, 5 ramps.
 - The finish pad is lengthened to the fastest rider's landing (fast riders used to fly clean over it).
+- **Not everything goes downhill.** User, Oct 6 2026: Expert "isn't very hard because of how fast you can get, and because it is downhill".
+  - Each ramp may carry its own `pitch`: degrees downhill along its length, 0 level, negative climbs. Without one it takes the difficulty's default; Expert's default is 6°.
+  - `limitBySpeed` in the validator gives a ramp its usual slope back when a cautious rider would only crawl along it (below `MIN_CRUISE_SPEED`).
+  - It also eases climbs so the cautious rider still has `MIN_CLIMB_SPEED` at the top. Respawns ride at that cautious speed.
+- **New pieces, hand-made only for now.** The user chose "hand-made first", so the AI isn't offered walls or spirals yet.
+  - **`wall`**: stands across the next ramp, past the fastest rider's landing plus `WALL_SETTLE`. Its window spans `windowSlack` either side of the riding line (420, 340, 260, 200 by difficulty). Off the line, you hit it.
+  - **`spiral`**: one full turn of ramps round a tower, radius `SPIRAL_RADIUS` (5600, kept wide for the flyover camera).
+    - Its ramps are nearly level (`SPIRAL_PITCH_DEG`), and you hold toward the tower.
+    - Its gaps shrink to what its slowest rider can cross.
+    - It drops at least a ramp's height plus `SPIRAL_CLEARANCE` before passing under its own start.
+  - The tower and the walls are solid; they go in the collision mesh, under `visuals.obstacles`.
+- A spiral passes over itself, so a respawn finds its place with `TrackPath.relocate`, which uses true distance. The HUD's checkpoint marks do the same. Never search horizontally from the start: that can match the wrong level of a spiral.
 - Ramp colour is semantic: `rampRight` = ramp on your right (hold D), `rampLeft` = hold A.
 - The bot (`course/bot.ts`) faces the *local* track heading (looking ahead on curves makes its strafe brake) and surfs whichever face it's actually on.
 
@@ -63,6 +75,7 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - **Money (user, Oct 5 2026): "no chance of me being billed any more."** OpenAI runs on $5 of prepaid credit with auto-recharge off, model `gpt-5.4-nano`. `BUDGET` in `server/generateCourse.ts` (150/day, 1,800 lifetime, 1,500 output tokens per call) keeps the worst case under $5; the database enforces it atomically (`claim_generation`) and the server fails closed if it can't claim. Never add a path that calls OpenAI without a successful claim, never add retries, and re-check `BUDGET` (there's a test with the prices) before changing the model.
 - **Malicious prompts (user, Oct 5 2026: "ensure that nothing malicious can be injected").** Layers, all tested: `preparePrompt` (clean, drop markup chars, refuse links/blocked words: before the claim), the free OpenAI moderation check (`server/openaiModerator.ts`, after the claim so it's rate-limited; plain `violence` is allowed, everything else flagged refuses; fails closed), the prompt sent as a JSON string, Structured Outputs, `validateCourse`, and the course name checked by the validator (`cleanName`) and moderated. Any new player-visible text (leaderboard names!) goes through `cleanName`/`sanitizeName`. Render user text with `textContent` only.
 - Course share codes: 6 chars `[A-HJ-NP-Z2-9]` (`course/shareCode.ts`, enforced by a DB check). Room codes stay 4 letters.
+- **AI ramps carry a `pitch`.** Strict mode has no optional properties, so it's `["integer", "null"]`, and null means the usual slope. The prompt asks for 12–20 ramps (about a minute) on Hard and Expert, and mostly level ramps with boosters on Expert. Walls and spirals aren't in the AI schema yet.
 - **The player picks the difficulty** of an AI course (generator chips). The request carries `difficulty` (old clients default to medium). The model is told it in the user message, and the server overwrites the reply's difficulty with it before validating. A random fallback course uses the picked difficulty too, and travels to rooms as `{ kind: 'random', seed, difficulty }`.
 - Test rows TESTQA and DWLU69 were deleted from `courses` on Oct 6 2026 (user-approved) before launch.
 
@@ -76,7 +89,7 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Assist mode (`game/assist.ts`) must never raise `maxVelocity`: the leaderboard's `runCheck` assumes the default cap for every run.
 
 ## Flyover camera
-- `render/flyover.ts` follows a smoothed line (height: running max then blur; horizontal: blur), never the raw riding line: the raw line drops near-vertically and zigzags (user, Oct 5 2026: transitions must be smooth). Keep `flyover.test.ts` green: it bounds glide angle, acceleration, turn rate and pitch rate on every course. The glide bound is 0.6, or 1.7× the course's own average descent on steeper (hard) courses. The loop seam fades through dark (`flyoverFade`, the `.scene-fade` div).
+- `render/flyover.ts` follows a smoothed line (height: running max then blur; horizontal: blur), never the raw riding line: the raw line drops near-vertically and zigzags (user, Oct 5 2026: transitions must be smooth). Keep `flyover.test.ts` green: it bounds glide angle, acceleration, turn rate and pitch rate on every course. The glide bound is 0.6, or 1.7× the course's own average descent on steeper (hard) courses. Minute-long courses (100k+ units) get up to 45 s of flyover (`MAX_DURATION_S`); otherwise the camera races round their curves and spirals. The loop seam fades through dark (`flyoverFade`, the `.scene-fade` div).
 - Theme `rampRight.ui` / `rampLeft.ui` are the ramp colours for UI (A/D keys, coach); `line` can be dark on light-surfaced themes.
 
 ## Leaderboards (Phase 6)

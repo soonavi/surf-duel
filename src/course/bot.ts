@@ -55,7 +55,7 @@ export class SurfBot {
 
   /** Call after teleporting the player (respawn). */
   resync(state: PlayerState): void {
-    this.hint = this.built.path.locate(state.pos, 0).index;
+    this.hint = this.built.path.relocate(state.pos).index;
   }
 
   command(state: PlayerState): MoveCmd {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BufferGeometry, Vector3 } from 'three';
-import { buildCourse } from './builder.js';
+import { buildCourse, type PadPiece, type RampPiece, type TowerPiece, type WallPiece } from './builder.js';
+import { forwardOf, rightOf } from './layout.js';
 import type { Course, Segment } from './schema.js';
 import { BvhWorld, ContactList } from '../physics/collision.js';
 import { DEFAULT_PHYSICS, FLOOR_NORMAL_Y, TICK_DT } from '../physics/constants.js';
@@ -173,5 +174,120 @@ describe('buildCourse', () => {
       expect(s.killY).toBeLessThan(s.floorY);
       expect(s.killY).toBeLessThan(s.pos.y);
     }
+  });
+});
+
+const rampsIn = (built: ReturnType<typeof buildCourse>): RampPiece[] => built.pieces.filter((p): p is RampPiece => p.kind === 'ramp');
+
+/** The riding line point `s` along a ramp (linear between its points). */
+function rideAt(r: RampPiece, s: number): { pos: Vector3; heading: number } {
+  const pts = r.points.filter((p) => p.s >= 0);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i]!;
+    const b = pts[i + 1]!;
+    if (s <= b.s) {
+      const t = (s - a.s) / (b.s - a.s);
+      return { pos: a.pos.clone().lerp(b.pos, t), heading: a.heading + (b.heading - a.heading) * t };
+    }
+  }
+  const last = pts[pts.length - 1]!;
+  return { pos: last.pos.clone(), heading: last.heading };
+}
+
+describe('buildCourse: level and climbing ramps', () => {
+  it('lays each ramp at its own slope: a level one stays level, a climb rises', () => {
+    const built = buildCourse(spec([ramp({ length: 9000 }), { type: 'booster', strength: 800 }, ramp({ side: 'left', pitch: 0 }), ramp({ pitch: -4 })]));
+    const [, level, climb] = rampsIn(built);
+    const rise = (r: RampPiece) => r.points[r.points.length - 1]!.pos.y - r.points.find((p) => p.s === 0)!.pos.y;
+    expect(rise(level!)).toBeCloseTo(0, 6);
+    expect(rise(climb!)).toBeCloseTo(climb!.length * Math.tan((4 * Math.PI) / 180), 3);
+  });
+});
+
+describe('buildCourse: walls', () => {
+  const walled = spec([ramp({ length: 6000 }), { type: 'wall' }, ramp({ side: 'left', length: 6000 }), ramp()]);
+
+  it('stands a wall across the ramp after it, past where riders land', () => {
+    const built = buildCourse(walled);
+    const walls = built.pieces.filter((p): p is WallPiece => p.kind === 'wall');
+    expect(walls).toHaveLength(1);
+    const target = built.pieces[walls[0]!.ramp];
+    expect(target?.kind === 'ramp' && target.side).toBe('left');
+    expect(walls[0]!.s).toBeGreaterThan(1500);
+  });
+
+  /** Slide along the ramp from 300 before the wall, `offset` toward the ridge, and say how far past the wall you got. */
+  function rideThroughWall(offset: number): number {
+    const built = buildCourse(walled);
+    const wall = built.pieces.find((p): p is WallPiece => p.kind === 'wall')!;
+    const r = built.pieces[wall.ramp] as RampPiece;
+    const start = rideAt(r, wall.s - 300);
+    const towardRidge = (r.side === 'right' ? 1 : -1) * offset;
+    const theta = (r.angleDeg * Math.PI) / 180;
+    const fwd = forwardOf(start.heading);
+    const player = createPlayer(start.pos.clone().addScaledVector(rightOf(start.heading), towardRidge));
+    player.pos.y += Math.abs(offset) * Math.tan(theta) * Math.sign(offset) + 2;
+    player.vel.copy(fwd).multiplyScalar(1500);
+    const world = new BvhWorld(built.collision);
+    for (let i = 0; i < 40; i++) stepPlayer(player, { forward: 0, side: 0, jump: false, yaw: start.heading }, DEFAULT_PHYSICS, world, TICK_DT);
+    const end = rideAt(r, wall.s);
+    return player.pos.clone().sub(end.pos).dot(fwd);
+  }
+
+  it('lets a rider on the riding line through its window', () => {
+    expect(rideThroughWall(0)).toBeGreaterThan(200);
+  });
+
+  it('stops a rider who is too high or too low on the face', () => {
+    const built = buildCourse(walled);
+    const wall = built.pieces.find((p): p is WallPiece => p.kind === 'wall')!;
+    expect(rideThroughWall(wall.slack + 80)).toBeLessThan(0);
+    expect(rideThroughWall(-(wall.slack + 80))).toBeLessThan(0);
+  });
+});
+
+describe('buildCourse: spirals', () => {
+  const spiralled = spec(
+    [ramp({ length: 6000 }), { type: 'booster', strength: 600 }, { type: 'spiral', turn: 'left', ramps: 6, angle: 58 }, ramp({ side: 'right' })],
+    { difficulty: 'expert' },
+  );
+
+  it('wraps its ramps one full turn round a tower, then carries on the way it came in', () => {
+    const built = buildCourse(spiralled);
+    const tower = built.pieces.find((p): p is TowerPiece => p.kind === 'tower')!;
+    expect(tower).toBeDefined();
+    const arcs = rampsIn(built).slice(1, 7);
+    expect(arcs).toHaveLength(6);
+    for (const arc of arcs) {
+      // Holding the key toward the tower: the ridge is on its side.
+      expect(arc.side).toBe('left');
+      for (const p of arc.points) expect(Math.hypot(p.pos.x - tower.center.x, p.pos.z - tower.center.z)).toBeCloseTo(tower.rideRadius, 0);
+      // The tower stands clear inside every ramp.
+      expect(tower.radius).toBeLessThan(tower.rideRadius - Math.abs(arc.centerOffset) - arc.faceWidth - 100);
+    }
+    const finish = built.pieces.find((p): p is PadPiece => p.kind === 'pad' && p.role === 'finish')!;
+    expect(Math.cos(finish.heading)).toBeCloseTo(1, 6);
+  });
+
+  it('never passes close above or below itself', () => {
+    const { path } = buildCourse(spiralled);
+    let closest = Infinity;
+    for (let i = 0; i < path.count; i++) {
+      for (let j = i + 1; j < path.count; j++) {
+        const a = path.sample(i);
+        const b = path.sample(j);
+        if (b.s - a.s < 8000 || Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) > 900) continue;
+        closest = Math.min(closest, Math.abs(a.pos.y - b.pos.y));
+      }
+    }
+    expect(closest).toBeGreaterThan(1500);
+  });
+
+  it('re-finds the right turn of the spiral after a respawn, not the one above or below', () => {
+    const built = buildCourse(spiralled);
+    const lastArc = rampsIn(built)[6]!;
+    const at = rideAt(lastArc, lastArc.length - 200).pos;
+    const hit = built.path.relocate(at);
+    expect(hit.sample.pos.distanceTo(at)).toBeLessThan(400);
   });
 });

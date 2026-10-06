@@ -93,7 +93,7 @@ export class CourseRuntime {
   /** After a respawn, forget which triggers we were in and resync progress. */
   afterRespawn(state: PlayerState): void {
     this.inside.clear();
-    const hit = this.built.path.locate(state.pos, 0);
+    const hit = this.built.path.relocate(state.pos);
     this.hint = hit.index;
     this.piece = hit.sample.piece;
     this.lateral = hit.lateral;

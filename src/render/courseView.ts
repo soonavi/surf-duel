@@ -30,6 +30,8 @@ export class CourseView {
     const boosters = new THREE.MeshBasicMaterial({ color: theme.booster, transparent: true, opacity: 0.9, depthWrite: false });
     this.add(visuals.gates, gates);
     this.add(visuals.boosters, boosters);
+    // Walls and towers: the pad's surface with the gates' colour for its grid, so obstacles read as part of the course.
+    this.add(visuals.obstacles, createGridMaterial({ base: theme.pad.base, line: theme.accent, cell: 256, lineWidth: 2 }));
     for (const material of [gates, boosters]) this.glowing.push({ material, color: material.color.clone() });
 
     if (theme.ground) {

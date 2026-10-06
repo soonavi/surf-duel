@@ -229,6 +229,12 @@ The sideways jump follows the physics:
 - **Each transfer** gets enough fall to be possible. Its shift is a fixed fraction of that best case: 45% on Hard, 60% on Expert. It's never less than the distance that makes a straight flight miss the ramp.
 - **The tests enforce both sides.** A skilled bot that air-strafes like a player must finish every Hard and Expert course. The cautious bot must die on every one.
 
+**Not all downhill.** Each ramp can set its own slope: level, gently downhill, or climbing. On Expert, speed mostly comes from boosters, and keeping it is the skill; a climb costs you speed, and leaving one launches you into the air. The validator makes sure nobody stalls. A climb is eased if a cautious rider couldn't crest it at 600 u/s, and a ramp they'd only crawl along gets its usual downhill slope back.
+
+**Obstacles** (in hand-made courses for now):
+- **Wall:** a wall stands across a ramp, just past where riders land. It has a window round the riding line, and if you ride too high or too low on the face, you hit the wall. The window is tighter on harder courses: 200 units either side on Expert.
+- **Spiral:** one full turn of ramps round a tall tower. You hold the key toward the tower, and the jumps between ramps cut across the circle, so you have to steer inward in the air. The turn drops well clear of its own start before passing under it. Respawns find their place by true distance, so they never pick the wrong level of the spiral.
+
 Shipped courses live in `src/course/courses/*.json`:
 
 | Course | Theme | Difficulty | Character |
@@ -236,8 +242,9 @@ Shipped courses live in `src/course/courses/*.json`:
 | **Tutorial** | neon | easy | with the coach |
 | **Easy Cruise** | desert | easy | |
 | **Frostbite Flow** | ice | medium | sweeping S-bends |
-| **Speed Demon** | lava | hard | zig-zag transfers, drops and boosters |
-| **Event Horizon** | void | expert | narrow two-sided ridges, long falls, few checkpoints |
+| **Speed Demon** | lava | hard | about a minute of zig-zag transfers, drops, boosters and walls |
+| **Event Horizon** | void | expert | about a minute of two-sided ridges, long falls, climbs and walls |
+| **Spire** | neon | expert | about a minute of mostly level ramps: a full turn round a tower, three walls, climbs that cost speed |
 
 Ramp colour tells you which key to hold: each theme uses one colour for ramps on your right (hold D) and another for ramps on your left (hold A).
 

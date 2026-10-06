@@ -1,0 +1,29 @@
+{
+  "name": "Spire",
+  "theme": "neon",
+  "difficulty": "expert",
+  "segments": [
+    { "type": "booster", "strength": 500 },
+    { "type": "ramp", "length": 4000, "angle": 56, "side": "right", "curve": 0, "pitch": 10 },
+    { "type": "booster", "strength": 300 },
+    { "type": "ramp", "length": 4000, "angle": 58, "side": "left", "curve": 20, "pitch": 2 },
+    { "type": "ramp", "length": 4000, "angle": 59, "side": "right", "curve": -25, "pitch": 0 },
+    { "type": "wall" },
+    { "type": "ramp", "length": 4500, "angle": 58, "side": "left", "curve": 15, "pitch": 1 },
+    { "type": "booster", "strength": 300 },
+    { "type": "ramp", "length": 3500, "angle": 59, "side": "right", "curve": 0, "pitch": -7 },
+    { "type": "spiral", "turn": "left", "ramps": 6, "angle": 58 },
+    { "type": "ramp", "length": 4000, "angle": 59, "side": "right", "curve": -20, "pitch": 1 },
+    { "type": "wall" },
+    { "type": "ramp", "length": 4000, "angle": 60, "side": "left", "curve": 30, "pitch": 0 },
+    { "type": "booster", "strength": 300 },
+    { "type": "ramp", "length": 3500, "angle": 59, "side": "both", "curve": 0, "pitch": -8 },
+    { "type": "gap", "length": 900 },
+    { "type": "ramp", "length": 4000, "angle": 60, "side": "right", "curve": -35, "pitch": 1 },
+    { "type": "wall" },
+    { "type": "ramp", "length": 4500, "angle": 59, "side": "left", "curve": 25, "pitch": 0 },
+    { "type": "drop", "height": 1200 },
+    { "type": "ramp", "length": 4000, "angle": 60, "side": "right", "curve": -20, "pitch": 2 },
+    { "type": "ramp", "length": 5000, "angle": 60, "side": "left", "curve": 10, "pitch": 2 }
+  ]
+}

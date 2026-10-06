@@ -3,7 +3,7 @@
  * Deterministic: the same input always yields the same course. Never throws on
  * bad input (the validator repairs it first).
  */
-import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, MathUtils, Vector3 } from 'three';
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, CylinderGeometry, MathUtils, Vector3 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Course, Segment } from './schema.js';
 import { validateCourse } from './validator.js';
@@ -20,9 +20,11 @@ import {
   type Piece,
   type RampPiece,
   type SpawnPoint,
+  type TowerPiece,
+  type WallPiece,
 } from './layout.js';
 
-export type { BoosterPiece, GatePiece, PadPiece, Piece, RampPiece, RidePoint, SpawnPoint } from './layout.js';
+export type { BoosterPiece, GatePiece, PadPiece, Piece, RampPiece, RidePoint, SpawnPoint, TowerPiece, WallPiece } from './layout.js';
 
 export type TriggerKind = 'start' | 'checkpoint' | 'booster' | 'finish';
 
@@ -48,6 +50,8 @@ export interface CourseVisuals {
   finish: BufferGeometry;
   gates: BufferGeometry;
   boosters: BufferGeometry;
+  /** Walls with windows, and the towers spirals turn round: solid, so they're in the collision too. */
+  obstacles: BufferGeometry;
 }
 
 export interface BuiltCourse {
@@ -252,6 +256,30 @@ function boosterGeometry(b: BoosterPiece): BufferGeometry[] {
   return parts;
 }
 
+const WALL_THICKNESS = 60;
+
+/** Four panels round the window: either side of it full height, and above and below it. */
+function wallGeometry(w: WallPiece): BufferGeometry[] {
+  const r = rightOf(w.heading);
+  const panel = (lateralFrom: number, lateralTo: number, bottom: number, top: number): BufferGeometry => {
+    const center = w.pos.clone().addScaledVector(r, (lateralFrom + lateralTo) / 2);
+    center.y = (bottom + top) / 2;
+    return orientedBox(lateralTo - lateralFrom, top - bottom, WALL_THICKNESS, center, w.heading);
+  };
+  return [
+    panel(-w.halfWidth, -w.slack, w.bottom, w.top),
+    panel(w.slack, w.halfWidth, w.bottom, w.top),
+    panel(-w.slack, w.slack, w.windowTop, w.top),
+    panel(-w.slack, w.slack, w.bottom, w.windowBottom),
+  ];
+}
+
+function towerGeometry(t: TowerPiece): BufferGeometry {
+  const g = new CylinderGeometry(t.radius, t.radius, t.top - t.bottom, 48, 1).toNonIndexed();
+  g.translate(t.center.x, (t.top + t.bottom) / 2, t.center.z);
+  return g;
+}
+
 function positionsOnly(g: BufferGeometry): BufferGeometry {
   const out = new BufferGeometry();
   out.setAttribute('position', g.getAttribute('position').clone());
@@ -270,6 +298,7 @@ export function buildCourse(input: unknown): BuiltCourse {
   const finish: BufferGeometry[] = [];
   const gates: BufferGeometry[] = [];
   const boosters: BufferGeometry[] = [];
+  const obstacles: BufferGeometry[] = [];
   const triggers: Trigger[] = [];
   let boosterNo = 0;
 
@@ -277,6 +306,12 @@ export function buildCourse(input: unknown): BuiltCourse {
     switch (piece.kind) {
       case 'ramp':
         (piece.side === 'left' ? rampLeft : rampRight).push(rampGeometry(piece));
+        break;
+      case 'wall':
+        obstacles.push(...wallGeometry(piece));
+        break;
+      case 'tower':
+        obstacles.push(towerGeometry(piece));
         break;
       case 'booster':
         boosters.push(...boosterGeometry(piece));
@@ -331,8 +366,9 @@ export function buildCourse(input: unknown): BuiltCourse {
     finish: merge(finish),
     gates: merge(gates),
     boosters: merge(boosters),
+    obstacles: merge(obstacles),
   };
-  const collision = merge([visuals.rampRight, visuals.rampLeft, visuals.pads, visuals.finish].map(positionsOnly));
+  const collision = merge([visuals.rampRight, visuals.rampLeft, visuals.pads, visuals.finish, visuals.obstacles].map(positionsOnly));
   collision.computeBoundingBox();
   const bounds = collision.boundingBox?.clone() ?? new Box3();
 

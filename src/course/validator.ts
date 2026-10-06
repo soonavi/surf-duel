@@ -16,7 +16,23 @@ import {
   type ThemeName,
 } from './schema.js';
 import { cleanName as cleanPublicName } from '../util/text.js';
-import { START_SPEED, afterBooster, afterFall, afterRamp, maxGapLength, type SpeedRange } from './tuning.js';
+import {
+  DIFFICULTY,
+  MIN_CLIMB_SPEED,
+  MIN_CRUISE_PITCH,
+  MIN_CRUISE_SPEED,
+  SPIRAL_PITCH_DEG,
+  PLAN_GRAVITY,
+  SPIRAL_RADIUS,
+  START_SPEED,
+  afterBooster,
+  afterFall,
+  afterRamp,
+  maxGapLength,
+  rampPitchDeg,
+  spiralArcLength,
+  type SpeedRange,
+} from './tuning.js';
 
 export interface ValidationResult {
   course: Course;
@@ -86,7 +102,7 @@ function sanitizeSegment(raw: unknown, index: number, lastSide: RampSide | null,
     r.note(`${label}: not an object, removed`);
     return null;
   }
-  const type = oneOf(raw.type, ['ramp', 'drop', 'gap', 'booster', 'checkpoint'] as const);
+  const type = oneOf(raw.type, ['ramp', 'drop', 'gap', 'booster', 'checkpoint', 'wall', 'spiral'] as const);
   switch (type) {
     case 'ramp': {
       let side = oneOf(raw.side, RAMP_SIDES);
@@ -94,12 +110,30 @@ function sanitizeSegment(raw: unknown, index: number, lastSide: RampSide | null,
         side = lastSide === 'right' ? 'left' : 'right';
         r.note(`${label}: unknown ramp side ${JSON.stringify(raw.side)}, used ${side}`);
       }
-      return {
+      const ramp: RampSegment = {
         type: 'ramp',
         length: r.number(raw.length, LIMITS.rampLength, DEFAULT_RAMP.length, `${label} length`),
         angle: r.number(raw.angle, LIMITS.rampAngle, DEFAULT_RAMP.angle, `${label} angle`),
         side,
         curve: raw.curve === undefined || raw.curve === null ? 0 : r.number(raw.curve, LIMITS.rampCurve, 0, `${label} curve`),
+      };
+      // No slope given (or null, as the AI sends it): the difficulty's usual one.
+      if (raw.pitch !== undefined && raw.pitch !== null) ramp.pitch = r.number(raw.pitch, LIMITS.rampPitch, 0, `${label} pitch`);
+      return ramp;
+    }
+    case 'wall':
+      return { type: 'wall' };
+    case 'spiral': {
+      let turn = oneOf(raw.turn, ['left', 'right'] as const);
+      if (!turn) {
+        turn = 'left';
+        r.note(`${label}: unknown spiral turn ${JSON.stringify(raw.turn)}, used left`);
+      }
+      return {
+        type: 'spiral',
+        turn,
+        ramps: Math.round(r.number(raw.ramps, LIMITS.spiralRamps, 6, `${label} spiral ramps`)),
+        angle: r.number(raw.angle, LIMITS.rampAngle, DEFAULT_RAMP.angle, `${label} spiral angle`),
       };
     }
     case 'drop':
@@ -132,6 +166,10 @@ function fixStructure(segments: Segment[], r: Repairer): Segment[] {
       r.note('two gaps in a row merged into one');
       continue;
     }
+    if (seg.type === 'wall' && prev?.type === 'wall') {
+      r.note('two walls in a row merged into one');
+      continue;
+    }
     if (seg.type === 'checkpoint') {
       if (!seenRamp) {
         r.note('checkpoint before the first ramp removed');
@@ -142,8 +180,17 @@ function fixStructure(segments: Segment[], r: Repairer): Segment[] {
         continue;
       }
     }
-    if (seg.type === 'ramp') seenRamp = true;
+    if (seg.type === 'ramp' || seg.type === 'spiral') seenRamp = true;
     out.push({ ...seg });
+  }
+  // A wall stands across the next ramp: with none left to come, it has nothing to stand on.
+  let lastRamp = out.length - 1;
+  while (lastRamp >= 0 && out[lastRamp]!.type !== 'ramp' && out[lastRamp]!.type !== 'spiral') lastRamp--;
+  for (let i = out.length - 1; i > lastRamp; i--) {
+    if (out[i]!.type === 'wall') {
+      out.splice(i, 1);
+      r.note('wall with no ramp after it removed');
+    }
   }
   // A trailing checkpoint is pointless: the finish comes right after.
   while (out[out.length - 1]?.type === 'checkpoint') {
@@ -154,7 +201,7 @@ function fixStructure(segments: Segment[], r: Repairer): Segment[] {
 }
 
 function rampCount(segments: Segment[]): number {
-  return segments.filter((s) => s.type === 'ramp').length;
+  return segments.reduce((n, s) => n + (s.type === 'ramp' ? 1 : s.type === 'spiral' ? s.ramps : 0), 0);
 }
 
 function lastRampSide(segments: Segment[]): RampSide | null {
@@ -174,6 +221,7 @@ function totalLength(segments: Segment[]): number {
   for (const s of segments) {
     if (s.type === 'ramp' || s.type === 'gap') sum += s.length;
     else if (s.type === 'drop') sum += s.height;
+    else if (s.type === 'spiral') sum += 2 * Math.PI * SPIRAL_RADIUS;
   }
   return sum;
 }
@@ -225,13 +273,37 @@ function limitHeadingDrift(segments: Segment[], r: Repairer): void {
   }
 }
 
-/** Walk the course with the speed model and shorten gaps a cautious rider couldn't clear. */
-function limitGaps(segments: Segment[], difficulty: Difficulty, r: Repairer): void {
+/**
+ * Walk the course with the speed model: give ramps riders would only crawl
+ * along their usual downhill slope back, ease climbs they would stall on,
+ * and shorten gaps they couldn't clear.
+ */
+function limitBySpeed(segments: Segment[], difficulty: Difficulty, r: Repairer): void {
   let speed: SpeedRange = { ...START_SPEED };
   for (const s of segments) {
     switch (s.type) {
-      case 'ramp':
-        speed = afterRamp(speed, s.length, difficulty);
+      case 'ramp': {
+        const pitch = rampPitchDeg(s, difficulty);
+        if (pitch < Math.min(MIN_CRUISE_PITCH, DIFFICULTY[difficulty].pitchDeg) && speed.lo < MIN_CRUISE_SPEED) {
+          // Level or climbing with nothing to carry you: a course you'd walk along for minutes.
+          delete s.pitch;
+          r.note(`a ${pitch}° ramp given its usual downhill slope: riders here are too slow to climb or keep going`);
+        } else if (pitch < 0) {
+          // Steepest climb that still leaves MIN_CLIMB_SPEED at the top.
+          const sin = (speed.lo * speed.lo - MIN_CLIMB_SPEED * MIN_CLIMB_SPEED) / (2 * PLAN_GRAVITY * s.length);
+          const maxClimb = sin > 0 ? (Math.asin(Math.min(1, sin)) * 180) / Math.PI : 0;
+          if (-pitch > maxClimb) {
+            s.pitch = maxClimb >= 0.1 ? -Math.floor(maxClimb * 10) / 10 : 0;
+            r.note(`a ${-pitch}° climb eased to ${-s.pitch}°: riders here are too slow to climb it`);
+          }
+        }
+        speed = afterRamp(speed, s.length, rampPitchDeg(s, difficulty));
+        break;
+      }
+      case 'spiral':
+        for (let k = 0; k < s.ramps; k++) speed = afterRamp(speed, spiralArcLength(s.ramps, k === s.ramps - 1), SPIRAL_PITCH_DEG);
+        break;
+      case 'wall':
         break;
       case 'drop':
         speed = afterFall(speed, s.height);
@@ -304,7 +376,7 @@ export function validateCourse(input: unknown): ValidationResult {
     limitHeadingDrift(segments, r);
     fitTotalLength(segments, r);
     ensureMinRamps(segments, r);
-    limitGaps(segments, difficulty, r);
+    limitBySpeed(segments, difficulty, r);
 
     const course: Course = { name, theme, difficulty, segments };
     const parsed = Course.safeParse(course);

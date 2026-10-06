@@ -97,24 +97,36 @@ export class TrackPath {
     }
   }
 
-  /** Nearest sample to `pos` (horizontally), searching around `hint` first. */
+  /**
+   * Nearest sample to `pos` (horizontally), searching around `hint` first.
+   * Lost, it searches the whole path by true distance: a spiral passes over
+   * itself, and only height tells its turns apart.
+   */
   locate(pos: Vector3, hint: number): PathHit {
     const n = this.samples.length;
     const from = Math.max(0, hint - WINDOW_BEHIND);
     const to = Math.min(n - 1, hint + WINDOW_AHEAD);
-    let best = this.nearestIn(pos, from, to);
-    if (best.distSq > RESYNC_DISTANCE * RESYNC_DISTANCE) best = this.nearestIn(pos, 0, n - 1);
-    const sample = this.sample(best.index);
-    const lateral = (pos.x - sample.pos.x) * Math.cos(sample.heading) - (pos.z - sample.pos.z) * Math.sin(sample.heading);
-    return { index: best.index, s: sample.s, lateral, sample };
+    const best = this.nearestIn(pos, from, to);
+    return this.hit(pos, best.distSq > RESYNC_DISTANCE * RESYNC_DISTANCE ? this.nearestIn(pos, 0, n - 1, true).index : best.index);
   }
 
-  private nearestIn(pos: Vector3, from: number, to: number): { index: number; distSq: number } {
+  /** Where `pos` is with no idea where it was before (a respawn): the nearest sample by true distance. */
+  relocate(pos: Vector3): PathHit {
+    return this.hit(pos, this.nearestIn(pos, 0, this.samples.length - 1, true).index);
+  }
+
+  private hit(pos: Vector3, index: number): PathHit {
+    const sample = this.sample(index);
+    const lateral = (pos.x - sample.pos.x) * Math.cos(sample.heading) - (pos.z - sample.pos.z) * Math.sin(sample.heading);
+    return { index, s: sample.s, lateral, sample };
+  }
+
+  private nearestIn(pos: Vector3, from: number, to: number, withHeight = false): { index: number; distSq: number } {
     let index = from;
     let distSq = Infinity;
     for (let i = from; i <= to; i++) {
       const p = this.samples[i]!.pos;
-      const d = (pos.x - p.x) ** 2 + (pos.z - p.z) ** 2;
+      const d = (pos.x - p.x) ** 2 + (pos.z - p.z) ** 2 + (withHeight ? (pos.y - p.y) ** 2 : 0);
       if (d < distSq) {
         distSq = d;
         index = i;

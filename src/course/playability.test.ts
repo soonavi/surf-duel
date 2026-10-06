@@ -121,6 +121,25 @@ describe('extreme AI-style courses', () => {
       name: 'One Way', theme: 'lava', difficulty: 'easy',
       segments: Array.from({ length: 8 }, () => [ramp(46, 'right', -15), { type: 'booster', strength: 800 }]).flat(),
     },
+    'a wall across every ramp, level ramps kept fast by boosters': {
+      name: 'Needle', theme: 'neon', difficulty: 'expert',
+      segments: [
+        { type: 'booster', strength: 800 },
+        ...Array.from({ length: 8 }, (_, i) => [{ type: 'wall' }, { ...ramp(58, alt(i), i % 2 ? 20 : -20, 3500), pitch: 0 }, { type: 'booster', strength: 300 }]).flat(),
+      ],
+    },
+    'two spirals back to back, turning both ways': {
+      name: 'Corkscrew', theme: 'void', difficulty: 'hard',
+      segments: [ramp(56, 'right', 0, 5000), { type: 'spiral', turn: 'left', ramps: 4, angle: 60 }, { type: 'spiral', turn: 'right', ramps: 8, angle: 46 }, ramp(58, 'left', 0, 4000)],
+    },
+    'a spiral straight off the start pad': {
+      name: 'Launch Spiral', theme: 'ice', difficulty: 'easy',
+      segments: [{ type: 'spiral', turn: 'right', ramps: 5, angle: 50 }, ramp(50, 'left', 0, 4000)],
+    },
+    'climbs everywhere': {
+      name: 'Uphill Both Ways', theme: 'desert', difficulty: 'medium',
+      segments: Array.from({ length: 10 }, (_, i) => ({ ...ramp(54, alt(i), 0, 4000), pitch: -8 })),
+    },
     'forty segments of everything': {
       name: 'Kitchen Sink', theme: 'lava', difficulty: 'hard',
       segments: Array.from({ length: 40 }, (_, i) =>

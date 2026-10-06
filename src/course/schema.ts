@@ -28,13 +28,17 @@ export const LIMITS = {
   rampLength: { min: 1500, max: 9000 },
   rampAngle: { min: 46, max: 60 },
   rampCurve: { min: -45, max: 45 },
+  /** Degrees a ramp runs downhill along its length; negative climbs. */
+  rampPitch: { min: -8, max: 12 },
   dropHeight: { min: 200, max: 2500 },
   gapLength: { min: 100, max: 3000 },
   boosterStrength: { min: 100, max: 800 },
+  /** Ramps in one turn of a spiral round a tower. */
+  spiralRamps: { min: 4, max: 8 },
   segments: { max: 40 },
   minRamps: 2,
-  /** Sum of ramp lengths, gaps and drops, in units. */
-  totalLength: { min: 6000, max: 80000 },
+  /** Sum of ramp lengths, gaps, drops and spirals, in units (a minute-long course is ~100k). */
+  totalLength: { min: 6000, max: 140000 },
   /** Total turning across the course, so it never loops back over itself. */
   maxHeadingDrift: 150,
 } as const;
@@ -61,6 +65,12 @@ export const RampSegment = z.object({
   angle: z.number().min(LIMITS.rampAngle.min).max(LIMITS.rampAngle.max),
   side: z.enum(RAMP_SIDES),
   curve: z.number().min(LIMITS.rampCurve.min).max(LIMITS.rampCurve.max),
+  /**
+   * How steeply it runs downhill along its length (degrees). 0 is level and
+   * negative climbs, so speed has to come from boosters and be kept. Left
+   * out (or null, as the AI sends it), the difficulty's usual slope.
+   */
+  pitch: z.number().min(LIMITS.rampPitch.min).max(LIMITS.rampPitch.max).nullable().optional(),
 });
 
 export const DropSegment = z.object({
@@ -82,7 +92,29 @@ export const CheckpointSegment = z.object({
   type: z.literal('checkpoint'),
 });
 
-export const Segment = z.discriminatedUnion('type', [RampSegment, DropSegment, GapSegment, BoosterSegment, CheckpointSegment]);
+/** A wall across the next ramp with a window round the riding line: stay on your line or hit it. */
+export const WallSegment = z.object({
+  type: z.literal('wall'),
+});
+
+/** One full turn of ramps round a tall tower, with a transfer between each. */
+export const SpiralSegment = z.object({
+  type: z.literal('spiral'),
+  /** Which way it turns; you hold the key toward the tower. */
+  turn: z.enum(['left', 'right']),
+  ramps: z.number().int().min(LIMITS.spiralRamps.min).max(LIMITS.spiralRamps.max),
+  angle: z.number().min(LIMITS.rampAngle.min).max(LIMITS.rampAngle.max),
+});
+
+export const Segment = z.discriminatedUnion('type', [
+  RampSegment,
+  DropSegment,
+  GapSegment,
+  BoosterSegment,
+  CheckpointSegment,
+  WallSegment,
+  SpiralSegment,
+]);
 
 export const Course = z.object({
   name: z.string().min(1).max(LIMITS.name.max),
@@ -96,5 +128,7 @@ export type DropSegment = z.infer<typeof DropSegment>;
 export type GapSegment = z.infer<typeof GapSegment>;
 export type BoosterSegment = z.infer<typeof BoosterSegment>;
 export type CheckpointSegment = z.infer<typeof CheckpointSegment>;
+export type WallSegment = z.infer<typeof WallSegment>;
+export type SpiralSegment = z.infer<typeof SpiralSegment>;
 export type Segment = z.infer<typeof Segment>;
 export type Course = z.infer<typeof Course>;

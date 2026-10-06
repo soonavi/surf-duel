@@ -7,7 +7,7 @@ import { hashString } from '../util/rng.js';
  * Old personal bests and ghosts then stop matching instead of replaying a
  * ghost through walls that have moved.
  */
-export const LAYOUT_VERSION = 4;
+export const LAYOUT_VERSION = 5;
 
 function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;

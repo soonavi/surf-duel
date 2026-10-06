@@ -17,6 +17,8 @@ function objects(node: Json, out: Json[] = []): Json[] {
 /** Just enough JSON Schema to check an instance against ours. */
 function conforms(node: Json, value: unknown): boolean {
   if (node.anyOf) return (node.anyOf as Json[]).some((b) => conforms(b, value));
+  // A nullable type, like ["integer", "null"].
+  if (Array.isArray(node.type)) return (value === null && node.type.includes('null')) || node.type.some((t) => t !== 'null' && conforms({ ...node, type: t }, value));
   if (node.enum && !(node.enum as unknown[]).includes(value)) return false;
   switch (node.type) {
     case 'object': {
@@ -57,14 +59,14 @@ const EXAMPLE = {
   theme: 'lava',
   difficulty: 'medium',
   segments: [
-    { type: 'ramp', length: 5000, angle: 52, side: 'right', curve: 0 },
-    { type: 'ramp', length: 6000, angle: 54, side: 'left', curve: 30 },
+    { type: 'ramp', length: 5000, angle: 52, side: 'right', curve: 0, pitch: null },
+    { type: 'ramp', length: 6000, angle: 54, side: 'left', curve: 30, pitch: 4 },
     { type: 'checkpoint' },
     { type: 'drop', height: 1800 },
-    { type: 'ramp', length: 7000, angle: 55, side: 'right', curve: -25 },
+    { type: 'ramp', length: 7000, angle: 55, side: 'right', curve: -25, pitch: 0 },
     { type: 'booster', strength: 400 },
     { type: 'gap', length: 600 },
-    { type: 'ramp', length: 5000, angle: 53, side: 'both', curve: 0 },
+    { type: 'ramp', length: 5000, angle: 53, side: 'both', curve: 0, pitch: -3 },
   ],
 };
 
@@ -88,6 +90,9 @@ describe('COURSE_JSON_SCHEMA (OpenAI Structured Outputs, strict mode)', () => {
     expect([prop(ramp, 'angle').minimum, prop(ramp, 'angle').maximum]).toEqual([LIMITS.rampAngle.min, LIMITS.rampAngle.max]);
     expect([prop(ramp, 'length').minimum, prop(ramp, 'length').maximum]).toEqual([LIMITS.rampLength.min, LIMITS.rampLength.max]);
     expect([prop(ramp, 'curve').minimum, prop(ramp, 'curve').maximum]).toEqual([LIMITS.rampCurve.min, LIMITS.rampCurve.max]);
+    // A slope, or null for the difficulty's usual one: strict mode has no optional properties.
+    expect(prop(ramp, 'pitch').type).toEqual(['integer', 'null']);
+    expect([prop(ramp, 'pitch').minimum, prop(ramp, 'pitch').maximum]).toEqual([LIMITS.rampPitch.min, LIMITS.rampPitch.max]);
     expect(prop(branch('drop'), 'height').maximum).toBe(LIMITS.dropHeight.max);
     expect(COURSE_JSON_SCHEMA.properties.segments.maxItems).toBe(LIMITS.segments.max);
   });
@@ -110,6 +115,12 @@ describe('COURSE_SYSTEM_PROMPT', () => {
     for (const type of ['ramp', 'drop', 'gap', 'booster', 'checkpoint']) expect(COURSE_SYSTEM_PROMPT).toContain(type);
     expect(COURSE_SYSTEM_PROMPT).toContain(`${LIMITS.rampAngle.min}`);
     expect(COURSE_SYSTEM_PROMPT).toContain(`${LIMITS.rampAngle.max}`);
+  });
+
+  it('asks for level and climbing ramps, and minute-long hard and expert courses', () => {
+    expect(COURSE_SYSTEM_PROMPT).toMatch(/pitch/);
+    expect(COURSE_SYSTEM_PROMPT).toMatch(/climb/);
+    expect(COURSE_SYSTEM_PROMPT).toMatch(/a minute/);
   });
 
   it('describes every difficulty, and that the player picks it', () => {

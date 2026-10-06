@@ -59,6 +59,20 @@ After the wind went, the user still reported the song "almost painfully loud" an
 - The AI generator has difficulty chips. The server enforces the player's pick.
 - The flyover camera smoothing is wider, and its glide bound now scales with each course's own descent.
 
+**Then (user feedback, Oct 6):** the Hard and Expert courses were "good starter levels". Expert wasn't hard "because of how fast you can get, and because it is downhill". The user wants surfing around or through things (they sent reference shots of a spiral round a tower and a ramp through a wall) and courses of about a minute. They chose "hand-made first": the AI gets towers and walls next round.
+
+Built:
+- Per-ramp `pitch`: level and climbing ramps.
+- `wall` (a window round the riding line) and `spiral` (one turn round a tower).
+- A new Expert course, **Spire**, at about 60 s.
+- Speed Demon (about 57 s) and Event Horizon (about 65 s) lengthened and reworked.
+- Expert's default pitch lowered to 6.
+- AI ramps can climb, and AI Hard and Expert courses ask for 12–20 ramps.
+- Random Hard and Expert courses have 10–15 ramps.
+- `LAYOUT_VERSION` is now 5.
+
+**Awaiting the user's playtest** of Spire especially.
+
 **Next, queued by the user:** thumbs up on generated courses, and a **Popular** section listing the most-liked ones. Agreed plan:
 - one like per player (`Profile.boardId`) per course, which they can undo;
 - counted server-side with the service role, like `submit_run`, with an IP-hash rate limit;

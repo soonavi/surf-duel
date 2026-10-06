@@ -464,7 +464,7 @@ export class App {
     const path = this.built.path;
     return this.built.triggers
       .filter((t) => t.kind === 'checkpoint')
-      .map((t) => path.locate(t.center, 0).s / Math.max(1, path.length));
+      .map((t) => path.relocate(t.center).s / Math.max(1, path.length));
   }
 
   // --- settings & dev --------------------------------------------------------

@@ -24,8 +24,9 @@ describe('recordBotGhost', () => {
     sampleGhost(run!.ghost, 0, pos);
     expect(pos.distanceTo(tutorial.spawn.pos)).toBeLessThan(1);
     sampleGhost(run!.ghost, run!.timeMs / 1000, pos);
+    // It finishes on entering the finish volume (the pad lengthens to catch fast riders): inside its footprint.
     const finish = tutorial.triggers.find((t) => t.kind === 'finish')!;
-    expect(Math.hypot(pos.x - finish.center.x, pos.z - finish.center.z)).toBeLessThan(2000);
+    expect(Math.hypot(pos.x - finish.center.x, pos.z - finish.center.z)).toBeLessThan(Math.hypot(finish.half.x, finish.half.z) + 100);
   });
 });
 

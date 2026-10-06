@@ -33,6 +33,12 @@ const SEGMENT_VARIANTS = [
     angle: int(LIMITS.rampAngle, 'Steepness of the surf face in degrees. Steeper is harder to hold.'),
     side: { type: 'string', enum: [...RAMP_SIDES], description: "Which side of the rider the ramp is on; 'both' is a two-sided ridge." },
     curve: int(LIMITS.rampCurve, 'Total bend over the ramp in degrees: positive bends left, negative right, 0 is straight.'),
+    pitch: {
+      type: ['integer', 'null'],
+      minimum: LIMITS.rampPitch.min,
+      maximum: LIMITS.rampPitch.max,
+      description: 'How steeply it runs downhill along its length, in degrees: 0 is level, negative climbs. null for the usual slope of the difficulty.',
+    },
   }),
   variant('drop', 'The next ramp starts this much lower.', {
     height: int(LIMITS.dropHeight, 'Extra fall before the next piece, in units.'),
@@ -75,14 +81,15 @@ const style = (d: Difficulty): string => {
 export const COURSE_SYSTEM_PROMPT = `You design race courses for Surf Duel, a first-person "surf" racing game (like surf maps in Counter-Strike). Riders slide along steep angled ramps, holding the strafe key toward the ramp to stay on it, building speed downhill and flying from ramp to ramp. Distances are in units; 1 unit is about 2 cm.
 
 Build a course as a list of segments, start to finish:
-- ramp: the core of every course. length ${LIMITS.rampLength.min}–${LIMITS.rampLength.max}, angle ${LIMITS.rampAngle.min}–${LIMITS.rampAngle.max} degrees, side "left" / "right" (which side of the rider the ramp is on) or "both" (a two-sided ridge), curve ${LIMITS.rampCurve.min} to ${LIMITS.rampCurve.max} degrees (positive bends left).
+- ramp: the core of every course. length ${LIMITS.rampLength.min}–${LIMITS.rampLength.max}, angle ${LIMITS.rampAngle.min}–${LIMITS.rampAngle.max} degrees, side "left" / "right" (which side of the rider the ramp is on) or "both" (a two-sided ridge), curve ${LIMITS.rampCurve.min} to ${LIMITS.rampCurve.max} degrees (positive bends left), pitch ${LIMITS.rampPitch.min} to ${LIMITS.rampPitch.max} degrees downhill along its length (0 is level, negative climbs; null for the difficulty's usual slope).
 - drop: the next ramp starts lower (height ${LIMITS.dropHeight.min}–${LIMITS.dropHeight.max}). Big drops are dramatic and add speed.
 - gap: open air before the next piece (length ${LIMITS.gapLength.min}–${LIMITS.gapLength.max}).
 - booster: a gate that adds speed (strength ${LIMITS.boosterStrength.min}–${LIMITS.boosterStrength.max}).
 - checkpoint: a respawn gate; place one every 2–4 ramps.
 
 Make it fun and beatable:
-- 5–12 ramps (about 30–90 seconds of riding). Start and end with a ramp.
+- 6–12 ramps on easy and medium; 12–20 on hard and expert, for about a minute of riding. Start and end with a ramp.
+- Not every ramp has to run downhill: level (pitch 0) and climbing (negative pitch) ramps make riders keep their speed. Put a booster or a downhill ramp before each climb. On expert, mostly level ramps with a few boosters; plain downhill speed makes it too easy.
 - Mostly alternate ramp sides; repeat a side now and then for variety.
 - Never put two drops in a row. Keep total turning under ${LIMITS.maxHeadingDrift} degrees either way, so the course never loops back over itself.
 - Design at the difficulty the player picked, given with their description: easy = ${style('easy')}; medium = ${style('medium')}; hard = ${style('hard')}; expert = ${style('expert')}. The game makes hard and expert courses demanding itself (every ramp sits off to the side of the last, so riders air-strafe across), so there, short ramps and sharp bends matter more than huge gaps. The picked difficulty wins over any difficulty named in the description.

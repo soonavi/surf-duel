@@ -25,7 +25,8 @@ export function randomCourse(seed: number, opts: RandomCourseOptions = {}): Cour
   const [angleLo, angleHi] = DIFFICULTY_STYLE[difficulty].angle;
   const [lengthLo, lengthHi] = DIFFICULTY_STYLE[difficulty].length;
   const segments: Segment[] = [];
-  const ramps = between(4, 8);
+  // Hard and expert run about a minute, like their shipped courses.
+  const ramps = difficulty === 'hard' || difficulty === 'expert' ? between(10, 15) : between(4, 8);
   let side: RampSide = rng() < 0.5 ? 'left' : 'right';
 
   for (let i = 0; i < ramps; i++) {

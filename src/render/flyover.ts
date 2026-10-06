@@ -27,8 +27,12 @@ const SWAY = 380;
 const SWAY_PERIOD_S = 9;
 /** Fly no slower than this (units/s)... */
 const MIN_SPEED = 2600;
-/** ...and cover any course in at most this long. */
-const MAX_DURATION_S = 14;
+/**
+ * ...and cover any course in at most this long. Minute-long courses run past
+ * 100k units: any shorter and the camera would race round their curves (and
+ * a spiral) far faster than the menu should feel.
+ */
+const MAX_DURATION_S = 45;
 /** The fade at the loop seam, each side of it (seconds). */
 export const FADE_SECONDS = 0.45;
 
@@ -37,10 +41,11 @@ const STEP = 50;
 /**
  * Blur widths (one standard deviation, units of path distance). Wide enough
  * that a hard course's zig-zag transfers and deep drops become one steady
- * dive down the middle, rather than a camera swinging from ramp to ramp.
+ * dive down the middle, rather than a camera swinging from ramp to ramp, and
+ * that a climb followed by a transfer drop doesn't make it plunge.
  */
 const SIGMA_XZ = 2400;
-const SIGMA_Y = 3800;
+const SIGMA_Y = 5200;
 /** The height envelope's reach each side: the blur's full reach, so the camera can't sink below the line. */
 const ENVELOPE = 3 * SIGMA_Y;
 

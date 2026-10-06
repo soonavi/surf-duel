@@ -153,6 +153,57 @@ describe('validateCourse', () => {
     }
   });
 
+  it("keeps a ramp's own slope, clamped to the safe range, and drops an empty one", () => {
+    const { course, repairs } = validateCourse({
+      ...valid(),
+      segments: [ramp({ length: 8000 }), ramp({ side: 'left', pitch: 0 }), ramp({ pitch: 40 }), { ...ramp({ side: 'left' }), pitch: null }],
+    });
+    const ramps = rampsOf(course);
+    expect(ramps[1]!.pitch).toBe(0);
+    expect(ramps[2]!.pitch).toBe(LIMITS.rampPitch.max);
+    expect('pitch' in ramps[3]!).toBe(false);
+    expect(repairs.join(' ')).toMatch(/pitch/);
+  });
+
+  it('flattens a climb nobody could make, and keeps one riders have the speed for', () => {
+    // Straight off the start pad you're walking: no climbing yet.
+    const { course, repairs } = validateCourse({ ...valid(), segments: [ramp({ pitch: -8, length: 6000 }), ramp({ side: 'left' })] });
+    expect(rampsOf(course)[0]!.pitch ?? 0).toBeGreaterThanOrEqual(0);
+    expect(repairs.join(' ')).toMatch(/climb/);
+
+    const fast = [ramp({ length: 9000 }), { type: 'booster', strength: 800 }, ramp({ side: 'left', pitch: -4, length: 3000 }), ramp()];
+    expect(validateCourse({ ...valid(), segments: fast }).repairs).toEqual([]);
+  });
+
+  it('gives a level ramp its usual downhill slope back where riders would only crawl along it', () => {
+    // Off the start pad you're walking: a level ramp would keep you walking.
+    const { course, repairs } = validateCourse({ ...valid(), segments: [ramp({ pitch: 0 }), ramp({ side: 'left', pitch: 0 })] });
+    // The first goes back downhill; after it riders have the speed for the second to stay level.
+    expect(rampsOf(course).map((r) => r.pitch)).toEqual([undefined, 0]);
+    expect(repairs.join(' ')).toMatch(/too slow/);
+    // With a booster first, level is fine.
+    const boosted = [{ type: 'booster', strength: 800 }, ramp({ pitch: 0 }), ramp({ side: 'left', pitch: 0 })];
+    expect(validateCourse({ ...valid(), segments: boosted }).repairs).toEqual([]);
+  });
+
+  it('keeps walls only where a ramp follows, one per ramp', () => {
+    const { course, repairs } = validateCourse({
+      ...valid(),
+      segments: [ramp(), { type: 'wall' }, { type: 'wall' }, ramp({ side: 'left' }), { type: 'wall' }],
+    });
+    expect(course.segments.map((s) => s.type)).toEqual(['ramp', 'wall', 'ramp']);
+    expect(repairs.length).toBe(2);
+  });
+
+  it('cleans up a spiral: ramp count, angle and turn direction', () => {
+    const { course, repairs } = validateCourse({
+      ...valid(),
+      segments: [ramp(), { type: 'spiral', turn: 'sideways', ramps: 20, angle: 80 }, ramp({ side: 'left' })],
+    });
+    expect(course.segments[1]).toEqual({ type: 'spiral', turn: 'left', ramps: LIMITS.spiralRamps.max, angle: LIMITS.rampAngle.max });
+    expect(repairs.length).toBe(3);
+  });
+
   it('caps the number of segments', () => {
     const segments = Array.from({ length: 100 }, (_, i) => (i % 2 ? { type: 'booster', strength: 200 } : ramp({ length: 1500 })));
     const { course } = validateCourse({ ...valid(), segments });

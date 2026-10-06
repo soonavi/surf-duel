@@ -13,7 +13,7 @@ describe('flyover camera', () => {
   it('takes a watchable amount of time to cover the course', () => {
     const d = flyoverDuration(path);
     expect(d).toBeGreaterThan(5);
-    expect(d).toBeLessThanOrEqual(14);
+    expect(d).toBeLessThanOrEqual(45); // minute-long courses take longer
   });
 
   it('flies above the riding line, looking ahead along it', () => {
