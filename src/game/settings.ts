@@ -71,6 +71,15 @@ export function loadSettings(storage: KeyValueStorage | null = browserStorage())
   }
 }
 
+/**
+ * Whether a settings change should open the music file picker: only when the
+ * player has just picked "My music" with no file loaded, never on other
+ * changes (a volume slider sends a change for every step of a drag).
+ */
+export function wantsMusicFile(changed: keyof Settings, settings: Settings, hasFile: boolean): boolean {
+  return changed === 'music' && settings.music === 'file' && !hasFile;
+}
+
 export function saveSettings(settings: Settings, storage: KeyValueStorage | null = browserStorage()): void {
   try {
     storage?.setItem(STORAGE_KEY, JSON.stringify(settings));

@@ -26,7 +26,8 @@ const KEYS: readonly [string, string][] = [
 ];
 
 export class SettingsUi {
-  onChange: (() => void) | null = null;
+  /** A setting changed (`key` says which). */
+  onChange: ((key: keyof Settings) => void) | null = null;
   onPickMusicFile: ((file: File) => void) | null = null;
   onBack: (() => void) | null = null;
 
@@ -115,9 +116,9 @@ export class SettingsUi {
     else this.fileLine.textContent = this.settings.music === 'file' ? 'No file chosen yet (pick one each visit).' : '';
   }
 
-  private changed(): void {
+  private changed(key: keyof Settings): void {
     for (const sync of this.syncs) sync();
-    this.onChange?.();
+    this.onChange?.(key);
   }
 
   private section(title: string): HTMLElement {
@@ -136,7 +137,7 @@ export class SettingsUi {
     input.step = String(step);
     input.addEventListener('input', () => {
       this.settings[key] = Number(input.value);
-      this.changed();
+      this.changed(key);
     });
     this.syncs.push(() => {
       input.value = String(this.settings[key]);
@@ -154,7 +155,7 @@ export class SettingsUi {
     input.type = 'checkbox';
     input.addEventListener('change', () => {
       this.settings[key] = input.checked;
-      this.changed();
+      this.changed(key);
     });
     this.syncs.push(() => {
       input.checked = this.settings[key];
@@ -178,7 +179,7 @@ export class SettingsUi {
       b.setAttribute('role', 'radio');
       b.addEventListener('click', () => {
         (this.settings as unknown as Record<string, string>)[key] = value;
-        this.changed();
+        this.changed(key);
       });
       this.syncs.push(() => b.setAttribute('aria-checked', String(this.settings[key] === value)));
       group.append(b);

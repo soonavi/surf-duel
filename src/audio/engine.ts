@@ -13,7 +13,7 @@
  */
 import type { ThemeName } from '../course/schema.js';
 import { THEME_MOODS, composeSong, stepSeconds, type Mood, type Note, type Song } from './music.js';
-import { bassLevel, followPulse, mixLevels, spectrumBars } from './levels.js';
+import { bassLevel, busGains, followPulse, mixLevels, settleBars, spectrumBars } from './levels.js';
 
 export type MusicSource = 'generated' | 'file' | 'off';
 
@@ -23,10 +23,8 @@ const LAYERS: readonly Layer[] = ['pad', 'bass', 'kick', 'arp', 'hat', 'snare'];
 /** Schedule this far ahead of the audio clock (s), checking this often (ms). */
 const LOOKAHEAD = 0.15;
 const SCHEDULE_MS = 25;
-/** Overall loudness of each bus at volume 1, leaving headroom. */
-const MUSIC_TRIM = 0.55;
-const SFX_TRIM = 0.7;
-const FILE_TRIM = 0.9;
+/** The analyser: fine enough for distinct equalizer bars down to the bass. */
+const FFT_SIZE = 2048;
 
 const midiHz = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -56,12 +54,16 @@ export class AudioEngine {
   private musicVolumeNode!: GainNode;
   private musicTap!: GainNode;
   private filter!: BiquadFilterNode;
-  private fileGain!: GainNode;
   private analyser!: AnalyserNode;
   private layers = {} as Record<Layer, GainNode>;
   private echo!: GainNode;
   private noise!: AudioBuffer;
-  private freq = new Uint8Array(128);
+  private freq = new Uint8Array(FFT_SIZE / 2);
+  /** Width of one analyser bin (Hz). */
+  private binHz = 48_000 / FFT_SIZE;
+  /** The equalizer bars on screen, per bar count, and the last frame's length. */
+  private readonly shownBars = new Map<number, number[]>();
+  private frameDt = 1 / 60;
 
   private source: MusicSource = 'generated';
   private mood: Mood = THEME_MOODS.neon;
@@ -123,13 +125,18 @@ export class AudioEngine {
 
     this.musicVolumeNode = ctx.createGain();
     this.musicVolumeNode.connect(master);
-    // The tap sits before the volume, so the visuals keep moving with the music turned down.
+    // The tap sits before the volume (and its trim, which busGains sets per source),
+    // so the visuals see the same levels whatever the volume.
     this.musicTap = ctx.createGain();
     this.musicTap.connect(this.musicVolumeNode);
     this.analyser = ctx.createAnalyser();
-    this.analyser.fftSize = 256;
+    this.analyser.fftSize = FFT_SIZE;
     this.analyser.smoothingTimeConstant = 0.6;
+    // Fitted to the music's levels at the tap (loud bins near the top, quiet ones low).
+    this.analyser.minDecibels = -65;
+    this.analyser.maxDecibels = -20;
     this.freq = new Uint8Array(this.analyser.frequencyBinCount);
+    this.binHz = ctx.sampleRate / FFT_SIZE;
     this.musicTap.connect(this.analyser);
 
     this.filter = ctx.createBiquadFilter();
@@ -137,7 +144,6 @@ export class AudioEngine {
     this.filter.Q.value = 0.7;
     this.filter.connect(this.musicTap);
     const bus = ctx.createGain();
-    bus.gain.value = MUSIC_TRIM;
     bus.connect(this.filter);
     for (const layer of LAYERS) {
       const g = ctx.createGain();
@@ -156,10 +162,6 @@ export class AudioEngine {
     feedback.connect(delay);
     delay.connect(bus);
     this.echoDelay = delay;
-
-    this.fileGain = ctx.createGain();
-    this.fileGain.gain.value = FILE_TRIM;
-    this.fileGain.connect(this.musicTap);
 
     this.sfxBus = ctx.createGain();
     this.sfxBus.connect(master);
@@ -186,12 +188,15 @@ export class AudioEngine {
   private applyVolumes(): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    // Squared: sliders feel even to the ear.
-    this.musicVolumeNode.gain.setTargetAtTime(this.musicVolume ** 2, t, 0.05);
-    this.sfxBus.gain.setTargetAtTime(this.sfxVolume ** 2 * SFX_TRIM, t, 0.05);
+    const gains = busGains(this.musicVolume, this.sfxVolume);
+    this.musicVolumeNode.gain.setTargetAtTime(this.source === 'file' ? gains.file : gains.music, t, 0.05);
+    this.sfxBus.gain.setTargetAtTime(gains.sfx, t, 0.05);
   }
 
   setSource(source: MusicSource): void {
+    // The App calls this on every settings change (each step of a slider drag):
+    // restarting the clock then would cram the song's steps together.
+    if (source === this.source) return;
     this.source = source;
     this.applySource();
   }
@@ -211,6 +216,7 @@ export class AudioEngine {
       if (this.source === 'file') void this.fileEl.play().catch(() => undefined);
       else this.fileEl.pause();
     }
+    this.applyVolumes(); // a music file is trimmed differently from the generated mix
   }
 
   /**
@@ -227,7 +233,7 @@ export class AudioEngine {
     if (!this.fileNode) {
       this.fileEl = el;
       this.fileNode = ctx.createMediaElementSource(el);
-      this.fileNode.connect(this.fileGain);
+      this.fileNode.connect(this.musicTap);
     }
     const url = URL.createObjectURL(file);
     el.src = url;
@@ -511,7 +517,9 @@ export class AudioEngine {
     this.intensity += (this.targetIntensity - this.intensity) * Math.min(1, dt * 1.5);
     this.applyMix(false);
     this.analyser.getByteFrequencyData(this.freq);
-    this.pulseValue = followPulse(this.pulseValue, Math.max(0, bassLevel(this.freq) - 0.35) / 0.65, dt);
+    this.frameDt = dt;
+    // A steady glow (~0.65) that swells toward 0.9 with the kick and bass: fitted to the analyser's levels.
+    this.pulseValue = followPulse(this.pulseValue, Math.min(1, 0.6 + 0.55 * bassLevel(this.freq, this.binHz)), dt);
   }
 
   private applyMix(immediate: boolean): void {
@@ -523,9 +531,11 @@ export class AudioEngine {
     this.filter.frequency.setTargetAtTime(levels.cutoffHz, t, tc);
   }
 
-  /** `count` equalizer bars (0–1) from the music right now. */
+  /** `count` equalizer bars (0–1) from the music right now, eased. Call once per frame per equalizer. */
   bars(count: number): number[] {
     if (!this.ctx) return new Array<number>(count).fill(0);
-    return spectrumBars(this.freq, count);
+    const shown = settleBars(this.shownBars.get(count) ?? [], spectrumBars(this.freq, count, this.binHz), this.frameDt);
+    this.shownBars.set(count, shown);
+    return shown;
   }
 }

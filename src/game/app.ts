@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FixedStepLoop } from './loop.js';
 import { Input } from './input.js';
-import { loadSettings, saveSettings, type Settings } from './settings.js';
+import { loadSettings, saveSettings, wantsMusicFile, type Settings } from './settings.js';
 import { applyMouseLook, wrapAngle, type ViewAngles } from './view.js';
 import { noclipStep } from './noclip.js';
 import { RaceSession } from './race.js';
@@ -279,9 +279,9 @@ export class App {
 
     this.settingsUi = new SettingsUi(this.settings);
     this.overlay.registerScreen('settings', this.settingsUi.screen);
-    this.settingsUi.onChange = () => {
+    this.settingsUi.onChange = (key) => {
       // Picking "My music" with no file yet opens the file picker (still inside the click).
-      if (this.settings.music === 'file' && !this.audio.hasFile) this.settingsUi.pickFile();
+      if (wantsMusicFile(key, this.settings, this.audio.hasFile)) this.settingsUi.pickFile();
       this.applySettings();
     };
     this.settingsUi.onPickMusicFile = (file) => void this.useMusicFile(file);

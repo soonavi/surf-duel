@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings } from './settings.js';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, wantsMusicFile } from './settings.js';
 import type { KeyValueStorage } from './records.js';
 
 class MemoryStorage implements KeyValueStorage {
@@ -52,5 +52,21 @@ describe('settings', () => {
     };
     expect(loadSettings(broken)).toEqual(DEFAULT_SETTINGS);
     expect(() => saveSettings(DEFAULT_SETTINGS, broken)).not.toThrow();
+  });
+});
+
+describe('wantsMusicFile', () => {
+  const myMusic = { ...DEFAULT_SETTINGS, music: 'file' as const };
+
+  it('opens the file picker when "My music" is chosen and there is no file yet', () => {
+    expect(wantsMusicFile('music', myMusic, false)).toBe(true);
+    expect(wantsMusicFile('music', myMusic, true)).toBe(false);
+    expect(wantsMusicFile('music', DEFAULT_SETTINGS, false)).toBe(false);
+  });
+
+  it('never opens it for other settings, e.g. while a volume slider is dragged', () => {
+    for (const key of ['musicVolume', 'sfxVolume', 'sensitivity', 'fov', 'graphics', 'assist'] as const) {
+      expect(wantsMusicFile(key, myMusic, false), key).toBe(false);
+    }
   });
 });
