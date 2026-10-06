@@ -2,6 +2,8 @@
 
 Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, deadline Oct 30 2026 11:59 PM PT). Full spec and phase plan: [docs/SPEC.md](docs/SPEC.md).
 
+**Resuming work? Read [docs/HANDOFF.md](docs/HANDOFF.md) first:** current state, open items, IDs, and tooling gotchas on this machine.
+
 ## Ground rules (from the user)
 - Work phase by phase. Stop at the end of each phase, give exact test steps, wait for go-ahead. Commit after each phase.
 - Keep physics pure and unit-tested (vitest). Physics functions take `PhysicsParams`; only the game layer reads the live `physics` object.
