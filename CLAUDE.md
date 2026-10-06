@@ -60,6 +60,7 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Audio only starts on a user gesture (`AudioEngine.unlock`, wired to the first pointerdown/keydown). Every engine call is a no-op before that.
 - Levels live in `busGains` (levels.ts): music sits ~10 dB under the effects (user, Oct 2026: music was "MUCH too loud"; measured in Chrome, not by ear). `applySettings` runs on every step of a slider drag, so engine setters must be cheap and idempotent: never restart the music clock unless the source actually changes (`engine.test.ts` checks the tempo holds).
 - The player's own music file is played from a blob URL and never uploaded; it isn't persisted between visits.
+- Every open game window has its own AudioEngine. Settings sync across windows through the `storage` event (`settingsFromOtherWindow`); a synced change is applied with `applySettings(false)` (never re-saved).
 - `BEAT_PULSE` (render/materials.ts) is one shared uniform object for every course material; respect `prefers-reduced-motion` (pulse, equalizers, FOV/roll changes off).
 - Assist mode (`game/assist.ts`) must never raise `maxVelocity`: the leaderboard's `runCheck` assumes the default cap for every run.
 

@@ -22,6 +22,26 @@ All three were fixed in `b089bee`, test-first. Tests: 426 passing.
 
 **Not yet confirmed by the user:** they haven't heard the fix. Everything was measured, not heard. Ask how it sounds before changing levels again. If it's now too quiet, raise `MUSIC_TRIM` in `levels.ts`; the test caps it at ≈0.063 at the default volume, so adjust the test's intent with the user.
 
+### Follow-up after resuming (Oct 6)
+
+The user then reported:
+- their uploaded song was too loud;
+- the slider didn't change it;
+- "Off" didn't stop the generated music.
+
+**None of this reproduced** in the browser pane, on either the dev build or the live site. The checks went through the real file input, the chips and slider drags:
+- the song routed through the volume stage, with gain 0.25 at 100% and 0.01 at 20%;
+- "Off" paused the file and stopped the scheduler.
+
+The one cause that explains all three symptoms is the game open in **two windows**, perhaps from the two-player test. Each window has its own AudioEngine, and settings only applied in the window where they were changed. Fixed: settings now sync across windows via the `storage` event (`settingsFromOtherWindow`, tested), and this was verified with a second instance in a frame.
+
+**Still unconfirmed:** whether the user really had two windows open. If they report the problem again with **one** window, ask:
+- which browser (Firefox, Edge, Chrome);
+- live site or local;
+- the exact click sequence.
+
+Only Chromium has been tested.
+
 ## Phase status
 
 | Phase | State |

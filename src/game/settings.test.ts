@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, wantsMusicFile } from './settings.js';
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, settingsFromOtherWindow, wantsMusicFile } from './settings.js';
 import type { KeyValueStorage } from './records.js';
 
 class MemoryStorage implements KeyValueStorage {
@@ -52,6 +52,24 @@ describe('settings', () => {
     };
     expect(loadSettings(broken)).toEqual(DEFAULT_SETTINGS);
     expect(() => saveSettings(DEFAULT_SETTINGS, broken)).not.toThrow();
+  });
+});
+
+describe('settingsFromOtherWindow', () => {
+  it('reads settings saved by another open game window', () => {
+    const storage = new MemoryStorage();
+    const changed = { ...DEFAULT_SETTINGS, music: 'off' as const, musicVolume: 0.2 };
+    saveSettings(changed, storage);
+    const raw = storage.getItem('surfduel.settings.v1');
+    expect(settingsFromOtherWindow('surfduel.settings.v1', raw)).toEqual(changed);
+  });
+
+  it('ignores other keys, cleared storage and damaged values', () => {
+    expect(settingsFromOtherWindow('surfduel.player.v1', '{"music":"off"}')).toBeNull();
+    expect(settingsFromOtherWindow(null, null)).toBeNull();
+    expect(settingsFromOtherWindow('surfduel.settings.v1', null)).toBeNull();
+    expect(settingsFromOtherWindow('surfduel.settings.v1', '{not json')).toBeNull();
+    expect(settingsFromOtherWindow('surfduel.settings.v1', '{"music":"loud"}')).toBeNull();
   });
 });
 

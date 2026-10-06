@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FixedStepLoop } from './loop.js';
 import { Input } from './input.js';
-import { loadSettings, saveSettings, wantsMusicFile, type Settings } from './settings.js';
+import { loadSettings, saveSettings, settingsFromOtherWindow, wantsMusicFile, type Settings } from './settings.js';
 import { applyMouseLook, wrapAngle, type ViewAngles } from './view.js';
 import { noclipStep } from './noclip.js';
 import { RaceSession } from './race.js';
@@ -285,6 +285,13 @@ export class App {
       this.applySettings();
     };
     this.settingsUi.onPickMusicFile = (file) => void this.useMusicFile(file);
+    // Every open game window plays its own music: follow settings changed in another one.
+    window.addEventListener('storage', (e) => {
+      const changed = settingsFromOtherWindow(e.key, e.newValue);
+      if (!changed) return;
+      Object.assign(this.settings, changed);
+      this.applySettings(false);
+    });
     this.settingsUi.onBack = () => this.closeSettings();
     this.overlay.onOpenSettings = () => this.openSettings();
     // Browsers only allow sound after a user gesture: start it on the first one.
@@ -462,15 +469,15 @@ export class App {
 
   // --- settings & dev --------------------------------------------------------
 
-  /** Push changed settings into the renderer and persist them. */
-  applySettings(): void {
+  /** Push changed settings into the renderer and audio, and persist them (unless they came from storage). */
+  applySettings(save = true): void {
     this.fovNow = this.settings.fov;
     this.view.setFov(this.settings.fov);
     this.view.setQuality(this.settings.graphics);
     this.audio.setVolumes(this.settings.musicVolume, this.settings.sfxVolume);
     // "My music" with no file picked this visit plays the generated music until one is.
     this.audio.setSource(this.settings.music === 'file' && !this.audio.hasFile ? 'generated' : this.settings.music);
-    saveSettings(this.settings);
+    if (save) saveSettings(this.settings);
     this.settingsUi?.refresh(this.audio.fileName, this.musicFileProblem);
   }
 

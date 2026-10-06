@@ -60,15 +60,33 @@ const StoredSettings = z
   })
   .partial();
 
+/** Stored settings over the defaults, or null if `raw` is missing or damaged. */
+function parseSettings(raw: string | null): Settings | null {
+  if (!raw) return null;
+  try {
+    const parsed = StoredSettings.safeParse(JSON.parse(raw));
+    return parsed.success ? { ...DEFAULT_SETTINGS, ...parsed.data } : null;
+  } catch {
+    return null;
+  }
+}
+
 export function loadSettings(storage: KeyValueStorage | null = browserStorage()): Settings {
   try {
-    const raw = storage?.getItem(STORAGE_KEY) ?? null;
-    if (!raw) return { ...DEFAULT_SETTINGS };
-    const parsed = StoredSettings.safeParse(JSON.parse(raw));
-    return parsed.success ? { ...DEFAULT_SETTINGS, ...parsed.data } : { ...DEFAULT_SETTINGS };
+    return parseSettings(storage?.getItem(STORAGE_KEY) ?? null) ?? { ...DEFAULT_SETTINGS };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
+}
+
+/**
+ * Settings another open game window just saved (from a `storage` event's key
+ * and new value), or null if the event is about something else. Every window
+ * plays its own music, so they must follow each other's settings: "Off" in
+ * one would otherwise leave the music playing in the other.
+ */
+export function settingsFromOtherWindow(key: string | null, newValue: string | null): Settings | null {
+  return key === STORAGE_KEY ? parseSettings(newValue) : null;
 }
 
 /**
