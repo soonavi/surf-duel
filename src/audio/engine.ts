@@ -25,6 +25,9 @@ const LOOKAHEAD = 0.15;
 const SCHEDULE_MS = 25;
 /** The analyser: fine enough for distinct equalizer bars down to the bass. */
 const FFT_SIZE = 2048;
+/** The biggest music file we'll decode: a long MP3 song, a short WAV. */
+export const MAX_MUSIC_FILE_MB = 30;
+const MAX_FILE_BYTES = MAX_MUSIC_FILE_MB * 1024 * 1024;
 
 const midiHz = (m: number): number => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -81,9 +84,12 @@ export class AudioEngine {
   private sfxVolume = 0.8;
   private pulseValue = 0;
 
-  private fileEl: HTMLAudioElement | null = null;
-  private fileNode: MediaElementAudioSourceNode | null = null;
-  private fileUrl: string | null = null;
+  /** The player's own song, decoded, and the voice playing it (null while stopped). */
+  private fileBuffer: AudioBuffer | null = null;
+  private fileVoice: AudioBufferSourceNode | null = null;
+  /** Where in the song it stopped (s), and the audio-clock time it would have started at 0. */
+  private fileOffset = 0;
+  private fileStartedAt = 0;
   fileName: string | null = null;
 
   /** True once audio is running. */
@@ -210,47 +216,57 @@ export class AudioEngine {
     } else {
       this.releasePads(this.ctx.currentTime);
     }
-    if (this.fileEl) {
-      if (this.source === 'file') void this.fileEl.play().catch(() => undefined);
-      else this.fileEl.pause();
-    }
+    if (this.source === 'file') this.startFile();
+    else this.stopFile();
     this.applyVolumes(); // a music file is trimmed differently from the generated mix
   }
 
   /**
-   * Play the player's own music file (looped). It's read locally from the
-   * file they picked and never uploaded anywhere. Resolves false if the
-   * browser can't play it.
+   * Play the player's own music file (looped). It's read locally from the file
+   * they picked and never uploaded anywhere. It's decoded and played inside the
+   * graph, never through an audio element: extensions such as equalizers hook
+   * HTMLMediaElement.play and play the element again in their own AudioContext,
+   * at full volume and out of reach of the music volume (Firefox allows it).
+   * Resolves false if the file can't be played.
    */
   async loadFile(file: File): Promise<boolean> {
     this.unlock();
     const ctx = this.ctx;
-    if (!ctx) return false;
-    const el = this.fileEl ?? new Audio();
-    el.loop = true;
-    if (!this.fileNode) {
-      this.fileEl = el;
-      this.fileNode = ctx.createMediaElementSource(el);
-      this.fileNode.connect(this.musicTap);
-    }
-    const url = URL.createObjectURL(file);
-    el.src = url;
+    // Decoded audio takes ~23 MB a minute: refuse files that would decode to gigabytes.
+    if (!ctx || file.size > MAX_FILE_BYTES) return false;
+    let song: AudioBuffer;
     try {
-      await el.play();
+      song = await ctx.decodeAudioData(await file.arrayBuffer());
     } catch {
-      // Unplayable: keep the track that was playing before, if any.
-      URL.revokeObjectURL(url);
-      if (this.fileUrl) {
-        el.src = this.fileUrl;
-        if (this.source === 'file') void el.play().catch(() => undefined);
-      }
-      return false;
+      return false; // Unplayable: keep the song that was playing, if any.
     }
-    if (this.fileUrl) URL.revokeObjectURL(this.fileUrl);
-    this.fileUrl = url;
+    this.stopFile();
+    this.fileBuffer = song;
+    this.fileOffset = 0;
     this.fileName = file.name;
-    if (this.source !== 'file') el.pause();
+    if (this.source === 'file') this.startFile();
     return true;
+  }
+
+  private startFile(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.fileBuffer || this.fileVoice) return;
+    const voice = ctx.createBufferSource();
+    voice.buffer = this.fileBuffer;
+    voice.loop = true;
+    voice.connect(this.musicTap);
+    voice.start(ctx.currentTime, this.fileOffset);
+    this.fileStartedAt = ctx.currentTime - this.fileOffset;
+    this.fileVoice = voice;
+  }
+
+  /** Stop the song, remembering where, so it carries on from there. */
+  private stopFile(): void {
+    if (!this.ctx || !this.fileVoice || !this.fileBuffer) return;
+    this.fileOffset = (this.ctx.currentTime - this.fileStartedAt) % this.fileBuffer.duration;
+    this.fileVoice.stop();
+    this.fileVoice.disconnect();
+    this.fileVoice = null;
   }
 
   get hasFile(): boolean {

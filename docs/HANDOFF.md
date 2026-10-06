@@ -46,7 +46,7 @@ After the wind went, the user still reported the song "almost painfully loud" an
 - A second Firefox test reproduced the user's real conditions: default autoplay settings, real clicks on ⚙ Settings, and a real file selection (`input.setFiles`). The song still went through the volume stage.
 - The user's own Firefox profile has no audio or privacy prefs changed. Their Firefox has been open since 09:51, before every audio fix.
 - **Leading theory:** an older Surf Duel tab or window, still running pre-fix code with the song loaded. Old code played the file ~11 dB louder, and it doesn't sync settings, so the new tab's slider can't touch it.
-- **Asked the user** to check Firefox's speaker icons and close every Surf Duel tab but one. If it's still loud with one tab, ask for the song's file type and whether it happens on the settings screen or only in a race.
+- **Root cause (found):** the user's "Audio Equalizer" Firefox extension. It patches `Audio.prototype.play` and captures every played audio element into its own AudioContext, straight to the speakers. Firefox allows a second `createMediaElementSource`. A copy of its hook in the hidden Firefox reproduced it exactly: the extension's copy played at the full source level whatever the slider. **Fixed:** the song is now decoded and played as an AudioBufferSourceNode, with no media element. Verified in Firefox with the hook installed (it's never called; the song follows the slider). `engine.test.ts` covers the routing, pause and resume, bad files and the size cap.
 
 ## Phase status
 

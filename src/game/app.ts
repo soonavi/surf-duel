@@ -50,7 +50,7 @@ import { GeneratorUi } from '../ui/generator.js';
 import { flyoverFade, flyoverPose } from '../render/flyover.js';
 import { BEAT_PULSE } from '../render/materials.js';
 import { COVER_HEIGHT, COVER_WIDTH, buildCoverRider, coverShot, drawCoverTitle, type CoverShot } from '../render/cover.js';
-import { AudioEngine } from '../audio/engine.js';
+import { AudioEngine, MAX_MUSIC_FILE_MB } from '../audio/engine.js';
 import { assistCommand, assistedPhysics } from './assist.js';
 import { approachRoll, speedFov, speedLines } from './feel.js';
 import { SpeedLines } from '../render/speedLines.js';
@@ -494,7 +494,7 @@ export class App {
   /** The player's own music: played from their disk, never uploaded. */
   private async useMusicFile(file: File): Promise<void> {
     const ok = await this.audio.loadFile(file);
-    this.musicFileProblem = ok ? '' : "Couldn't play that file. Try an MP3, OGG, WAV or M4A.";
+    this.musicFileProblem = ok ? '' : `Couldn't play that file. Try an MP3, OGG, WAV or M4A under ${MAX_MUSIC_FILE_MB} MB.`;
     if (ok) this.settings.music = 'file';
     else if (!this.audio.hasFile && this.settings.music === 'file') this.settings.music = 'generated';
     this.applySettings();

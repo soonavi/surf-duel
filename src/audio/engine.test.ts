@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudioEngine } from './engine.js';
+import { busGains } from './levels.js';
 import { THEME_MOODS, composeSong, stepSeconds } from './music.js';
 
 /**
@@ -31,25 +32,38 @@ class FakeParam {
 }
 
 class FakeNode {
+  readonly outputs: unknown[] = [];
+  gain?: FakeParam;
   constructor(protected readonly ctx: FakeContext) {}
   connect<T>(dest: T): T {
+    this.outputs.push(dest);
     return dest;
   }
-  disconnect(): void {}
+  disconnect(): void {
+    this.outputs.length = 0;
+  }
 }
 
 class FakeSource extends FakeNode {
   type = 'sine';
   buffer: unknown = null;
   loop = false;
+  offset = 0;
+  stopped = false;
   onended: (() => void) | null = null;
   readonly frequency = new FakeParam();
   readonly detune = new FakeParam();
-  start(when = 0): void {
+  start(when = 0, offset = 0): void {
     this.ctx.starts.push(when);
+    this.offset = offset;
   }
-  stop(): void {}
+  stop(): void {
+    this.stopped = true;
+  }
 }
+
+/** What decodeAudioData makes of a music file: three minutes of song. */
+const SONG = { duration: 180 };
 
 class FakeContext {
   static last: FakeContext | null = null;
@@ -58,6 +72,8 @@ class FakeContext {
   readonly sampleRate = 48_000;
   readonly destination = {};
   readonly starts: number[] = [];
+  readonly bufferSources: FakeSource[] = [];
+  decoded = 0;
 
   constructor() {
     FakeContext.last = this;
@@ -96,11 +112,32 @@ class FakeContext {
     return new FakeSource(this);
   }
   createBufferSource() {
-    return new FakeSource(this);
+    const source = new FakeSource(this);
+    this.bufferSources.push(source);
+    return source;
   }
-  createMediaElementSource() {
-    return new FakeNode(this);
+  /** An empty file stands in for one the browser can't decode. */
+  decodeAudioData(data: ArrayBuffer): Promise<typeof SONG> {
+    this.decoded++;
+    return data.byteLength > 0 ? Promise.resolve(SONG) : Promise.reject(new Error('EncodingError'));
   }
+}
+
+function musicFile(name: string, bytes = 8, size = 5_000_000): File {
+  return { name, size, arrayBuffer: () => Promise.resolve(new ArrayBuffer(bytes)) } as unknown as File;
+}
+
+/** The song now playing: the last buffer source given the decoded song and not stopped. */
+function playingSong(ctx: FakeContext): FakeSource | undefined {
+  return ctx.bufferSources.filter((s) => s.buffer === SONG && !s.stopped).at(-1);
+}
+
+/** The overall gain along every path from `node` to the speakers. */
+function gainsToSpeakers(node: unknown, ctx: FakeContext, gain = 1): number[] {
+  if (node === ctx.destination) return [gain];
+  if (!(node instanceof FakeNode)) return [];
+  const here = gain * (node.gain?.value ?? 1);
+  return node.outputs.flatMap((next) => gainsToSpeakers(next, ctx, here));
 }
 
 let intervals: Map<number, () => void>;
@@ -151,5 +188,62 @@ describe('AudioEngine', () => {
     const times = [...new Set(ctx.starts)];
     expect(times.length).toBeGreaterThan(10);
     for (let i = 1; i < times.length; i++) expect(times[i]! - times[i - 1]!, `gap ${i}`).toBeGreaterThan(step * 0.99);
+  });
+});
+
+describe('AudioEngine: your own music file', () => {
+  // Browser extensions (e.g. "Audio Equalizer") hook HTMLMediaElement.play and route every
+  // audio element into their own AudioContext, straight to the speakers at full volume;
+  // Firefox lets them. So the song never touches a media element: there's no Audio in
+  // this test environment, and using one fails.
+  it('plays the song inside its own graph, once, at the music volume', async () => {
+    const engine = new AudioEngine();
+    engine.setVolumes(0.6, 0.8);
+    engine.unlock();
+    const ctx = FakeContext.last!;
+    expect(await engine.loadFile(musicFile('song.mp3'))).toBe(true);
+    engine.setSource('file');
+
+    const song = playingSong(ctx)!;
+    expect(song.loop).toBe(true);
+    expect(gainsToSpeakers(song, ctx)).toEqual([expect.closeTo(busGains(0.6, 0.8).file, 9)]);
+    engine.setVolumes(0.2, 0.8);
+    expect(gainsToSpeakers(song, ctx)).toEqual([expect.closeTo(busGains(0.2, 0.8).file, 9)]);
+  });
+
+  it('carries on where it was when the music is turned off and back on', async () => {
+    const engine = new AudioEngine();
+    engine.unlock();
+    const ctx = FakeContext.last!;
+    await engine.loadFile(musicFile('song.mp3'));
+    engine.setSource('file');
+    ctx.currentTime += 30;
+    engine.setSource('off');
+    expect(playingSong(ctx)).toBeUndefined();
+    ctx.currentTime += 10;
+    engine.setSource('file');
+    expect(playingSong(ctx)!.offset).toBeCloseTo(30, 6);
+  });
+
+  it("keeps the song that was playing when a new file can't be played", async () => {
+    const engine = new AudioEngine();
+    engine.unlock();
+    const ctx = FakeContext.last!;
+    await engine.loadFile(musicFile('good.mp3'));
+    engine.setSource('file');
+    const before = playingSong(ctx);
+
+    expect(await engine.loadFile(musicFile('broken.mp3', 0))).toBe(false);
+    expect(engine.fileName).toBe('good.mp3');
+    expect(playingSong(ctx)).toBe(before);
+  });
+
+  it('refuses a file too big to decode safely, without decoding it', async () => {
+    const engine = new AudioEngine();
+    engine.unlock();
+    const ctx = FakeContext.last!;
+    expect(await engine.loadFile(musicFile('three-hour-mix.mp3', 8, 200_000_000))).toBe(false);
+    expect(ctx.decoded).toBe(0);
+    expect(engine.hasFile).toBe(false);
   });
 });
