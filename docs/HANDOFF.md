@@ -42,7 +42,11 @@ Then, still Oct 6:
 - The user asked to remove the wind that rose with speed (`d806588`). The wind is probably what they heard as "my song is much too loud and the slider doesn't control it", since it sat on the effects bus.
 - **Firefox 157 (the user's default browser) was checked through the real file input on the live site.** The song goes through the volume stage (gain 0.09 at 60%, 0.01 at 20%, 0.25 at 100%), the same as in Chromium.
 
-If the song is still too loud now, lower `FILE_TRIM` in `levels.ts`.
+After the wind went, the user still reported the song "almost painfully loud" and unchanged by the slider. The live deploy was confirmed current.
+- A second Firefox test reproduced the user's real conditions: default autoplay settings, real clicks on ⚙ Settings, and a real file selection (`input.setFiles`). The song still went through the volume stage.
+- The user's own Firefox profile has no audio or privacy prefs changed. Their Firefox has been open since 09:51, before every audio fix.
+- **Leading theory:** an older Surf Duel tab or window, still running pre-fix code with the song loaded. Old code played the file ~11 dB louder, and it doesn't sync settings, so the new tab's slider can't touch it.
+- **Asked the user** to check Firefox's speaker icons and close every Surf Duel tab but one. If it's still loud with one tab, ask for the song's file type and whether it happens on the settings screen or only in a race.
 
 ## Phase status
 
