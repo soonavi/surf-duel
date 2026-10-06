@@ -57,10 +57,16 @@ describe('busGains', () => {
     // as the countdown beep (RMS ~0.08 vs ~0.09 at an effects bus gain of 0.45). Music
     // is background: at least 10 dB quieter than that.
     const g = busGains(0.6, 0.8);
-    expect(g.sfx).toBeCloseTo(0.448, 3);
     expect(g.music).toBeLessThanOrEqual(0.2 * 10 ** (-10 / 20));
     // A mastered music file is about as loud as the generated mix flat out: trim it to match.
     expect(g.file).toBeLessThanOrEqual(g.music * 1.5);
+  });
+
+  it('plays the effects a notch under the level the beep was measured at', () => {
+    // User, Oct 6 2026: the effects at 0.448 were "a little too loud". About 3 dB less.
+    const db = 20 * Math.log10(busGains(0.6, 0.8).sfx / 0.448);
+    expect(db).toBeLessThanOrEqual(-2.5);
+    expect(db).toBeGreaterThanOrEqual(-4);
   });
 });
 

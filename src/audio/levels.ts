@@ -48,11 +48,12 @@ export function speedIntensity(speed: number): number {
  * Each bus's gain at full volume. Music is background: measured in Chrome, the
  * generated soundtrack at a bus gain of 0.2 was as loud as the countdown beep,
  * so it sits well under that. A mastered music file is about as loud as the
- * generated mix flat out.
+ * generated mix flat out. The effects were "a little too loud" at 0.7 (user,
+ * Oct 2026): 0.5 is about 3 dB quieter.
  */
 const MUSIC_TRIM = 0.17;
 const FILE_TRIM = 0.25;
-const SFX_TRIM = 0.7;
+const SFX_TRIM = 0.5;
 
 /** Bus gains for the volume sliders (0–1), squared so the sliders feel even to the ear. */
 export function busGains(music: number, sfx: number): { music: number; file: number; sfx: number } {
