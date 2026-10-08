@@ -29,6 +29,11 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - A cautious rider (speed model `lo`) must arrive above the next ramp's **ridge** + clearance; alternating-side transitions add `SLIDE_TOLERANCE·(tanθprev + tanθnext)` because sliding down one face moves you toward the next ridge.
 - Ramps after pads tuck under the pad (no gap to fall through). Ramps stay straight through the fast rider's landing zone, then curve.
 - Checkpoints are fly-through gates (user decision, Oct 4 2026 — no landing pads). Respawns put you on the next ramp's face at the cautious speed `lo`; tests restart from every checkpoint.
+- **Checkpoints count only in order, and the finish only after all of them** (user, Oct 8 2026: you could drop from Spire's spiral entry straight to its exit).
+  - Skipping one raises a `missed` event: "Missed checkpoint N: press R to go back".
+  - That made missed gates matter, so gates face along the track (only round a spiral do they face the chord across its gap). A gate faced along the chord of a big sideways transfer turned almost sideways, and riders flew past it.
+  - Their triggers reach `TRIGGER_HEADROOM` above the arch: flying clean over a gate still counts.
+  - Every spiral has a gate halfway round.
 - Ramp angles are capped at 60° (user: hard-mode 64–70° ramps were "much too steep"); difficulty comes from speed, curves, drops, narrower faces and sideways transfers instead.
 - **Four difficulties: easy, medium, hard, expert** (user, Oct 6 2026: the old hard maps were easy, and they must need real skill).
   - **Easy and medium** are guaranteed for the *cautious* bot, which never air-strafes.
@@ -48,7 +53,14 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
   - The layout stretches short ramps to catch fast riders (a 1,750 climb became 7,263). `placeRamp` eases a stretched climb the same way, over its real length; it once stopped the modelled rider dead and crashed the layout. Transfers also never assume a rider slower than walking pace.
   - `builder.test.ts` lays out 300 seeded AI-shaped courses (`aiShapedCourses.ts`: walls, spirals, steep climbs, big boosters, every difficulty) and they must all build with finite geometry.
 - **Walls and spirals** (hand-made first; the AI got them on Oct 8 2026, user: "give the AI walls and spirals now").
-  - **`wall`**: stands across the next ramp, past the fastest rider's landing plus `WALL_SETTLE`. Its window spans `windowSlack` either side of the riding line (520, 460, 260, 200 by difficulty). Off the line, you hit it. Easy and medium are wide because a rider who doesn't air-strafe settles ~400 off the line at 3,000+ u/s; air-strafers hold the line.
+  - **`wall`** (rebuilt Oct 8 2026; user: walls were "too easy", and their frames shouldn't be connected to the ramps): a free-standing wall `WALL_GATE_AFTER` (200) past the *end* of the next ramp.
+    - Its window is `windowSlack` (190, 160, 95, 70) either side of a point on the face.
+    - The window alternates between low down the face (0.56 of its width) and high. On hard and expert, high is half a window above the riding line; on easy and medium, it's centred on the line plus `CAUTIOUS_SAG`, because riders who don't air-strafe skim the face at speed and can't climb.
+    - On a two-sided ridge the window is round the ridge. Where you leave the face is where you fly through.
+    - **A walled ramp runs straight**: on a bend, fast riders are flung over the ridge or slide down. It's long enough for a rider at 1.2× the speed cap to land and still line up for 0.9 s (`wallRunUp`).
+    - **Nothing touches the wall**: the next piece starts ≥ 500 beyond it (`clearWall`), and a booster just after it moves on.
+    - **No sideways transfer right after a wall**: you fly straight through the window, and that's the jump's challenge.
+    - The bot rides at the window's height on a walled ramp, and doesn't air-strafe until it's through.
   - **`spiral`**: one full turn of ramps round a tower, radius `SPIRAL_RADIUS` (5600, kept wide for the flyover camera).
     - Its ramps are nearly level (`SPIRAL_PITCH_DEG`), and you hold toward the tower.
     - Its gaps shrink to what its slowest rider can cross.

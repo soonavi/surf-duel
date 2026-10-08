@@ -11,6 +11,7 @@
  */
 import { Vector3 } from 'three';
 import type { BuiltCourse } from './builder.js';
+import { RIDGE_RIDE, WALL_GATE_AFTER, forwardOf, type WallPiece } from './layout.js';
 import { needsAirStrafe } from './tuning.js';
 import type { MoveCmd, PlayerState } from '../physics/player.js';
 
@@ -38,19 +39,26 @@ function wrapPi(a: number): number {
 /** Slack around the riding line before the bot corrects. */
 const RIDE_TOLERANCE = 25;
 /** On a two-sided ramp the riding line is the ridge; ride this far below it. */
-const BOTH_RIDE_OFFSET = 120;
+const BOTH_RIDE_OFFSET = RIDGE_RIDE;
+/** Past a wall's plane by this much, it's behind us. */
+const WALL_PASSED = 60;
 /** Only bunny-hop when already moving faster than this (hopping can't build speed from rest). */
 const HOP_MIN_SPEED = 400;
 
 export class SurfBot {
   private hint = 0;
   private readonly airStrafes: boolean;
+  /** Ramps with a wall past their end (ride at its window's height on the face to fly through it). */
+  private readonly walls = new Map<number, WallPiece>();
+  /** The ramp we last surfed. */
+  private lastRamp = -1;
 
   constructor(
     private readonly built: BuiltCourse,
     private readonly style: BotStyle = { hop: false },
   ) {
     this.airStrafes = style.airStrafe ?? needsAirStrafe(built.course.difficulty);
+    for (const p of built.pieces) if (p.kind === 'wall') this.walls.set(p.ramp, p);
   }
 
   /** Call after teleporting the player (respawn). */
@@ -79,14 +87,27 @@ export class SurfBot {
       return { forward: 1, side: 0, jump: this.style.hop && fast, yaw };
     }
 
-    if (this.airStrafes && !state.surfing) return this.airStrafe(state, hit.s);
+    if (state.surfing && piece?.kind === 'ramp') this.lastRamp = hit.sample.piece;
+    // Once down on a walled ramp, keep lining up for its window even when skimming off the face
+    // (strafing in the air would pull us back to the usual line).
+    const liningUp = this.walls.has(hit.sample.piece) && this.lastRamp === hit.sample.piece;
+    if (this.airStrafes && !state.surfing && !liningUp) {
+      // Off the end of a walled ramp: fly straight through the window first, like a player would,
+      // then strafe for the next ramp. (Before the end we're only hopping along the face.)
+      const wall = this.walls.get(this.lastRamp);
+      const along = wall ? state.pos.clone().sub(wall.pos).dot(forwardOf(wall.heading)) : Infinity;
+      if (along > -WALL_GATE_AFTER && along < WALL_PASSED) {
+        return { forward: 0, side: 0, jump: false, yaw: Math.atan2(-state.vel.x, -state.vel.z) };
+      }
+      return this.airStrafe(state, hit.s);
+    }
     if (piece?.kind !== 'ramp') return { forward: 0, side: 0, jump: false, yaw };
 
     // Surf whichever face we're actually on — like a person who lands just
     // past the ridge. `fromRidge` < 0 means the ridge is to our right.
     const fromRidge = hit.lateral - piece.centerOffset;
     const ridgeDir = fromRidge < 0 ? 1 : -1;
-    const targetRide = piece.side === 'both' ? BOTH_RIDE_OFFSET : piece.ride;
+    const targetRide = piece.side === 'both' ? BOTH_RIDE_OFFSET : (this.walls.get(hit.sample.piece)?.target ?? piece.ride);
     // How much further from the ridge we are than we want to be.
     const outward = Math.abs(fromRidge) - targetRide;
     const side = outward > -RIDE_TOLERANCE ? ridgeDir : 0;

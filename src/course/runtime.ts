@@ -14,7 +14,9 @@ export type CourseEvent =
   | { type: 'checkpoint'; index: number }
   | { type: 'booster'; index: number }
   | { type: 'finish' }
-  | { type: 'kill' };
+  | { type: 'kill' }
+  /** A checkpoint or the finish reached without passing checkpoint `index`: it doesn't count. */
+  | { type: 'missed'; index: number };
 
 /** Is point `p` inside the trigger's heading-aligned box? */
 export function triggerContains(t: Trigger, p: Vector3): boolean {
@@ -138,17 +140,24 @@ export class CourseRuntime {
         applyBoost(state.vel, t.heading, t.strength);
         events.push({ type: 'booster', index: t.index });
         break;
+      // Checkpoints count only in order, and the finish only after all of them (user, Oct 8 2026:
+      // you could drop straight from Spire's spiral entry to its exit). Skipping one is reported.
       case 'checkpoint':
-        if (t.index > this.lastCheckpoint) {
+        if (t.index === this.lastCheckpoint + 1) {
           this.lastCheckpoint = t.index;
           events.push({ type: 'checkpoint', index: t.index });
+        } else if (t.index > this.lastCheckpoint + 1) {
+          events.push({ type: 'missed', index: this.lastCheckpoint + 1 });
         }
         break;
       case 'finish':
-        if (!this.finished) {
-          this.finished = true;
-          events.push({ type: 'finish' });
+        if (this.finished) break;
+        if (this.lastCheckpoint < this.built.checkpoints.length - 1) {
+          events.push({ type: 'missed', index: this.lastCheckpoint + 1 });
+          break;
         }
+        this.finished = true;
+        events.push({ type: 'finish' });
         break;
       case 'start':
         break;

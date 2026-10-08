@@ -104,7 +104,20 @@ The user: "give the AI walls and spirals now".
 - **Live check.** 25 more generations (lifetime 50 → 75; 60 used today out of the 150 a day). Every course came out beatable in 34–74 s with 0 deaths, about 1 s of riding per request, 5–7 s in total. They also met the new 2-minute limit, which tames courses that crawl: one Hard pink course took 165 s before it.
 - **Visually checked**, muted: an all-pink Hard course with a tower and walls renders well.
 
-**Next:** the user's playtest of AI walls and spirals, and of Spire.
+## Phase 12 (user feedback, Oct 8): harder walls, no spiral skipping
+
+The user: "the spirals feel good but the walls are too easy. another thing, the gates should not be connected to the ramps, and on spire, you can just skip the entire spiral". They chose: wall frames free-standing between ramps, and tighter windows off your line.
+
+- **Walls** are free-standing just past a ramp's end, with tight windows set low on the face or high. The bot lines up on the face.
+- **Supporting changes:** walled ramps run straight and long enough to line up at top speed; no sideways transfer right after a wall; boosters and the next ramp stay clear of it. See CLAUDE.md, "Walls and spirals".
+- **Spirals** have a checkpoint gate halfway round. **Checkpoints count only in order**, the finish only after all of them, and skipping one shows "Missed checkpoint N: press R to go back".
+- **Gate fixes needed for that:**
+  - Gates face along the track: on big sideways transfers they used to face almost sideways and riders missed them.
+  - Gate triggers reach 3,000 above the arch, so flying over a gate still counts.
+- **Tuned on AI-shaped courses.** Walls survive the ride-before-serve check on 5–6 of 8 per difficulty; spirals on all. A live check kept walls on 2 of 3 courses.
+- `LAYOUT_VERSION` is 6: all leaderboards and PBs reset again.
+
+**Next:** the user's playtest of the new walls and the spiral rule.
 
 ## Phase status
 

@@ -74,12 +74,26 @@ describe('CourseRuntime', () => {
   it('advances checkpoints in order and respawns at the latest', () => {
     const rt = new CourseRuntime(built);
     const [cp1, cp2] = built.triggers.filter((t) => t.kind === 'checkpoint');
-    const p = createPlayer(centerOf(cp2!));
+    const p = createPlayer(centerOf(cp1!));
+    expect(rt.update(p)).toContainEqual({ type: 'checkpoint', index: 1 });
+    p.pos.copy(centerOf(cp2!));
     expect(rt.update(p)).toContainEqual({ type: 'checkpoint', index: 2 });
     p.pos.copy(centerOf(cp1!));
     rt.update(p);
     expect(rt.lastCheckpoint).toBe(2);
     expect(rt.respawnPoint().pos.distanceTo(built.checkpoints[2]!.pos)).toBe(0);
+  });
+
+  it("doesn't count a checkpoint reached by skipping one: it reports the one missed (user, Oct 8 2026: you could skip Spire's spiral)", () => {
+    const rt = new CourseRuntime(built);
+    const [, cp2] = built.triggers.filter((t) => t.kind === 'checkpoint');
+    const p = createPlayer(centerOf(cp2!));
+    const events = rt.update(p);
+    expect(events).toContainEqual({ type: 'missed', index: 1 });
+    expect(events.map((e) => e.type)).not.toContain('checkpoint');
+    expect(rt.lastCheckpoint).toBe(0);
+    // Once per pass through the gate, not every tick inside it.
+    expect(rt.update(p)).toEqual([]);
   });
 
   it('reports falling below the kill floor', () => {
@@ -95,10 +109,22 @@ describe('CourseRuntime', () => {
     const ramp = built.pieces.find((x) => x.kind === 'ramp')!;
     p.pos.copy(ramp.kind === 'ramp' ? ramp.points[2]!.pos : new Vector3());
     expect(rt.update(p).map((e) => e.type)).toContain('start');
+    for (const cp of built.triggers.filter((t) => t.kind === 'checkpoint')) {
+      p.pos.copy(centerOf(cp));
+      rt.update(p);
+    }
     const finish = built.triggers.find((t) => t.kind === 'finish')!;
     p.pos.copy(centerOf(finish));
     expect(rt.update(p).map((e) => e.type)).toContain('finish');
     expect(rt.update(p).map((e) => e.type)).not.toContain('finish');
     expect(rt.finished).toBe(true);
+  });
+
+  it('only counts the finish once every checkpoint is passed', () => {
+    const rt = new CourseRuntime(built);
+    const finish = built.triggers.find((t) => t.kind === 'finish')!;
+    const p = createPlayer(centerOf(finish));
+    expect(rt.update(p)).toContainEqual({ type: 'missed', index: 1 });
+    expect(rt.finished).toBe(false);
   });
 });

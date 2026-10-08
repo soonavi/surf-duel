@@ -206,44 +206,68 @@ describe('buildCourse: level and climbing ramps', () => {
 });
 
 describe('buildCourse: walls', () => {
-  const walled = spec([ramp({ length: 6000 }), { type: 'wall' }, ramp({ side: 'left', length: 6000 }), ramp()]);
+  // User, Oct 8 2026: the walls were "too easy", and their frames shouldn't be connected to the ramps.
+  const walled = spec([ramp({ length: 6000 }), { type: 'wall' }, ramp({ side: 'left', length: 6000 }), ramp()], { difficulty: 'hard' });
+  const theWall = (built: ReturnType<typeof buildCourse>) => built.pieces.find((p): p is WallPiece => p.kind === 'wall')!;
+  const endOf = (r: RampPiece) => r.points[r.points.length - 1]!;
 
-  it('stands a wall across the ramp after it, past where riders land', () => {
+  it('stands free, just past the end of the ramp after it, clear of every ramp', () => {
     const built = buildCourse(walled);
     const walls = built.pieces.filter((p): p is WallPiece => p.kind === 'wall');
     expect(walls).toHaveLength(1);
-    const target = built.pieces[walls[0]!.ramp];
-    expect(target?.kind === 'ramp' && target.side).toBe('left');
-    expect(walls[0]!.s).toBeGreaterThan(1500);
+    const r = built.pieces[walls[0]!.ramp] as RampPiece;
+    expect(r.side).toBe('left');
+    const end = endOf(r);
+    const past = walls[0]!.pos.clone().sub(end.pos).dot(forwardOf(end.heading));
+    expect(past).toBeGreaterThan(100);
+    // The next ramp starts well beyond it.
+    const next = rampsIn(built)[2]!;
+    const entry = next.points.find((p) => p.s === 0)!.pos;
+    expect(entry.clone().sub(walls[0]!.pos).dot(forwardOf(end.heading))).toBeGreaterThanOrEqual(400);
   });
 
-  /** Slide along the ramp from 300 before the wall, `offset` toward the ridge, and say how far past the wall you got. */
-  function rideThroughWall(offset: number): number {
+  it("sets a tight window off the riding line: you have to change line to fit through", () => {
+    const wall = theWall(buildCourse(walled));
+    expect(wall.windowRight - wall.windowLeft).toBeLessThan(250);
+    // The riding line (lateral 0) is outside the window.
+    expect(wall.windowLeft > 0 || wall.windowRight < 0).toBe(true);
+  });
+
+  /** Ride off the end of the walled ramp `fromRidge` units down the face, and say how far past the wall you got. */
+  function rideOff(fromRidge: number): number {
     const built = buildCourse(walled);
-    const wall = built.pieces.find((p): p is WallPiece => p.kind === 'wall')!;
+    const wall = theWall(built);
     const r = built.pieces[wall.ramp] as RampPiece;
-    const start = rideAt(r, wall.s - 300);
-    const towardRidge = (r.side === 'right' ? 1 : -1) * offset;
+    const start = rideAt(r, r.length - 400);
     const theta = (r.angleDeg * Math.PI) / 180;
+    // Left ramp: the ridge is to the left of the riding line, the face runs right of it.
+    const lateral = r.centerOffset + fromRidge;
+    const player = createPlayer(start.pos.clone().addScaledVector(rightOf(start.heading), lateral));
+    player.pos.y += (r.ride - fromRidge) * Math.tan(theta) + 2;
     const fwd = forwardOf(start.heading);
-    const player = createPlayer(start.pos.clone().addScaledVector(rightOf(start.heading), towardRidge));
-    player.pos.y += Math.abs(offset) * Math.tan(theta) * Math.sign(offset) + 2;
     player.vel.copy(fwd).multiplyScalar(1500);
     const world = new BvhWorld(built.collision);
-    for (let i = 0; i < 40; i++) stepPlayer(player, { forward: 0, side: 0, jump: false, yaw: start.heading }, DEFAULT_PHYSICS, world, TICK_DT);
-    const end = rideAt(r, wall.s);
-    return player.pos.clone().sub(end.pos).dot(fwd);
+    for (let i = 0; i < 70; i++) stepPlayer(player, { forward: 0, side: -1, jump: false, yaw: start.heading }, DEFAULT_PHYSICS, world, TICK_DT);
+    return player.pos.clone().sub(wall.pos).dot(forwardOf(wall.heading));
   }
 
-  it('lets a rider on the riding line through its window', () => {
-    expect(rideThroughWall(0)).toBeGreaterThan(200);
+  it('lets a rider lined up with the window through', () => {
+    const wall = theWall(buildCourse(walled));
+    expect(rideOff(wall.target)).toBeGreaterThan(150);
   });
 
-  it('stops a rider who is too high or too low on the face', () => {
+  it('stops a rider who stays on the usual riding line', () => {
     const built = buildCourse(walled);
-    const wall = built.pieces.find((p): p is WallPiece => p.kind === 'wall')!;
-    expect(rideThroughWall(wall.slack + 80)).toBeLessThan(0);
-    expect(rideThroughWall(-(wall.slack + 80))).toBeLessThan(0);
+    const r = built.pieces[theWall(built).ramp] as RampPiece;
+    expect(rideOff(r.ride)).toBeLessThan(0);
+  });
+
+  it('alternates its windows low and high on the face', () => {
+    const twoWalls = buildCourse(spec([ramp({ length: 6000 }), { type: 'wall' }, ramp({ side: 'left', length: 6000 }), { type: 'wall' }, ramp({ length: 6000 }), ramp({ side: 'left' })], { difficulty: 'hard' }));
+    const walls = twoWalls.pieces.filter((p): p is WallPiece => p.kind === 'wall');
+    const ride = (w: WallPiece) => (twoWalls.pieces[w.ramp] as RampPiece).ride;
+    expect(walls[0]!.target).toBeGreaterThan(ride(walls[0]!));
+    expect(walls[1]!.target).toBeLessThan(ride(walls[1]!));
   });
 });
 
@@ -268,6 +292,21 @@ describe('buildCourse: spirals', () => {
     }
     const finish = built.pieces.find((p): p is PadPiece => p.kind === 'pad' && p.role === 'finish')!;
     expect(Math.cos(finish.heading)).toBeCloseTo(1, 6);
+  });
+
+  it('hangs a checkpoint gate halfway round, so dropping from its start to its end skips a checkpoint', () => {
+    const built = buildCourse(spiralled);
+    const tower = built.pieces.find((p): p is TowerPiece => p.kind === 'tower')!;
+    const arcs = rampsIn(built).slice(1, 7);
+    const halfway = arcs[3]!;
+    // The gate just before the ramp halfway round, on the far side of the tower from the start.
+    const gates = built.pieces.filter((p) => p.kind === 'gate');
+    const entry = halfway.points.find((p) => p.s === 0)!.pos;
+    expect(gates.some((g) => g.kind === 'gate' && g.center.distanceTo(entry) < 2500)).toBe(true);
+    const start = arcs[0]!.points.find((p) => p.s === 0)!.pos;
+    const angle = (v: Vector3) => Math.atan2(v.x - tower.center.x, v.z - tower.center.z);
+    expect(Math.abs(Math.cos(angle(entry) - angle(start)))).toBeGreaterThan(0.4);
+    expect(Math.cos(angle(entry) - angle(start))).toBeLessThan(0);
   });
 
   it('never passes close above or below itself', () => {

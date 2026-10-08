@@ -267,10 +267,10 @@ function wallGeometry(w: WallPiece): BufferGeometry[] {
     return orientedBox(lateralTo - lateralFrom, top - bottom, WALL_THICKNESS, center, w.heading);
   };
   return [
-    panel(-w.halfWidth, -w.slack, w.bottom, w.top),
-    panel(w.slack, w.halfWidth, w.bottom, w.top),
-    panel(-w.slack, w.slack, w.windowTop, w.top),
-    panel(-w.slack, w.slack, w.bottom, w.windowBottom),
+    panel(-w.halfWidth, w.windowLeft, w.bottom, w.top),
+    panel(w.windowRight, w.halfWidth, w.bottom, w.top),
+    panel(w.windowLeft, w.windowRight, w.windowTop, w.top),
+    panel(w.windowLeft, w.windowRight, w.bottom, w.windowBottom),
   ];
 }
 
@@ -326,12 +326,14 @@ export function buildCourse(input: unknown): BuiltCourse {
         break;
       case 'gate':
         gates.push(...checkpointArchGeometry(piece));
+        // Checkpoints count only in order, so the trigger reaches far above the arch: a fast rider
+        // flying clean over it still passed it. (Skipping a spiral means dropping far from its gate.)
         triggers.push({
           kind: 'checkpoint',
           index: piece.index,
-          center: piece.center.clone(),
+          center: piece.center.clone().setY(piece.center.y + TRIGGER_HEADROOM / 2),
           heading: piece.heading,
-          half: new Vector3(piece.width / 2, piece.height / 2, piece.depth / 2),
+          half: new Vector3(piece.width / 2, (piece.height + TRIGGER_HEADROOM) / 2, piece.depth / 2),
           strength: 0,
         });
         break;

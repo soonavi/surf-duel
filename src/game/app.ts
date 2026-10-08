@@ -1609,6 +1609,10 @@ export class App {
       case 'finish':
         this.finishRun();
         break;
+      case 'missed':
+        // Skipped part of the course (dropped past a spiral, say): it doesn't count until you go back.
+        this.overlay.toast(`Missed checkpoint ${event.index}: press R to go back`, 3500);
+        break;
       case 'start':
         break;
     }

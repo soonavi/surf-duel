@@ -163,7 +163,7 @@ Build a course as a list of sections, start to finish: each a ramp or a spiral (
 - gap: open air before the next piece.
 - booster: a gate that adds speed.
 - checkpoint: a respawn gate; place one every 2–4 ramps.
-- wall: set wall true on a ramp to stand a wall across it with a window round the riding line; riders who drift off their line hit it.
+- wall: set wall true on a ramp to stand a wall just past its end with a small window set high or low on the face; riders line up on the ramp to fly through it.
 - spiral: a section of its own, one full turn of ${LIMITS.spiralRamps.min}–${LIMITS.spiralRamps.max} ramps dropping round a tall tower; riders hold toward the tower. At most one per course.
 
 Make it fun and beatable:

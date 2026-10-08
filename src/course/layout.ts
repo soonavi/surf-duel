@@ -15,7 +15,7 @@
  * spiral lays one full turn of ramps on a circle round a tower.
  */
 import { MathUtils, Vector3 } from 'three';
-import { PLAYER_HEIGHT, PLAYER_RADIUS } from '../physics/constants.js';
+import { DEFAULT_PHYSICS, PLAYER_HEIGHT, PLAYER_RADIUS } from '../physics/constants.js';
 import type { Course, RampSegment, RampSide, Segment, SpiralSegment } from './schema.js';
 import { TrackPath } from './path.js';
 import {
@@ -96,18 +96,24 @@ export interface GatePiece {
 }
 
 /** A wall standing across a ramp, with a window round the riding line: stay on your line or hit it. */
+/**
+ * A free-standing wall just past the end of a ramp, with a small window set
+ * off the riding line (user, Oct 8 2026: walls were "too easy", and they
+ * shouldn't be connected to the ramps). Where you leave the ramp decides
+ * where you fly through, so you line up on the face before its end.
+ */
 export interface WallPiece {
   kind: 'wall';
-  /** Index (into pieces) of the ramp it stands across. */
+  /** Index (into pieces) of the ramp it stands past the end of. */
   ramp: number;
-  /** Distance along that ramp's riding line. */
-  s: number;
-  /** The riding line at the wall (a rider's feet), and the ramp's heading there. */
+  /** Where the riding line, carried on, crosses the wall (a rider's feet), and the ramp's end heading. */
   pos: Vector3;
   heading: number;
-  /** The window spans this far across the face either side of the riding line... */
-  slack: number;
-  /** ...and between these heights. */
+  /** The window's centre, as a distance down the face from the ramp's ridge (0 on a two-sided ridge). */
+  target: number;
+  /** The window: across the wall from `pos` (positive is to the right), and between these heights. */
+  windowLeft: number;
+  windowRight: number;
   windowBottom: number;
   windowTop: number;
   /** The whole wall: half its width, and its bottom and top heights. */
@@ -205,12 +211,29 @@ const MAX_SECTION_TURN_DEG = 2;
 const PATH_SPACING = 150;
 const KILL_WINDOW = 1500;
 const KILL_MARGIN = 700;
-/** A wall stands this far past the fastest rider's landing point (time to settle on the line)... */
+/** A wall stands this far past the end of its ramp, clear of it. */
+export const WALL_GATE_AFTER = 200;
+/** Whatever follows a wall starts at least this far beyond it, so the wall never touches a ramp. */
+const WALL_CLEARANCE = 500;
+/** A walled ramp runs at least this far past the fastest rider's landing: time to settle, then line up for the window. */
 const WALL_SETTLE = 1200;
-/** ...at least this far along its ramp, with at least this much ramp after it. */
-const WALL_MIN_S = 900;
 const WALL_RUNOUT = 900;
-/** The window reaches this far below the lowest feet in it, and this far above the highest head. */
+/**
+ * ...and long enough that a rider far faster than the speed model's fastest (who lands late) still
+ * gets this long on the face to line up: at 4,000 u/s a bot landed a quarter-second before the wall.
+ */
+const WALL_LINEUP_TIME = 0.9;
+const FASTEST_RIDER = DEFAULT_PHYSICS.maxVelocity * 1.2;
+/** Windows sit low on the face (this fraction of its width from the ridge) or high, a little above the riding line. */
+const WINDOW_LOW = 0.56;
+const WINDOW_HIGH_MIN = 0.12;
+/** On a two-sided ridge riders ride this far down either face (the bot does too); its window is centred on the ridge. */
+export const RIDGE_RIDE = 120;
+/** At speed, riders who don't air-strafe ride this much below their line... */
+const CAUTIOUS_SAG = 60;
+/** ...and sag this much further down a two-sided ridge's face. */
+const CAUTIOUS_RIDGE_SAG = 150;
+/** The window reaches this far below the lowest feet in it (riders drop a little after leaving the ramp), and this far above the highest head. */
 const WINDOW_FLOOR = 250;
 const WINDOW_HEADROOM = 100;
 /** The wall reaches this far beyond the ramp's faces, below its base and above the riding line. */
@@ -234,6 +257,72 @@ export function rightOf(heading: number, out = new Vector3()): Vector3 {
   return out.set(Math.cos(heading), 0, -Math.sin(heading));
 }
 
+/** How long a ramp with a wall past its end must be, to give every rider time to line up for its window. */
+function wallRunUp(fastLanding: number, front: number, flight: number): number {
+  return Math.max(fastLanding - front + WALL_SETTLE + WALL_RUNOUT, FASTEST_RIDER * (flight + WALL_LINEUP_TIME) - front);
+}
+
+/**
+ * The wall past the end of ramp `ramp`. Its window is `w` either side of a
+ * point on the face: low down it, or high just above the riding line
+ * (alternating), or round the ridge of a two-sided ramp. Riders fly on from
+ * where they leave the face, so that's where they cross the wall.
+ */
+function wallPast(
+  ramp: number,
+  end: RidePoint,
+  shape: { side: RampSide; faceWidth: number; ride: number; theta: number; peakAboveRide: number; height: number },
+  w: number,
+  index: number,
+  /** Built for riders who don't air-strafe (easy, medium): at speed they skim the face and can't climb much. */
+  cautious: boolean,
+): WallPiece {
+  const { side, faceWidth, ride, theta, peakAboveRide, height } = shape;
+  const tanTheta = Math.tan(theta);
+  const pos = end.pos.clone().addScaledVector(forwardOf(end.heading), WALL_GATE_AFTER);
+  pos.y = end.pos.y;
+  let target: number;
+  let windowLeft: number;
+  let windowRight: number;
+  let lowestFeet: number;
+  let highestFeet: number;
+  if (side === 'both') {
+    target = 0;
+    const reach = RIDGE_RIDE + w + (cautious ? CAUTIOUS_RIDGE_SAG : 0);
+    windowLeft = -reach;
+    windowRight = reach;
+    lowestFeet = end.pos.y - reach * tanTheta;
+    highestFeet = end.pos.y;
+  } else {
+    // High windows sit half a window above the riding line: riding within ~70 of the ridge tips you over it.
+    // (For cautious riders, "high" is tight round the riding line itself: they can't climb much at speed.)
+    const high = cautious ? ride + CAUTIOUS_SAG : Math.max(WINDOW_HIGH_MIN * faceWidth, ride - w / 2);
+    target = index % 2 === 0 ? WINDOW_LOW * faceWidth : high;
+    // The face runs away from the ridge: to the left of a right-hand ramp, to the right of a left-hand one.
+    const sign = side === 'right' ? 1 : -1;
+    const lateral = (fromRidge: number): number => sign * (ride - fromRidge);
+    windowLeft = Math.min(lateral(target - w), lateral(target + w));
+    windowRight = Math.max(lateral(target - w), lateral(target + w));
+    const feet = (fromRidge: number): number => end.pos.y + (ride - fromRidge) * tanTheta;
+    lowestFeet = feet(target + w);
+    highestFeet = feet(target - w);
+  }
+  return {
+    kind: 'wall',
+    ramp,
+    pos,
+    heading: end.heading,
+    target,
+    windowLeft,
+    windowRight,
+    windowBottom: lowestFeet - WINDOW_FLOOR,
+    windowTop: highestFeet + PLAYER_HEIGHT + WINDOW_HEADROOM,
+    halfWidth: faceWidth + WALL_REACH,
+    bottom: end.pos.y + peakAboveRide - height - WALL_BELOW,
+    top: end.pos.y + peakAboveRide + WALL_ABOVE,
+  };
+}
+
 /** Height lost after travelling `x` horizontally at speed v, starting with downward speed vy. */
 function fallAfter(v: number, vy: number, x: number): number {
   const t = x / Math.max(v, 1);
@@ -250,6 +339,8 @@ interface Cursor {
   floorY: number;
   /** Slope of the ramp just left, radians downhill (negative: it climbed, so you leave it rising). 0 after a pad. */
   exitPitch: number;
+  /** A wall stands just past the end of the ramp just left: what follows keeps clear of it. */
+  wallBehind: boolean;
 }
 
 /**
@@ -289,20 +380,6 @@ function transferSide(prev: RampSide, count: number): number {
   return count % 2 === 0 ? 1 : -1;
 }
 
-/** The riding line point `s` along a ramp's ridden points (linear between them). */
-function rideAt(points: RidePoint[], s: number): RidePoint {
-  for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i]!;
-    const b = points[i + 1]!;
-    if (s <= b.s) {
-      const t = b.s > a.s ? Math.max(0, (s - a.s) / (b.s - a.s)) : 0;
-      return { pos: a.pos.clone().lerp(b.pos, t), heading: a.heading + (b.heading - a.heading) * t, s };
-    }
-  }
-  const last = points[points.length - 1]!;
-  return { pos: last.pos.clone(), heading: last.heading, s: last.s };
-}
-
 export function planCourse(course: Course): CourseLayout {
   const diff = DIFFICULTY[course.difficulty];
 
@@ -334,13 +411,16 @@ export function planCourse(course: Course): CourseLayout {
     speed: { ...START_SPEED },
     floorY: -PAD_THICKNESS,
     exitPitch: 0,
+    wallBehind: false,
   };
   let pendingGap = 0;
   let pendingDrop = 0;
   /** A checkpoint is waiting for the next ramp: its gate spans the flight into it. */
   let pendingCheckpoint = false;
-  /** A wall is waiting to stand across the next ramp. */
+  /** A wall is waiting to stand past the end of the next ramp. */
   let pendingWall = false;
+  /** Walls so far (their windows alternate low and high). */
+  let walls = 0;
   let rampsSinceCheckpoint = 0;
   /** Sideways transfers so far (two-sided ridges alternate their direction). */
   let transfers = 0;
@@ -350,7 +430,13 @@ export function planCourse(course: Course): CourseLayout {
    * gaps/drops. `minDrop` is how far below the exit the next piece's entry
    * must be for its highest point to stay clear of a cautious rider.
    */
+  /** Past a wall, the flight to the next piece is long enough for that piece to start well beyond it. */
+  const clearWall = (): void => {
+    if (cursor.wallBehind) pendingGap = Math.max(pendingGap, WALL_GATE_AFTER + WALL_CLEARANCE - LEAD_FROM_RAMP);
+  };
+
   const transition = (minDrop: number, minAirTime = 0): { drop: number; front: number; fastLanding: number; airTime: number } => {
+    clearWall();
     const fromPad = cursor.from === 'pad';
     // Leaving a climb you're still rising (negative downward speed): more time in the air.
     const sinExit = fromPad ? 0 : Math.sin(cursor.exitPitch);
@@ -415,7 +501,8 @@ export function planCourse(course: Course): CourseLayout {
     // enough that a rider who doesn't misses the whole face; near enough to be a fixed
     // fraction of what a perfect air-strafe could cover in the time spent in the air.
     // (A spiral's ramps sit on its circle instead, and its transfers cut across it.)
-    const transfer = arc === null && prev !== null && diff.transferReach > 0;
+    // Not right after a wall: you fly straight through its window, and that's this jump's challenge.
+    const transfer = arc === null && prev !== null && diff.transferReach > 0 && !cursor.wallBehind;
     // In t seconds a perfect air-strafe moves you AIR_STRAFE_REACH·t² sideways, but never
     // faster than you're going: a slow rider turning out and back again covers about v·t/2.
     // (Never below walking pace: a stalled rider would make every transfer infinitely long.)
@@ -428,10 +515,9 @@ export function planCourse(course: Course): CourseLayout {
         ? diff.transferAirTime
         : 0;
     const { drop, front, fastLanding, airTime: flight } = transition(Math.max(minDrop, arc?.minDrop ?? 0), airTime);
-    const wallAt = Math.max(WALL_MIN_S, fastLanding - front + WALL_SETTLE);
     const length = arc
       ? arc.radius * arc.span
-      : Math.min(MAX_RAMP_LENGTH, Math.max(seg.length, fastLanding - front + MIN_RIDE, pendingWall ? wallAt + WALL_RUNOUT : 0));
+      : Math.min(MAX_RAMP_LENGTH, Math.max(seg.length, fastLanding - front + MIN_RIDE, pendingWall ? wallRunUp(fastLanding, front, flight) : 0));
     if (pitchDeg < 0 && length > seg.length) {
       // A climb stretched to catch fast riders climbs further than the validator planned for: ease
       // it, like the validator does, until a cautious rider still has MIN_CLIMB_SPEED at the top
@@ -464,7 +550,9 @@ export function planCourse(course: Course): CourseLayout {
         kind: 'gate',
         index: checkpoints.length,
         center,
-        heading: Math.hypot(dx, dz) > 1 ? headingOf(dx, dz) : cursor.heading,
+        // Square to the track; round a spiral, square to the chord across its gap. (Square to the chord
+        // of a big sideways transfer, a gate faced almost sideways and riders flew past it.)
+        heading: arc && Math.hypot(dx, dz) > 1 ? headingOf(dx, dz) : cursor.heading,
         width: GATE.width,
         height: top - bottom,
         depth: GATE.depth,
@@ -482,7 +570,9 @@ export function planCourse(course: Course): CourseLayout {
       back.y = entry.y + leadIn * tanPitch;
       points.push({ pos: back, heading: heading0, s: -leadIn });
     }
-    const curveRad = arc ? arc.dir * arc.span : MathUtils.degToRad(seg.curve);
+    // A ramp with a wall past it runs straight: on a bend, a fast rider can't hold the line its
+    // window needs (they're flung over the ridge or slide down the face).
+    const curveRad = arc ? arc.dir * arc.span : pendingWall ? 0 : MathUtils.degToRad(seg.curve);
     if (arc) {
       const sections = Math.max(2, Math.ceil(length / SECTION_SPACING));
       for (let i = 0; i <= sections; i++) {
@@ -548,31 +638,13 @@ export function planCourse(course: Course): CourseLayout {
       checkpoints[respawnIndex] = { pos, heading: at.heading, speed: entrySpeed };
     }
 
+    const last = points[points.length - 1]!;
+    cursor.wallBehind = pendingWall;
     if (pendingWall) {
-      // Past where riders land and settle, with ramp left after it (a spiral's ramps can't stretch).
-      const s = Math.min(wallAt, Math.max(WALL_MIN_S, length - WALL_RUNOUT));
-      const at = rideAt(ridden, s);
-      const tanTheta = Math.tan(theta);
-      const slack = diff.windowSlack;
-      // Feet climb toward the ridge across the face: the window's top clears the highest head in it.
-      const highestFeet = at.pos.y + (seg.side === 'both' ? 0 : slack * tanTheta);
-      pieces.push({
-        kind: 'wall',
-        ramp: pieceIndex,
-        s,
-        pos: at.pos,
-        heading: at.heading,
-        slack,
-        windowBottom: at.pos.y - slack * tanTheta - WINDOW_FLOOR,
-        windowTop: highestFeet + PLAYER_HEIGHT + WINDOW_HEADROOM,
-        halfWidth: faceWidth + WALL_REACH,
-        bottom: at.pos.y + peakAboveRide - height - WALL_BELOW,
-        top: at.pos.y + WALL_ABOVE,
-      });
+      const shape = { side: seg.side, faceWidth, ride, theta, peakAboveRide, height };
+      pieces.push(wallPast(pieceIndex, last, shape, diff.windowSlack, walls++, diff.transferReach === 0));
       pendingWall = false;
     }
-
-    const last = points[points.length - 1]!;
     cursor.pos.copy(last.pos);
     cursor.heading = arc ? arc.h0 + arc.dir * (arc.start + arc.span) : cursor.heading + curveRad;
     cursor.from = 'ramp';
@@ -600,6 +672,7 @@ export function planCourse(course: Course): CourseLayout {
   const placeSpiral = (seg: SpiralSegment): void => {
     const dir = seg.turn === 'left' ? 1 : -1;
     const h0 = cursor.heading;
+    clearWall();
     const front = pendingGap + (cursor.from === 'pad' ? 0 : LEAD_FROM_RAMP);
     const entry = cursor.pos.clone().addScaledVector(forwardOf(h0, f), front);
     const center = entry.clone().addScaledVector(rightOf(h0, f), -dir * SPIRAL_RADIUS);
@@ -618,6 +691,9 @@ export function planCourse(course: Course): CourseLayout {
       const span = k === seg.ramps - 1 ? 2 * Math.PI - k * step : step - gap;
       // Ridge toward the tower: you hold the key that points at it.
       const ramp: RampSegment = { type: 'ramp', length: SPIRAL_RADIUS * span, angle: seg.angle, side: seg.turn, curve: (dir * span * 180) / Math.PI, pitch: SPIRAL_PITCH_DEG };
+      // A checkpoint halfway round: the spiral ends right under where it starts, and without
+      // one you could drop straight down and skip it (user, Oct 8 2026, on Spire).
+      if (k === Math.floor(seg.ramps / 2)) pendingCheckpoint = true;
       stepRamp(ramp, { center, radius: SPIRAL_RADIUS, dir, h0, start: k * step, span, minDrop: k === 0 ? 0 : minDrop });
     }
     const arcs = pieces.slice(first).filter((p): p is RampPiece => p.kind === 'ramp');
@@ -660,7 +736,9 @@ export function planCourse(course: Course): CourseLayout {
     const fromPad = cursor.from === 'pad';
     const vLo = fromPad ? WALK_SPEED : cursor.speed.lo;
     const vyLo = fromPad ? 0 : vLo * Math.sin(cursor.exitPitch);
-    const along = pendingGap + BOOSTER.offset;
+    // Clear of a wall standing just past the ramp we left.
+    const clearOfWall = cursor.wallBehind ? WALL_GATE_AFTER + BOOSTER.depth : 0;
+    const along = pendingGap + BOOSTER.offset + clearOfWall;
     const fall = pendingDrop + fallAfter(vLo, vyLo, along);
     const top = cursor.pos.y + BOOSTER.margin;
     const bottom = cursor.pos.y - fall - BOOSTER.margin;
@@ -675,7 +753,7 @@ export function planCourse(course: Course): CourseLayout {
       depth: BOOSTER.depth,
       strength,
     });
-    pendingGap += BOOSTER.length;
+    pendingGap += BOOSTER.length + clearOfWall;
     cursor.speed = afterBooster(cursor.speed, strength);
   };
 
