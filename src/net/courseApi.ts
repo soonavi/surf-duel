@@ -18,6 +18,8 @@ export interface GeneratedCourse {
   code: string | null;
   /** The description it was made from, ready to show; null if there's nothing suitable to show. */
   prompt: string | null;
+  /** Thumbs up so far (a new course has none). */
+  likes: number;
 }
 
 export type GenerateFailure = 'bad-request' | 'rejected' | 'rate-limited' | 'budget' | 'timeout' | 'ai-failed' | 'unavailable' | 'network';
@@ -95,7 +97,7 @@ export async function requestCourse(
   }
   const ok = Success.safeParse(body);
   if (ok.success) {
-    return { ok: true, value: { course: validateCourse(ok.data.course).course, code: ok.data.code, prompt: displayPrompt(ok.data.prompt) } };
+    return { ok: true, value: { course: validateCourse(ok.data.course).course, code: ok.data.code, prompt: displayPrompt(ok.data.prompt), likes: 0 } };
   }
   const bad = Failure.safeParse(body);
   if (bad.success) {
@@ -108,11 +110,11 @@ export async function requestCourse(
 /** One row lookup by code; returns Supabase's `{ data, error }` shape. Injectable for tests. */
 export type CourseQuery = (code: string) => Promise<{ data: unknown; error: { message: string } | null }>;
 
-const Row = z.object({ code: z.string(), prompt: z.string(), spec: z.unknown() });
+const Row = z.object({ code: z.string(), prompt: z.string(), spec: z.unknown(), likes: z.number().int().min(0).catch(0) });
 
 const supabaseQuery: CourseQuery = async (code) => {
   const { supabaseClient } = await import('./supabase.js'); // keeps supabase-js out of the main bundle
-  const { data, error } = await supabaseClient().from('courses').select('code, prompt, spec').eq('code', code).maybeSingle();
+  const { data, error } = await supabaseClient().from('courses').select('code, prompt, spec, likes').eq('code', code).maybeSingle();
   return { data, error };
 };
 
@@ -130,5 +132,5 @@ export async function fetchSharedCourse(input: string, query: CourseQuery = supa
   if (result.data === null) return { ok: false, reason: 'not-found' };
   const row = Row.safeParse(result.data);
   if (!row.success) return { ok: false, reason: 'not-found' };
-  return { ok: true, value: { course: validateCourse(row.data.spec).course, code, prompt: displayPrompt(row.data.prompt) } };
+  return { ok: true, value: { course: validateCourse(row.data.spec).course, code, prompt: displayPrompt(row.data.prompt), likes: row.data.likes } };
 }

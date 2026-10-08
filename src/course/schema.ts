@@ -35,7 +35,8 @@ export const LIMITS = {
   boosterStrength: { min: 100, max: 800 },
   /** Ramps in one turn of a spiral round a tower. */
   spiralRamps: { min: 4, max: 8 },
-  segments: { max: 40 },
+  /** Room for 18 AI ramps with up to two pieces (gap, drop, booster, checkpoint) after each. */
+  segments: { max: 56 },
   minRamps: 2,
   /** Sum of ramp lengths, gaps, drops and spirals, in units (a minute-long course is ~100k). */
   totalLength: { min: 6000, max: 140000 },
@@ -45,18 +46,20 @@ export const LIMITS = {
 
 /**
  * What each difficulty looks like: ramp angles, the most a single ramp bends,
- * and ramp lengths (hard maps have short ramps: less time to settle before
- * the next transfer). Used by the random generator and the AI system prompt.
+ * ramp lengths (hard maps have short ramps: less time to settle before the
+ * next transfer), and how many ramps the AI is asked for: about a minute of
+ * riding (user, Oct 6 2026: the old courses were "only about 20 seconds").
+ * Used by the random generator and the AI system prompt.
  * The layout adds the rest (tuning.ts): on hard and expert, every ramp sits
  * off to the side of the last, so you must air-strafe across.
  */
 export const DIFFICULTY_STYLE: Readonly<
-  Record<Difficulty, { angle: readonly [number, number]; maxCurve: number; length: readonly [number, number] }>
+  Record<Difficulty, { angle: readonly [number, number]; maxCurve: number; length: readonly [number, number]; ramps: readonly [number, number] }>
 > = {
-  easy: { angle: [46, 52], maxCurve: 15, length: [3000, 6000] },
-  medium: { angle: [50, 56], maxCurve: 30, length: [2500, 6000] },
-  hard: { angle: [54, 60], maxCurve: 45, length: [2000, 4500] },
-  expert: { angle: [56, 60], maxCurve: 45, length: [1500, 3500] },
+  easy: { angle: [46, 52], maxCurve: 15, length: [3000, 6000], ramps: [12, 16] },
+  medium: { angle: [50, 56], maxCurve: 30, length: [2500, 6000], ramps: [14, 18] },
+  hard: { angle: [54, 60], maxCurve: 45, length: [2000, 4500], ramps: [14, 18] },
+  expert: { angle: [56, 60], maxCurve: 45, length: [1500, 3500], ramps: [14, 18] },
 };
 
 export const RampSegment = z.object({
@@ -116,11 +119,35 @@ export const Segment = z.discriminatedUnion('type', [
   SpiralSegment,
 ]);
 
+/** Least WCAG contrast between a course's two ramp colours: they tell you which key to hold. */
+export const MIN_RAMP_CONTRAST = 1.5;
+
+const HexColor = z.string().regex(/^#[0-9a-f]{6}$/);
+
+/**
+ * A course's own colours (user, Oct 2026: an "all pink" AI course came out
+ * as the Neon theme). The theme still sets the mood: music, fog, and the
+ * finish and booster colours where they still show up.
+ */
+export const CourseColors = z.object({
+  /** Horizon colour; the rest of the sky is shaded from it. */
+  sky: HexColor,
+  /** Ramps on your right (hold D), and two-sided ramps. */
+  ramp: HexColor,
+  /** Ramps on your left (hold A). */
+  ramp2: HexColor,
+});
+
 export const Course = z.object({
   name: z.string().min(1).max(LIMITS.name.max),
   theme: z.enum(THEMES),
   difficulty: z.enum(DIFFICULTIES),
   segments: z.array(Segment).min(1).max(LIMITS.segments.max),
+  /**
+   * Left out for the theme's own colours (so older courses keep their keys).
+   * The AI sends null for that; the validator leaves the key out.
+   */
+  colors: CourseColors.nullable().optional(),
 });
 
 export type RampSegment = z.infer<typeof RampSegment>;
@@ -132,3 +159,4 @@ export type WallSegment = z.infer<typeof WallSegment>;
 export type SpiralSegment = z.infer<typeof SpiralSegment>;
 export type Segment = z.infer<typeof Segment>;
 export type Course = z.infer<typeof Course>;
+export type CourseColors = z.infer<typeof CourseColors>;

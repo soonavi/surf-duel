@@ -17,7 +17,7 @@ const respond = (status: number, body: unknown): typeof fetch =>
 describe('requestCourse', () => {
   it('returns the course (re-validated), its share code and prompt', async () => {
     const out = await requestCourse('icy', { fetch: respond(200, { ok: true, code: 'K7M2QX', course: SPEC, prompt: 'icy', repairs: 0 }) });
-    expect(out).toMatchObject({ ok: true, value: { code: 'K7M2QX', prompt: 'icy', course: { name: 'Ice Ribbon' } } });
+    expect(out).toMatchObject({ ok: true, value: { code: 'K7M2QX', prompt: 'icy', likes: 0, course: { name: 'Ice Ribbon' } } });
   });
 
   it("never trusts the server's course blindly", async () => {
@@ -70,6 +70,13 @@ describe('fetchSharedCourse', () => {
   it('loads and validates a shared course', async () => {
     const out = await fetchSharedCourse('k7m-2qx', query({ data: { code: 'K7M2QX', prompt: 'icy', spec: SPEC }, error: null }));
     expect(out).toMatchObject({ ok: true, value: { code: 'K7M2QX', prompt: 'icy', course: { name: 'Ice Ribbon' } } });
+  });
+
+  it('brings its like count (0 for a row from before likes)', async () => {
+    const liked = await fetchSharedCourse('K7M2QX', query({ data: { code: 'K7M2QX', prompt: 'icy', spec: SPEC, likes: 7 }, error: null }));
+    expect(liked).toMatchObject({ ok: true, value: { likes: 7 } });
+    const old = await fetchSharedCourse('K7M2QX', query({ data: { code: 'K7M2QX', prompt: 'icy', spec: SPEC }, error: null }));
+    expect(old).toMatchObject({ ok: true, value: { likes: 0 } });
   });
 
   it('says when no course has that code', async () => {

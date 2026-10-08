@@ -7,8 +7,10 @@ import {
   Course,
   DIFFICULTIES,
   LIMITS,
+  MIN_RAMP_CONTRAST,
   RAMP_SIDES,
   THEMES,
+  type CourseColors,
   type Difficulty,
   type RampSegment,
   type RampSide,
@@ -16,6 +18,7 @@ import {
   type ThemeName,
 } from './schema.js';
 import { cleanName as cleanPublicName } from '../util/text.js';
+import { normalizeHex, separate } from '../util/color.js';
 import {
   DIFFICULTY,
   MIN_CLIMB_SPEED,
@@ -29,6 +32,7 @@ import {
   afterFall,
   afterRamp,
   maxGapLength,
+  needsAirStrafe,
   rampPitchDeg,
   spiralArcLength,
   type SpeedRange,
@@ -94,6 +98,23 @@ function cleanName(value: unknown, r: Repairer): string {
   }
   if (cleaned !== value) r.note('name: cleaned up');
   return cleaned;
+}
+
+/** The course's own colours, tidied; undefined for none (null, missing) or any it can't read. */
+function cleanColors(value: unknown, r: Repairer): CourseColors | undefined {
+  if (value === undefined || value === null) return undefined;
+  const obj = isRecord(value) ? value : {};
+  const sky = normalizeHex(obj.sky);
+  const ramp = normalizeHex(obj.ramp);
+  const ramp2 = normalizeHex(obj.ramp2);
+  if (!sky || !ramp || !ramp2) {
+    r.note('colors: not three #rrggbb colours, used the theme colours');
+    return undefined;
+  }
+  // The two sides say which key to hold, so they must never look alike.
+  const apart = separate(ramp, ramp2, MIN_RAMP_CONTRAST);
+  if (apart !== ramp2) r.note(`colors: ramp colours too alike, ${ramp2} changed to ${apart}`);
+  return { sky, ramp, ramp2: apart };
 }
 
 function sanitizeSegment(raw: unknown, index: number, lastSide: RampSide | null, r: Repairer): Segment | null {
@@ -284,7 +305,13 @@ function limitBySpeed(segments: Segment[], difficulty: Difficulty, r: Repairer):
     switch (s.type) {
       case 'ramp': {
         const pitch = rampPitchDeg(s, difficulty);
-        if (pitch < Math.min(MIN_CRUISE_PITCH, DIFFICULTY[difficulty].pitchDeg) && speed.lo < MIN_CRUISE_SPEED) {
+        if (!needsAirStrafe(difficulty) && pitch < MIN_CRUISE_PITCH) {
+          // Easy and medium are laid out for a cautious rider, who sheds speed landing and steering
+          // on a level ramp or climb with no slope to win it back: they fell short of the next ramp
+          // on an AI course (Oct 8 2026). Level ramps and climbs are for hard and expert.
+          delete s.pitch;
+          r.note(`a ${pitch}° ramp given its usual downhill slope: easy and medium courses run downhill`);
+        } else if (pitch < Math.min(MIN_CRUISE_PITCH, DIFFICULTY[difficulty].pitchDeg) && speed.lo < MIN_CRUISE_SPEED) {
           // Level or climbing with nothing to carry you: a course you'd walk along for minutes.
           delete s.pitch;
           r.note(`a ${pitch}° ramp given its usual downhill slope: riders here are too slow to climb or keep going`);
@@ -378,7 +405,8 @@ export function validateCourse(input: unknown): ValidationResult {
     ensureMinRamps(segments, r);
     limitBySpeed(segments, difficulty, r);
 
-    const course: Course = { name, theme, difficulty, segments };
+    const colors = cleanColors(obj.colors, r);
+    const course: Course = { name, theme, difficulty, segments, ...(colors ? { colors } : {}) };
     const parsed = Course.safeParse(course);
     if (parsed.success) return { course: parsed.data, repairs: r.repairs };
     r.note('course still invalid after repair; used the fallback course');

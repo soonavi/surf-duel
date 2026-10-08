@@ -759,6 +759,10 @@ kbd {
   animation-delay: 0.24s;
 }
 
+.home__side > :nth-child(4) {
+  animation-delay: 0.3s;
+}
+
 @keyframes home-rise {
   from {
     opacity: 0;
@@ -793,6 +797,175 @@ kbd {
   .home__courses,
   .home__side > * {
     animation: none;
+  }
+}
+
+/* --- Popular AI courses and the thumbs up ------------------------------------------ */
+
+.popular[hidden] {
+  display: none;
+}
+
+.popular__list {
+  display: grid;
+  gap: 4px;
+}
+
+.popular__row {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 10px 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, var(--swatch-a), var(--swatch-b)) left / 4px 100% no-repeat,
+    rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.popular__row:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background-color: rgba(255, 255, 255, 0.07);
+}
+
+.popular__row:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+
+.popular__row[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+
+.popular__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.popular__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popular__head .diff {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.popular__likes {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.popular__likes[data-liked='true'] {
+  color: #ffd27a;
+}
+
+.popular__prompt {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popular__note {
+  margin: 4px 0 0;
+}
+
+.like-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease, transform 0.12s ease;
+}
+
+.like-btn:hover:not(:disabled) {
+  border-color: rgba(255, 210, 122, 0.6);
+  transform: translateY(-1px);
+}
+
+.like-btn:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.like-btn[aria-pressed='true'] {
+  border-color: #ffd27a;
+  background: rgba(255, 210, 122, 0.16);
+  color: #ffd27a;
+}
+
+.like-btn:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.like-btn__icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.like-btn__count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.like-btn__count[hidden] {
+  display: none;
+}
+
+.results__like {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  margin: -6px 0 18px;
+}
+
+.results__like-text {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .like-btn {
+    transition: none;
+  }
+
+  .like-btn:hover:not(:disabled) {
+    transform: none;
   }
 }
 

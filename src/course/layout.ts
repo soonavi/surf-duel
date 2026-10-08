@@ -20,6 +20,7 @@ import type { Course, RampSegment, RampSide, Segment, SpiralSegment } from './sc
 import { TrackPath } from './path.js';
 import {
   AIR_STRAFE_REACH,
+  MIN_CLIMB_SPEED,
   DIFFICULTY,
   PLAN_GRAVITY,
   SPIRAL_GAP_DEG,
@@ -385,8 +386,8 @@ export function planCourse(course: Course): CourseLayout {
 
   const placeRamp = (seg: RampSegment, arc: Arc | null = null): void => {
     const theta = MathUtils.degToRad(seg.angle);
-    const pitchDeg = rampPitchDeg(seg, course.difficulty);
-    const tanPitch = Math.tan(MathUtils.degToRad(pitchDeg));
+    let pitchDeg = rampPitchDeg(seg, course.difficulty);
+    let tanPitch = Math.tan(MathUtils.degToRad(pitchDeg));
     let faceWidth: number = diff.faceWidth;
     let height = faceWidth * Math.tan(theta);
     if (height > MAX_RAMP_HEIGHT) {
@@ -417,7 +418,8 @@ export function planCourse(course: Course): CourseLayout {
     const transfer = arc === null && prev !== null && diff.transferReach > 0;
     // In t seconds a perfect air-strafe moves you AIR_STRAFE_REACH·t² sideways, but never
     // faster than you're going: a slow rider turning out and back again covers about v·t/2.
-    const vSlow = fromPad ? WALK_SPEED : cursor.speed.lo;
+    // (Never below walking pace: a stalled rider would make every transfer infinitely long.)
+    const vSlow = fromPad ? WALK_SPEED : Math.max(WALK_SPEED, cursor.speed.lo);
     const reachIn = (t: number): number => diff.transferReach * Math.min(AIR_STRAFE_REACH * t * t, 0.5 * vSlow * t);
     const missFace = (seg.side === 'both' ? faceWidth : faceWidth * (1 - RIDE_FRACTION)) + TRANSFER_MISS_MARGIN;
     const airTime = transfer
@@ -430,6 +432,17 @@ export function planCourse(course: Course): CourseLayout {
     const length = arc
       ? arc.radius * arc.span
       : Math.min(MAX_RAMP_LENGTH, Math.max(seg.length, fastLanding - front + MIN_RIDE, pendingWall ? wallAt + WALL_RUNOUT : 0));
+    if (pitchDeg < 0 && length > seg.length) {
+      // A climb stretched to catch fast riders climbs further than the validator planned for: ease
+      // it, like the validator does, until a cautious rider still has MIN_CLIMB_SPEED at the top
+      // (an AI course's 1750-long climb, stretched to 7263, stopped the rider dead and broke the layout).
+      const sin = (cursor.speed.lo ** 2 - MIN_CLIMB_SPEED ** 2) / (2 * PLAN_GRAVITY * length);
+      const maxClimb = sin > 0 ? MathUtils.radToDeg(Math.asin(Math.min(1, sin))) : 0;
+      if (-pitchDeg > maxClimb) {
+        pitchDeg = -maxClimb;
+        tanPitch = Math.tan(MathUtils.degToRad(pitchDeg));
+      }
+    }
     const shift = transfer ? transferSide(prev.side, transfers++) * Math.min(MAX_TRANSFER_SHIFT, Math.max(missFace, reachIn(flight))) : 0;
 
     const heading0 = arc ? arc.h0 + arc.dir * arc.start : cursor.heading;

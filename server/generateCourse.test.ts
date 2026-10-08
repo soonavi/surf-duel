@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BUDGET, RATE_LIMIT, handleGenerate, type ClaimLimits, type ClaimResult, type CourseRow, type CourseStore, type GenerateDeps } from './generateCourse.js';
 import { createRng } from '../src/util/rng.js';
-import { COURSE_JSON_SCHEMA, COURSE_SYSTEM_PROMPT, PROMPT_MAX_CHARS, courseUserMessage } from '../src/course/aiSchema.js';
+import { COURSE_SYSTEM_PROMPT, PROMPT_MAX_CHARS, courseJsonSchema, courseUserMessage } from '../src/course/aiSchema.js';
+import { DIFFICULTIES } from '../src/course/schema.js';
 
 const GOOD = {
   name: 'Molten Mile',
@@ -322,8 +323,10 @@ describe('handleGenerate: spending caps (all players together)', () => {
 
   it('really does send fewer input tokens than the cost math assumes', () => {
     // Under 3 characters per token is a pessimistic count for English text and JSON.
-    const chars = COURSE_SYSTEM_PROMPT.length + JSON.stringify(COURSE_JSON_SCHEMA).length + courseUserMessage('x'.repeat(PROMPT_MAX_CHARS), 'expert').length;
-    expect(chars / 3).toBeLessThan(BUDGET.maxInputTokens);
+    for (const d of DIFFICULTIES) {
+      const chars = COURSE_SYSTEM_PROMPT.length + JSON.stringify(courseJsonSchema(d)).length + courseUserMessage('x'.repeat(PROMPT_MAX_CHARS), d).length;
+      expect(chars / 3).toBeLessThan(BUDGET.maxInputTokens);
+    }
   });
 
   it('keeps the worst case under the $5 prepaid credit at gpt-5.4-nano prices', () => {

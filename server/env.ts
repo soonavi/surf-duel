@@ -5,13 +5,15 @@
  *   OPENAI_API_KEY, OPENAI_MODEL      required for generation (and the free moderation check)
  *   SUPABASE_SERVICE_ROLE_KEY         required too: the spending caps live in
  *   VITE_SUPABASE_URL                 the database, and without them we refuse.
- *                                     The leaderboard needs only these two.
+ *                                     The leaderboard and likes need only these two.
  */
 import { createHmac } from 'node:crypto';
 import OpenAI from 'openai';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { GenerateDeps } from './generateCourse.js';
+import type { LikeDeps } from './likeCourse.js';
 import type { SubmitDeps } from './submitRun.js';
+import { supabaseLikeStore } from './supabaseLikeStore.js';
 import { supabaseRunStore } from './supabaseRunStore.js';
 import { openAiDesigner } from './openaiDesigner.js';
 import { openAiModerator } from './openaiModerator.js';
@@ -65,6 +67,12 @@ export function generateDeps(): GenerateDeps | null {
 export function submitDeps(): SubmitDeps {
   const db = serviceDb();
   return { store: db ? supabaseRunStore(db) : null, hashIp: ipHasher(process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'no-key') };
+}
+
+/** Dependencies for handleLike; without the database, likes answer "unavailable". */
+export function likeDeps(): LikeDeps {
+  const db = serviceDb();
+  return { store: db ? supabaseLikeStore(db) : null, hashIp: ipHasher(process.env.SUPABASE_SERVICE_ROLE_KEY ?? 'no-key') };
 }
 
 /** The caller's IP. On Vercel these headers are set by the platform, not the client. */

@@ -6,6 +6,7 @@ import type { Course, Segment } from './schema.js';
 import { BvhWorld, ContactList } from '../physics/collision.js';
 import { DEFAULT_PHYSICS, FLOOR_NORMAL_Y, TICK_DT } from '../physics/constants.js';
 import { createPlayer, stepPlayer } from '../physics/player.js';
+import { createRng } from '../util/rng.js';
 
 const ramp = (over: Partial<Extract<Segment, { type: 'ramp' }>> = {}): Segment => ({
   type: 'ramp',
@@ -196,7 +197,7 @@ function rideAt(r: RampPiece, s: number): { pos: Vector3; heading: number } {
 
 describe('buildCourse: level and climbing ramps', () => {
   it('lays each ramp at its own slope: a level one stays level, a climb rises', () => {
-    const built = buildCourse(spec([ramp({ length: 9000 }), { type: 'booster', strength: 800 }, ramp({ side: 'left', pitch: 0 }), ramp({ pitch: -4 })]));
+    const built = buildCourse(spec([ramp({ length: 9000 }), { type: 'booster', strength: 800 }, ramp({ side: 'left', pitch: 0 }), ramp({ pitch: -4 })], { difficulty: 'hard' }));
     const [, level, climb] = rampsIn(built);
     const rise = (r: RampPiece) => r.points[r.points.length - 1]!.pos.y - r.points.find((p) => p.s === 0)!.pos.y;
     expect(rise(level!)).toBeCloseTo(0, 6);
@@ -290,4 +291,44 @@ describe('buildCourse: spirals', () => {
     const hit = built.path.relocate(at);
     expect(hit.sample.pos.distanceTo(at)).toBeLessThan(400);
   });
+});
+
+describe('buildCourse: anything the AI might send', () => {
+  // Seeded random courses in the AI's ranges, steep climbs and big boosters included: every one
+  // must lay out with finite geometry (an AI expert course with stretched climbs once crashed it).
+  const DIFFS = ['easy', 'medium', 'hard', 'expert'] as const;
+  const SIDES = ['left', 'right', 'both'] as const;
+
+  it('lays out 300 random AI-shaped courses without failing', () => {
+    const rng = createRng(20261008);
+    const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)]!;
+    const int = (lo: number, hi: number): number => Math.round(lo + rng() * (hi - lo));
+    for (let n = 0; n < 300; n++) {
+      const segments: Segment[] = [];
+      const ramps = int(10, 18);
+      for (let i = 0; i < ramps; i++) {
+        segments.push({ type: 'ramp', length: int(1500, 9000), angle: int(46, 60), side: pick(SIDES), curve: int(-45, 45), pitch: rng() < 0.3 ? null : int(-8, 12) });
+        for (let k = int(0, 2); k > 0; k--) {
+          segments.push(
+            pick<Segment>([
+              { type: 'drop', height: int(200, 2500) },
+              { type: 'gap', length: int(100, 3000) },
+              { type: 'booster', strength: int(100, 800) },
+              { type: 'checkpoint' },
+            ]),
+          );
+        }
+      }
+      const course = { name: `Fuzz ${n}`, theme: 'neon', difficulty: pick(DIFFS), segments };
+      let built: ReturnType<typeof buildCourse>;
+      try {
+        built = buildCourse(course);
+      } catch (err) {
+        throw new Error(`course ${n} (${course.difficulty}) failed to build: ${String(err)}\n${JSON.stringify(course)}`);
+      }
+      const pos = built.collision.attributes.position!.array as ArrayLike<number>;
+      for (let i = 0; i < pos.length; i++) if (!Number.isFinite(pos[i])) throw new Error(`course ${n} has non-finite geometry`);
+      for (const r of rampsIn(built)) expect(Number.isFinite(r.length) && r.length > 0).toBe(true);
+    }
+  }, 120_000);
 });

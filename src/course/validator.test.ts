@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { Course, LIMITS, type Segment } from './schema.js';
+import { Course, LIMITS, MIN_RAMP_CONTRAST, type Segment } from './schema.js';
 import { validateCourse } from './validator.js';
+import { courseKey } from './courseKey.js';
+import { contrast } from '../util/color.js';
 import { createRng } from '../util/rng.js';
 
 const ramp = (over: Partial<Extract<Segment, { type: 'ramp' }>> = {}): Segment => ({
@@ -156,6 +158,7 @@ describe('validateCourse', () => {
   it("keeps a ramp's own slope, clamped to the safe range, and drops an empty one", () => {
     const { course, repairs } = validateCourse({
       ...valid(),
+      difficulty: 'hard',
       segments: [ramp({ length: 8000 }), ramp({ side: 'left', pitch: 0 }), ramp({ pitch: 40 }), { ...ramp({ side: 'left' }), pitch: null }],
     });
     const ramps = rampsOf(course);
@@ -167,23 +170,33 @@ describe('validateCourse', () => {
 
   it('flattens a climb nobody could make, and keeps one riders have the speed for', () => {
     // Straight off the start pad you're walking: no climbing yet.
-    const { course, repairs } = validateCourse({ ...valid(), segments: [ramp({ pitch: -8, length: 6000 }), ramp({ side: 'left' })] });
+    const { course, repairs } = validateCourse({ ...valid(), difficulty: 'hard', segments: [ramp({ pitch: -8, length: 6000 }), ramp({ side: 'left' })] });
     expect(rampsOf(course)[0]!.pitch ?? 0).toBeGreaterThanOrEqual(0);
     expect(repairs.join(' ')).toMatch(/climb/);
 
     const fast = [ramp({ length: 9000 }), { type: 'booster', strength: 800 }, ramp({ side: 'left', pitch: -4, length: 3000 }), ramp()];
-    expect(validateCourse({ ...valid(), segments: fast }).repairs).toEqual([]);
+    expect(validateCourse({ ...valid(), difficulty: 'hard', segments: fast }).repairs).toEqual([]);
   });
 
   it('gives a level ramp its usual downhill slope back where riders would only crawl along it', () => {
     // Off the start pad you're walking: a level ramp would keep you walking.
-    const { course, repairs } = validateCourse({ ...valid(), segments: [ramp({ pitch: 0 }), ramp({ side: 'left', pitch: 0 })] });
+    const { course, repairs } = validateCourse({ ...valid(), difficulty: 'expert', segments: [ramp({ pitch: 0 }), ramp({ side: 'left', pitch: 0 })] });
     // The first goes back downhill; after it riders have the speed for the second to stay level.
     expect(rampsOf(course).map((r) => r.pitch)).toEqual([undefined, 0]);
     expect(repairs.join(' ')).toMatch(/too slow/);
     // With a booster first, level is fine.
     const boosted = [{ type: 'booster', strength: 800 }, ramp({ pitch: 0 }), ramp({ side: 'left', pitch: 0 })];
-    expect(validateCourse({ ...valid(), segments: boosted }).repairs).toEqual([]);
+    expect(validateCourse({ ...valid(), difficulty: 'expert', segments: boosted }).repairs).toEqual([]);
+  });
+
+  it('keeps easy and medium courses running downhill (cautious riders lose speed on level ramps and climbs)', () => {
+    for (const difficulty of ['easy', 'medium'] as const) {
+      const boosted = [{ type: 'booster', strength: 800 }, ramp({ pitch: 0 }), ramp({ side: 'left', pitch: -4 }), ramp({ pitch: 1 }), ramp({ side: 'left', pitch: 5 })];
+      const { course, repairs } = validateCourse({ ...valid(), difficulty, segments: boosted });
+      expect(rampsOf(course).map((r) => r.pitch)).toEqual([undefined, undefined, undefined, 5]);
+      expect(repairs).toHaveLength(3);
+      expect(repairs.join(' ')).toMatch(/downhill/);
+    }
   });
 
   it('keeps walls only where a ramp follows, one per ramp', () => {
@@ -239,5 +252,39 @@ describe('validateCourse', () => {
       const parsed = Course.safeParse(course);
       expect(parsed.success).toBe(true);
     }
+  });
+});
+
+describe('validateCourse: course colours', () => {
+  const pink = { sky: '#FFC0E0', ramp: '#ff4fa3', ramp2: '#FFD1E6' };
+
+  it('keeps a course its own colours, tidied', () => {
+    const { course, repairs } = validateCourse({ ...valid(), colors: pink });
+    expect(course.colors).toEqual({ sky: '#ffc0e0', ramp: '#ff4fa3', ramp2: '#ffd1e6' });
+    expect(repairs).toEqual([]);
+  });
+
+  it('leaves no colours key at all without them (null from the AI too), so course keys stay the same', () => {
+    for (const colors of [undefined, null]) {
+      const { course, repairs } = validateCourse({ ...valid(), colors });
+      expect('colors' in course).toBe(false);
+      expect(courseKey(course)).toBe(courseKey(validateCourse(valid()).course));
+      expect(repairs).toEqual([]);
+    }
+  });
+
+  it('drops colours it cannot read', () => {
+    for (const colors of [{ ...pink, sky: 'pink' }, { ...pink, ramp2: undefined }, 'pink', ['#ffffff']]) {
+      const { course, repairs } = validateCourse({ ...valid(), colors });
+      expect('colors' in course).toBe(false);
+      expect(repairs.join(' ')).toMatch(/colou?rs/);
+    }
+  });
+
+  it('keeps the two ramp sides telling apart (they say which key to hold)', () => {
+    const { course, repairs } = validateCourse({ ...valid(), colors: { sky: '#ffc0e0', ramp: '#ff69b4', ramp2: '#ff6eb8' } });
+    expect(contrast(course.colors!.ramp, course.colors!.ramp2)).toBeGreaterThanOrEqual(MIN_RAMP_CONTRAST);
+    expect(course.colors!.ramp).toBe('#ff69b4');
+    expect(repairs.join(' ')).toMatch(/ramp colours/);
   });
 });

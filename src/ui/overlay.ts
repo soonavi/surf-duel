@@ -1,5 +1,6 @@
 import { formatDelta, formatTime } from '../game/time.js';
 import { MAX_PLAYERS } from '../net/roomLogic.js';
+import { likeButton, type LikeButton, type LikeView } from './likeButton.js';
 
 export type OverlayScreen = 'start' | 'loading' | 'lobby' | 'pause' | 'results' | 'unsupported' | 'generate' | 'preview' | 'settings' | 'none';
 
@@ -29,6 +30,26 @@ export interface BoardRowView {
   selected: boolean;
   /** Set with assist mode on. */
   assist: boolean;
+}
+
+/** One course in the home screen's Popular list. */
+export interface PopularRowView {
+  code: string;
+  name: string;
+  difficulty: string;
+  swatch: [string, string];
+  likes: number;
+  prompt: string | null;
+  /** You liked it. */
+  liked: boolean;
+  /** It's the course loaded right now. */
+  selected: boolean;
+}
+
+export interface PopularView {
+  /** 'none': no database in this build, so the panel is hidden. */
+  state: 'loading' | 'ready' | 'unavailable' | 'none';
+  rows: PopularRowView[];
 }
 
 export interface BoardView {
@@ -87,6 +108,8 @@ export interface ResultsView {
   room?: { standings: StandingRow[]; isHost: boolean; raceOver: boolean };
   /** Present when the course has a leaderboard (solo and practice runs). */
   board?: ResultsBoardView;
+  /** Present for a shared course (it has a share code): the thumbs up. */
+  like?: LikeView;
 }
 
 export interface LobbyPlayerRow {
@@ -211,6 +234,11 @@ export class Overlay {
   /** Results screen: race a leaderboard ghost now. */
   onBoardRace: ((runId: string) => void) | null = null;
   onChangeName: ((name: string) => void) | null = null;
+  // Likes.
+  /** Results screen: like (or un-like) the course just raced. */
+  onLike: (() => void) | null = null;
+  /** Home screen: load one of the Popular courses. */
+  onPopularPick: ((code: string) => void) | null = null;
 
   private readonly root: HTMLElement;
   private readonly screens: Partial<Record<Exclude<OverlayScreen, 'none'>, HTMLElement>>;
@@ -223,6 +251,10 @@ export class Overlay {
   private raceVs: string | null = null;
   private readonly homeBoard: HTMLElement;
   private resultsBoard: HTMLElement | null = null;
+  private resultsLike: LikeButton | null = null;
+  private readonly popular: HTMLElement;
+  private readonly popularList: HTMLElement;
+  private readonly popularNote: HTMLElement;
   private readonly toastEl: HTMLElement;
   private readonly banner: HTMLElement;
   private readonly loadingText: HTMLElement;
@@ -283,6 +315,12 @@ export class Overlay {
                 </span>
                 <span class="feature__arrow" aria-hidden="true">→</span>
               </button>
+
+              <section class="panel popular" aria-labelledby="home-popular-title" hidden>
+                <h2 class="panel__title" id="home-popular-title">Popular AI courses</h2>
+                <div class="popular__list" role="group" aria-labelledby="home-popular-title"></div>
+                <p class="board__note popular__note" hidden></p>
+              </section>
 
               <section class="panel mp-block" aria-labelledby="home-mp-title">
                 <h2 class="panel__title" id="home-mp-title">Race friends</h2>
@@ -379,6 +417,9 @@ export class Overlay {
     this.courseList = q('.course-list');
     this.raceCourse = q('.btn--race__course');
     this.homeBoard = q('.home__board');
+    this.popular = q('.popular');
+    this.popularList = q('.popular__list');
+    this.popularNote = q('.popular__note');
     this.toastEl = q('.toast');
     this.banner = q('.banner');
     this.loadingText = q('.loading-text');
@@ -537,6 +578,53 @@ export class Overlay {
     if (view.note) box.append(el('p', view.note, 'board__note'));
   }
 
+  /** The most liked AI courses; click one to load it. Rows are player-made text: textContent only. */
+  setPopular(view: PopularView): void {
+    this.popular.hidden = view.state === 'none';
+    this.popularList.replaceChildren(
+      ...view.rows.map((r) => {
+        const b = el('button', undefined, 'popular__row');
+        b.type = 'button';
+        b.setAttribute('aria-pressed', String(r.selected));
+        b.style.setProperty('--swatch-a', r.swatch[0]);
+        b.style.setProperty('--swatch-b', r.swatch[1]);
+        const head = el('span', undefined, 'popular__head');
+        const diff = el('span', r.difficulty, 'diff');
+        diff.dataset.level = r.difficulty;
+        const likes = el('span', `👍 ${r.likes}`, 'popular__likes');
+        likes.dataset.liked = String(r.liked);
+        likes.setAttribute('aria-label', `${r.likes} ${r.likes === 1 ? 'like' : 'likes'}${r.liked ? ', including yours' : ''}`);
+        head.append(el('span', undefined, 'popular__swatch'), el('span', r.name, 'popular__name'), diff, likes);
+        b.append(head);
+        if (r.prompt) {
+          const prompt = el('span', `“${r.prompt}”`, 'popular__prompt');
+          b.title = r.prompt;
+          b.append(prompt);
+        }
+        b.addEventListener('click', () => {
+          b.blur();
+          this.onPopularPick?.(r.code);
+        });
+        return b;
+      }),
+    );
+    const note =
+      view.state === 'loading' && view.rows.length === 0
+        ? 'Loading…'
+        : view.state === 'unavailable'
+          ? "Couldn't load popular courses right now."
+          : view.state === 'ready' && view.rows.length === 0
+            ? 'No AI courses yet. Design the first!'
+            : '';
+    this.popularNote.textContent = note;
+    this.popularNote.hidden = note === '';
+  }
+
+  /** Refresh the results screen's thumbs up (the like's reply arrives after it appears). */
+  setLike(view: LikeView): void {
+    this.resultsLike?.update(view);
+  }
+
   /** Ids of the start-screen course cards, in order (for arrow-key picking). */
   courseIds(): string[] {
     return [...this.courseNames.keys()];
@@ -679,6 +767,7 @@ export class Overlay {
     this.standingsTable = null;
     this.resultsRoomNote = null;
     this.resultsBoard = null;
+    this.resultsLike = null;
     const r = el('div', undefined, 'results__main');
     card.append(r);
     if (view.board) {
@@ -731,6 +820,14 @@ export class Overlay {
       stats.append(stat(rival.label, `${formatTime(rival.timeMs)} (${formatDelta(view.timeMs - rival.timeMs)})`));
     }
     r.append(stats);
+
+    if (view.like) {
+      this.resultsLike = likeButton(() => this.onLike?.());
+      this.resultsLike.update(view.like);
+      const row = el('div', undefined, 'results__like');
+      row.append(el('span', 'Enjoy this course?', 'results__like-text'), this.resultsLike.element);
+      r.append(row);
+    }
 
     const buttons = el('div', undefined, 'btn-row');
     if (view.room) {

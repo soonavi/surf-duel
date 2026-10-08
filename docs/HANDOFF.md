@@ -1,6 +1,6 @@
 # Handoff: where Surf Duel stands
 
-Written Oct 6 2026, when the user paused work. Read this first, then [CLAUDE.md](../CLAUDE.md) (rules, conventions, money and security constraints) and, if needed, [SPEC.md](SPEC.md).
+Written Oct 6 2026, updated Oct 8 (Phase 10 below). Read this first, then [CLAUDE.md](../CLAUDE.md) (rules, conventions, money and security constraints) and, if needed, [SPEC.md](SPEC.md).
 
 ## In one paragraph
 
@@ -73,12 +73,25 @@ Built:
 
 **Awaiting the user's playtest** of Spire especially.
 
-**Next, queued by the user:** thumbs up on generated courses, and a **Popular** section listing the most-liked ones. Agreed plan:
-- one like per player (`Profile.boardId`) per course, which they can undo;
-- counted server-side with the service role, like `submit_run`, with an IP-hash rate limit;
-- a Popular list on the home screen with one-click play by share code.
+## Phase 10 (user-requested, Oct 8): likes, Popular, and a better AI designer
 
-The user picked "hard courses first, then likes" (Oct 6).
+The user asked to "begin with the thumbs up and popular section", and to tune the AI designer: "i prompted it to make an all pink course, and did not succeed" (both of their pink prompts had come out as the Neon theme, because the AI could only pick one of five themes).
+
+**Likes and Popular** (built as agreed on Oct 6):
+- Migration `20261008120000_course_likes.sql` is **applied to surf-duel**: `courses.likes`, `course_likes`, `like_requests`, and `like_course()`. Its rules were checked in a rolled-back SQL block, and the permissions with `has_*_privilege`. The security advisor only lists the intended service-only tables.
+- `/api/like-course` → `server/likeCourse.ts`. The client side is `src/net/likesApi.ts` (`sendLike`, `fetchPopular`, `LikedCourses`), `src/ui/likeButton.ts`, and the Popular panel in `overlay.ts`.
+- Verified on the dev server against the real database: like → 1, unlike → 0 (left at 0).
+
+**AI designer:**
+- **Course colours.** `colors: { sky, ramp, ramp2 }` in the spec and the AI schema; `render/palette.ts` derives the look. Live: "make a all pink ramp map please" gave pink sky and ramps; "black and gold" gave black and gold.
+- **Sections schema.** The model now replies one section per ramp, with min/max counts from `DIFFICULTY_STYLE.ramps`. It had been giving 7–11 ramps. Now Easy and Medium run ~40 s, Hard and Expert 50–90 s.
+- **Crash fixed.** An AI Expert course crashed the layout (a stretched climb stopped the modelled rider dead → NaN). It's now in the playability extremes, alongside a 300-course fuzz test.
+- **Easy and Medium run downhill only.** An AI Medium course with many climbs made the cautious bot fall twice and take 136 s.
+- Live test calls went through the real budget claim but saved nothing: 35 generations (lifetime total 15 → 50 of 1,800, about $0.04).
+
+**Not changed:** `LAYOUT_VERSION` stays 5. The shipped courses and the two saved climbing AI courses have byte-identical geometry (fingerprinted before and after).
+
+**Next:** the AI gets walls and spirals, once the user has playtested Spire.
 
 ## Phase status
 

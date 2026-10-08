@@ -1,9 +1,10 @@
 /**
  * The real CourseDesigner: one OpenAI Responses API call with Structured
- * Outputs (strict JSON schema), so the reply is always shaped like a course.
+ * Outputs (strict JSON schema), so the reply is always shaped like a course
+ * (one section per ramp, laid end to end into segments here).
  */
 import type OpenAI from 'openai';
-import { COURSE_JSON_SCHEMA, COURSE_SCHEMA_NAME, COURSE_SYSTEM_PROMPT, courseUserMessage } from '../src/course/aiSchema.js';
+import { COURSE_SCHEMA_NAME, COURSE_SYSTEM_PROMPT, courseFromAi, courseJsonSchema, courseUserMessage } from '../src/course/aiSchema.js';
 import { BUDGET, type CourseDesigner } from './generateCourse.js';
 
 /** The slice of the OpenAI client we use (lets tests pass a fake). */
@@ -24,7 +25,8 @@ export function openAiDesigner(client: ResponsesClient, model: string): CourseDe
         model,
         instructions: COURSE_SYSTEM_PROMPT,
         input: courseUserMessage(prompt, difficulty),
-        text: { format: { type: 'json_schema', name: COURSE_SCHEMA_NAME, schema: COURSE_JSON_SCHEMA, strict: true } },
+        // The schema for the picked difficulty holds the model to that many ramps.
+        text: { format: { type: 'json_schema', name: COURSE_SCHEMA_NAME, schema: courseJsonSchema(difficulty), strict: true } },
         // Players' prompts don't need to live on OpenAI's side.
         store: false,
         // Caps what one call can cost (a course is ~400-800 tokens).
@@ -41,6 +43,6 @@ export function openAiDesigner(client: ResponsesClient, model: string): CourseDe
     }
     const text = response.output_text;
     if (!text) throw new Error('The model returned no course (refused or empty).');
-    return JSON.parse(text) as unknown;
+    return courseFromAi(JSON.parse(text));
   };
 }

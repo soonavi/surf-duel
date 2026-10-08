@@ -8,6 +8,7 @@
  */
 import { PROMPT_MAX_CHARS } from '../course/aiSchema.js';
 import { DIFFICULTIES, type Difficulty } from '../course/schema.js';
+import { likeButton, type LikeButton, type LikeView } from './likeButton.js';
 
 /** The difficulty picker: a label and what to expect from each. */
 const DIFFICULTY_CHOICES: Readonly<Record<Difficulty, { label: string; note: string }>> = {
@@ -22,7 +23,7 @@ export const EXAMPLE_PROMPTS: readonly string[] = [
   'a gentle icy run for beginners',
   'short and brutal: steep ramps, big gaps',
   'neon city highway with boosters everywhere',
-  'a winding desert canyon that keeps dropping',
+  'all pink, with a big drop and boosters',
 ];
 
 const LOADING_LINES: readonly string[] = [
@@ -47,6 +48,8 @@ export interface PreviewView {
   /** False in view-only mode (touch devices): the race button is shown but disabled. */
   canRace?: boolean;
   canRegenerate: boolean;
+  /** The thumbs up, for a course with a share code. */
+  like: LikeView | null;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
@@ -76,6 +79,7 @@ export class GeneratorUi {
   onNewPrompt: (() => void) | null = null;
   onCopyLink: (() => void) | null = null;
   onPreviewBack: (() => void) | null = null;
+  onLike: (() => void) | null = null;
 
   readonly generateScreen: HTMLElement;
   readonly previewScreen: HTMLElement;
@@ -93,6 +97,7 @@ export class GeneratorUi {
   private readonly difficultyChips: HTMLButtonElement[] = [];
   private readonly difficultyNote: HTMLElement;
   private difficultyValue: Difficulty = 'medium';
+  private previewLike: LikeButton | null = null;
   private loadingTimer = 0;
 
   constructor() {
@@ -297,6 +302,12 @@ export class GeneratorUi {
       share.append(el('span', view.codeNote, 'preview__share-label'));
     }
     parts.push(share);
+    this.previewLike = null;
+    if (view.like) {
+      this.previewLike = likeButton(() => this.onLike?.());
+      this.previewLike.update(view.like);
+      share.append(this.previewLike.element);
+    }
 
     const actions = el('div', undefined, 'btn-row');
     const race = button(view.primaryLabel, 'btn btn--primary', () => this.onRace?.());
@@ -306,6 +317,11 @@ export class GeneratorUi {
     actions.append(button('New prompt', 'btn btn--ghost', () => this.onNewPrompt?.()), button('Back', 'btn btn--ghost', () => this.onPreviewBack?.()));
     parts.push(actions);
     p.replaceChildren(...parts);
+  }
+
+  /** Refresh the preview's thumbs up (the like's reply arrives after it appears). */
+  setLike(view: LikeView): void {
+    this.previewLike?.update(view);
   }
 
   private lock(busy: boolean): void {

@@ -19,7 +19,8 @@ import { createPlayer, stepPlayer, type MoveCmd, type PlayerState } from '../phy
 import { SceneView } from '../render/scene.js';
 import { CourseView } from '../render/courseView.js';
 import { GhostView } from '../render/ghostView.js';
-import { THEME_DEFS } from '../render/themes.js';
+import { THEME_DEFS, type Theme } from '../render/themes.js';
+import { courseTheme, themeLabel } from '../render/palette.js';
 import { buildCourse, type BuiltCourse, type SpawnPoint } from '../course/builder.js';
 import { CourseRuntime, placeAtSpawn, type CourseEvent } from '../course/runtime.js';
 import { SurfBot } from '../course/bot.js';
@@ -36,6 +37,7 @@ import { MAX_PLAYERS, rankRacers } from '../net/roomLogic.js';
 import type { CourseRef } from '../net/protocol.js';
 import { multiplayerConfigured } from '../net/config.js';
 import { fetchSharedCourse, requestCourse } from '../net/courseApi.js';
+import { LikedCourses, POPULAR_SIZE, fetchPopular, sendLike, type PopularCourse } from '../net/likesApi.js';
 import { BOARD_SIZE, fetchLeaderboard, fetchRunGhost, submitRun, type BoardEntry, type BoardRef, type SubmitPayload } from '../net/leaderboardApi.js';
 import type { RoomTransport } from '../net/transport.js';
 
@@ -44,7 +46,8 @@ async function roomTransport(): Promise<RoomTransport> {
   const { supabaseTransport } = await import('../net/supabase.js');
   return supabaseTransport();
 }
-import { Overlay, type OverlayScreen, type BoardView, type CourseCard, type LobbyView, type ResultsBoardView, type ResultsView, type StandingRow } from '../ui/overlay.js';
+import { Overlay, type OverlayScreen, type BoardView, type CourseCard, type LobbyView, type PopularView, type ResultsBoardView, type ResultsView, type StandingRow } from '../ui/overlay.js';
+import type { LikeView } from '../ui/likeButton.js';
 import { Hud, type HudMarker, type HudStanding } from '../ui/hud.js';
 import { GeneratorUi } from '../ui/generator.js';
 import { flyoverFade, flyoverPose } from '../render/flyover.js';
@@ -117,6 +120,8 @@ interface CustomCourse {
   seed: number | null;
 }
 const NO_KEYS: CoachKeys = { w: false, a: false, s: false, d: false, space: false };
+/** The home screen's Popular list is fetched again after this long. */
+const POPULAR_FRESH_MS = 60_000;
 /** The start screen's background flyover runs at this fraction of the preview's speed. */
 const MENU_FLYOVER_PACE = 0.55;
 
@@ -139,6 +144,8 @@ export class App {
   private readonly profile = new Profile();
 
   private built!: BuiltCourse;
+  /** The look in use: the course's theme in its own colours (or the dev panel's override). */
+  private theme!: Theme;
   private key = '';
   private courseId: string | null = null;
   private courseView: CourseView | null = null;
@@ -173,6 +180,15 @@ export class App {
   private custom: CustomCourse | null = null;
   /** Who the generator is for: you (back to the menu) or the room you host (back to the lobby). */
   private generatorFor: 'solo' | 'room' = 'solo';
+
+  // Likes and the Popular list.
+  private readonly liked = new LikedCourses();
+  /** Like counts by share code, as last heard from the database. */
+  private readonly likeCounts = new Map<string, number>();
+  private likeBusy = false;
+  private popular: PopularCourse[] = [];
+  private popularState: PopularView['state'] = 'loading';
+  private popularAt = -Infinity;
   /** Bumped per request, so a reply that arrives after you've moved on is ignored. */
   private generateRequest = 0;
   private flyoverStart = 0;
@@ -329,6 +345,8 @@ export class App {
     this.overlay.onBoardPick = (runId) => this.pickBoardGhost(runId);
     this.overlay.onBoardRace = (runId) => this.raceBoardGhost(runId);
     this.overlay.onChangeName = (name) => this.changeName(name);
+    this.overlay.onLike = () => void this.toggleLike();
+    this.overlay.onPopularPick = (code) => this.pickPopular(code);
     this.bindRoomUi();
     this.input.onLockChange = (locked) => this.handleLockChange(locked);
 
@@ -406,7 +424,8 @@ export class App {
 
   /** Rebuild visuals with the current theme (course theme or dev override). */
   applyTheme(): void {
-    const theme = THEME_DEFS[this.debug.themeOverride === 'auto' ? this.built.course.theme : this.debug.themeOverride];
+    const theme = this.debug.themeOverride === 'auto' ? courseTheme(this.built.course) : THEME_DEFS[this.debug.themeOverride];
+    this.theme = theme;
     this.courseView?.dispose();
     this.courseView = new CourseView(this.built, theme);
     this.view.scene.add(this.courseView.group);
@@ -424,9 +443,9 @@ export class App {
         id: c.id,
         name: spec.name,
         difficulty: spec.difficulty,
-        meta: THEME_DEFS[spec.theme].label,
+        meta: themeLabel(spec),
         blurb: c.blurb,
-        swatch: THEME_DEFS[spec.theme].swatch,
+        swatch: courseTheme(spec).swatch,
         bestMs: this.records.best(courseKey(spec))?.timeMs ?? null,
         badge: null,
       };
@@ -434,13 +453,14 @@ export class App {
     const custom = this.custom;
     if (custom) {
       const label = custom.source === 'ai' ? 'AI course' : custom.source === 'shared' ? 'Shared course' : 'Random course';
+      const likes = custom.code ? this.likeCounts.get(custom.code) : undefined;
       cards.push({
         id: CUSTOM_ID,
         name: custom.course.name,
         difficulty: custom.course.difficulty,
-        meta: [THEME_DEFS[custom.course.theme].label, label, custom.code].filter(Boolean).join(' · '),
+        meta: [themeLabel(custom.course), label, custom.code, likes === undefined ? null : `👍 ${likes}`].filter(Boolean).join(' · '),
         blurb: custom.prompt ? `“${custom.prompt}”` : 'Made from a random seed.',
-        swatch: THEME_DEFS[custom.course.theme].swatch,
+        swatch: courseTheme(custom.course).swatch,
         bestMs: this.records.best(courseKey(custom.course))?.timeMs ?? null,
         badge: null,
       });
@@ -449,6 +469,101 @@ export class App {
     const tutorial = cards.find((c) => c.id === TUTORIAL_ID);
     if (tutorial && cards.every((c) => c.bestMs === null)) tutorial.badge = 'Start here';
     this.overlay.setCourses(cards, this.selectedCourseId);
+  }
+
+  // --- likes and the Popular list ----------------------------------------------
+
+  /** The share code of the course loaded now, if it has one (only shared courses can be liked). */
+  private currentCode(): string | null {
+    return this.boardRef?.kind === 'code' ? this.boardRef.code : null;
+  }
+
+  private likeView(): LikeView | null {
+    const code = this.currentCode();
+    if (!code || !multiplayerConfigured()) return null;
+    return { liked: this.liked.has(code), likes: this.likeCounts.get(code) ?? null, busy: this.likeBusy };
+  }
+
+  private renderLike(): void {
+    const view = this.likeView();
+    if (view) {
+      this.overlay.setLike(view);
+      this.generator.setLike(view);
+    }
+  }
+
+  /** Thumbs up (or take it back) on the loaded course: shown at once, then settled by the server's count. */
+  private async toggleLike(): Promise<void> {
+    const code = this.currentCode();
+    if (!code || this.likeBusy) return;
+    const want = !this.liked.has(code);
+    const before = this.likeCounts.get(code);
+    this.likeBusy = true;
+    this.liked.set(code, want);
+    if (before !== undefined) this.likeCounts.set(code, Math.max(0, before + (want ? 1 : -1)));
+    this.renderLike();
+    const out = await sendLike(code, this.profile.boardId, want);
+    this.likeBusy = false;
+    if (out.ok) {
+      this.liked.set(code, out.liked);
+      this.likeCounts.set(code, out.likes);
+      this.popularAt = -Infinity; // the order may have changed
+    } else {
+      this.liked.set(code, !want);
+      if (before !== undefined) this.likeCounts.set(code, before);
+      else this.likeCounts.delete(code);
+      this.overlay.toast(out.message, 3000);
+    }
+    this.renderLike();
+    this.refreshCourseCards();
+  }
+
+  /** The home screen's Popular list, fetched again when stale. */
+  private refreshPopular(): void {
+    if (!multiplayerConfigured()) {
+      this.overlay.setPopular({ state: 'none', rows: [] });
+      return;
+    }
+    this.renderPopular();
+    if (performance.now() - this.popularAt < POPULAR_FRESH_MS) return;
+    this.popularAt = performance.now();
+    void fetchPopular(POPULAR_SIZE).then((out) => {
+      if (out.ok) {
+        this.popular = out.courses;
+        this.popularState = 'ready';
+        for (const c of out.courses) this.likeCounts.set(c.code, c.likes);
+      } else {
+        this.popularAt = -Infinity;
+        if (this.popular.length === 0) this.popularState = 'unavailable';
+      }
+      this.renderPopular();
+      if (this.state === 'menu') this.refreshCourseCards();
+    });
+  }
+
+  private renderPopular(): void {
+    this.overlay.setPopular({
+      state: this.popularState,
+      rows: this.popular.map((p) => ({
+        code: p.code,
+        name: p.course.name,
+        difficulty: p.course.difficulty,
+        swatch: courseTheme(p.course).swatch,
+        likes: this.likeCounts.get(p.code) ?? p.likes,
+        prompt: p.prompt,
+        liked: this.liked.has(p.code),
+        selected: this.selectedCourseId === CUSTOM_ID && this.custom?.code === p.code,
+      })),
+    });
+  }
+
+  /** Load a Popular course as your custom course, right here on the home screen. */
+  private pickPopular(code: string): void {
+    const pick = this.popular.find((p) => p.code === code);
+    if (!pick || this.state !== 'menu') return;
+    this.custom = { course: pick.course, source: 'shared', code: pick.code, prompt: pick.prompt, seed: null };
+    this.refreshCourseCards();
+    this.selectCourse(CUSTOM_ID);
   }
 
   /** Arrow keys on the start screen: pick the previous/next course card. */
@@ -653,6 +768,7 @@ export class App {
     this.flyoverStart = performance.now();
     this.overlay.show('start');
     this.refreshHomeBoard();
+    this.refreshPopular();
   }
 
   private handleMenuKeys(e: KeyboardEvent): void {
@@ -1133,7 +1249,7 @@ export class App {
     if (!room) return;
     const st = room.state;
     const me = room.players.find((p) => p.isMe);
-    const theme = THEME_DEFS[this.built.course.theme];
+    const theme = courseTheme(this.built.course);
     const ready = room.players.filter((p) => p.ready || p.isHost).length;
     const ramps = this.built.segments.filter((s) => s.type === 'ramp').length;
     const isCustom = (st.course.kind === 'spec' || st.course.kind === 'random') && this.custom !== null && this.roomCourseKey === courseKey(this.custom.course);
@@ -1153,7 +1269,7 @@ export class App {
       course: {
         name: this.built.course.name,
         difficulty: this.built.course.difficulty,
-        theme: theme.label,
+        theme: themeLabel(this.built.course),
         swatch: theme.swatch,
         bestMs: this.records.best(this.key)?.timeMs ?? null,
         detail: [plural(ramps, 'ramp'), plural(this.built.checkpoints.length - 1, 'checkpoint'), roomCode ? `share code ${roomCode}` : ''].filter(Boolean).join(' · '),
@@ -1302,6 +1418,7 @@ export class App {
     g.onRegenerate = () => void this.generate(this.custom?.prompt ?? g.prompt, this.custom?.course.difficulty ?? g.difficulty);
     g.onCopyLink = () => void this.copyCourseLink();
     g.onRace = () => this.raceCustom();
+    g.onLike = () => void this.toggleLike();
   }
 
   /** Open the prompt screen, for yourself or (as host) for your room. */
@@ -1342,6 +1459,7 @@ export class App {
       return;
     }
     this.generator.clearStatus();
+    if (out.value.code) this.likeCounts.set(out.value.code, out.value.likes);
     this.useCustom({ course: out.value.course, source: 'ai', code: out.value.code, prompt: out.value.prompt, seed: null });
   }
 
@@ -1362,6 +1480,7 @@ export class App {
       return;
     }
     this.generator.clearStatus();
+    if (out.value.code) this.likeCounts.set(out.value.code, out.value.likes);
     this.useCustom({ course: out.value.course, source: 'shared', code: out.value.code, prompt: out.value.prompt, seed: null });
   }
 
@@ -1395,13 +1514,14 @@ export class App {
     this.generator.showPreview({
       eyebrow: c.source === 'ai' ? 'AI course' : c.source === 'shared' ? 'Shared course' : 'Random course',
       name: course.name,
-      meta: `${course.difficulty} · ${THEME_DEFS[course.theme].label} · ${plural(ramps, 'ramp')} · ${plural(this.built.checkpoints.length - 1, 'checkpoint')}`,
+      meta: `${course.difficulty} · ${themeLabel(course)} · ${plural(ramps, 'ramp')} · ${plural(this.built.checkpoints.length - 1, 'checkpoint')}`,
       prompt: c.prompt,
       code: c.code,
       codeNote: c.source === 'random' ? 'Random courses have no share code.' : "Couldn't save a share code for this one, but you can still race it.",
       primaryLabel: this.viewOnly ? 'Race on a computer' : this.generatorFor === 'room' ? 'Use in room' : 'Race',
       canRace: !this.viewOnly,
       canRegenerate: c.source === 'ai' && c.prompt !== null,
+      like: this.likeView(),
     });
     this.overlay.show('preview');
   }
@@ -1474,7 +1594,7 @@ export class App {
         if (this.fancyEffects) {
           const at = forwardOf(this.angles.yaw, this.tmp).multiplyScalar(260).add(this.player.pos);
           at.y += EYE_HEIGHT;
-          this.burst.fire(at, this.player.vel, THEME_DEFS[this.built.course.theme].accent);
+          this.burst.fire(at, this.player.vel, this.theme.accent);
         }
         if (session) {
           const split = session.checkpoint(event.index);
@@ -1550,6 +1670,7 @@ export class App {
     };
     const board = this.postRun(outcome, result.splits);
     if (board && !roomRace) view.board = board;
+    view.like = this.likeView() ?? undefined;
 
     // Keep sliding on the finish pad for a moment, then show the results.
     // Counted in simulation ticks so pausing in between holds it too.
@@ -1565,6 +1686,7 @@ export class App {
     this.input.releaseLock();
     if (view.room) view.room.standings = this.standingRows();
     if (view.board) view.board = this.resultsBoardView() ?? view.board; // posting may have finished meanwhile
+    if (view.like) view.like = this.likeView() ?? undefined;
     this.overlay.showResults(view);
   }
 
@@ -1782,8 +1904,7 @@ export class App {
     BEAT_PULSE.value = pulse;
     this.courseView?.setPulse(pulse);
     if (this.reducedMotion || !this.audio.ready) return;
-    const theme = THEME_DEFS[this.built.course.theme];
-    if (this.overlay.screen === 'start') drawEqualizer(this.overlay.equalizerCanvas, this.audio.bars(48), theme.swatch);
+    if (this.overlay.screen === 'start') drawEqualizer(this.overlay.equalizerCanvas, this.audio.bars(48), this.theme.swatch);
     else if (racing || this.state === 'countdown') drawEqualizer(this.hud.equalizerCanvas, this.audio.bars(16), ['#ffffff', '#ffffff']);
   }
 

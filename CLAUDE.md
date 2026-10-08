@@ -42,8 +42,11 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - The finish pad is lengthened to the fastest rider's landing (fast riders used to fly clean over it).
 - **Not everything goes downhill.** User, Oct 6 2026: Expert "isn't very hard because of how fast you can get, and because it is downhill".
   - Each ramp may carry its own `pitch`: degrees downhill along its length, 0 level, negative climbs. Without one it takes the difficulty's default; Expert's default is 6°.
+  - **Level ramps and climbs are for hard and expert only.** On easy and medium the validator gives any ramp under `MIN_CRUISE_PITCH` its usual slope back: a cautious rider sheds ~12% of its speed landing and steering on a level ramp, the speed model doesn't count that, and on an AI medium course the bot fell short of a climb and hit its end (Oct 8 2026).
   - `limitBySpeed` in the validator gives a ramp its usual slope back when a cautious rider would only crawl along it (below `MIN_CRUISE_SPEED`).
   - It also eases climbs so the cautious rider still has `MIN_CLIMB_SPEED` at the top. Respawns ride at that cautious speed.
+  - The layout stretches short ramps to catch fast riders (a 1,750 climb became 7,263). `placeRamp` eases a stretched climb the same way, over its real length; it once stopped the modelled rider dead and crashed the layout. Transfers also never assume a rider slower than walking pace.
+  - `builder.test.ts` lays out 300 seeded random AI-shaped courses (steep climbs, big boosters, every difficulty) and they must all build with finite geometry.
 - **New pieces, hand-made only for now.** The user chose "hand-made first", so the AI isn't offered walls or spirals yet.
   - **`wall`**: stands across the next ramp, past the fastest rider's landing plus `WALL_SETTLE`. Its window spans `windowSlack` either side of the riding line (420, 340, 260, 200 by difficulty). Off the line, you hit it.
   - **`spiral`**: one full turn of ramps round a tower, radius `SPIRAL_RADIUS` (5600, kept wide for the flyover camera).
@@ -67,6 +70,7 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - Supabase delivers a joiner's own presence ~1 s before existing members: `Room.connect` waits (`joinSettleMs`) before deciding "not found", picking a colour or stamping `joinedAt`. `MemoryHub(existingMembersDelayMs)` reproduces this in tests.
 - Shared races never pause: the loop keeps simulating with the mouse released; `FixedStepLoop.droppedTime` (hidden tab) is charged to the race clock.
 - Test multiplayer alone in the browser pane with an iframe of `/?room=CODE` (a separate app instance) and drive both apps' `loop.frame(performance.now())`.
+- Never link `node_modules` into a temporary git worktree: `git worktree remove --force` follows the junction and empties the real one (Oct 8 2026; `npm ci` restored it).
 
 ## Server (Phase 5)
 - `api/*.ts` are Vercel functions with the web signature (`export function POST(request: Request)`); logic lives in `server/` with injected deps so it's unit-tested. `npm run dev` runs them through the `devApi()` middleware in `vite.config.ts`.
@@ -75,7 +79,21 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - **Money (user, Oct 5 2026): "no chance of me being billed any more."** OpenAI runs on $5 of prepaid credit with auto-recharge off, model `gpt-5.4-nano`. `BUDGET` in `server/generateCourse.ts` (150/day, 1,800 lifetime, 1,500 output tokens per call) keeps the worst case under $5; the database enforces it atomically (`claim_generation`) and the server fails closed if it can't claim. Never add a path that calls OpenAI without a successful claim, never add retries, and re-check `BUDGET` (there's a test with the prices) before changing the model.
 - **Malicious prompts (user, Oct 5 2026: "ensure that nothing malicious can be injected").** Layers, all tested: `preparePrompt` (clean, drop markup chars, refuse links/blocked words: before the claim), the free OpenAI moderation check (`server/openaiModerator.ts`, after the claim so it's rate-limited; plain `violence` is allowed, everything else flagged refuses; fails closed), the prompt sent as a JSON string, Structured Outputs, `validateCourse`, and the course name checked by the validator (`cleanName`) and moderated. Any new player-visible text (leaderboard names!) goes through `cleanName`/`sanitizeName`. Render user text with `textContent` only.
 - Course share codes: 6 chars `[A-HJ-NP-Z2-9]` (`course/shareCode.ts`, enforced by a DB check). Room codes stay 4 letters.
-- **AI ramps carry a `pitch`.** Strict mode has no optional properties, so it's `["integer", "null"]`, and null means the usual slope. The prompt asks for 12–20 ramps (about a minute) on Hard and Expert, and mostly level ramps with boosters on Expert. Walls and spirals aren't in the AI schema yet.
+- **AI ramps carry a `pitch`.** Strict mode has no optional properties, so it's `["integer", "null"]`, and null means the usual slope. The prompt asks for mostly level ramps with boosters on Expert, and downhill only on Easy and Medium. Walls and spirals aren't in the AI schema yet.
+- **The AI replies in sections, one per ramp** (the ramp, then up to `AI_MAX_PIECES` drops, gaps, boosters or checkpoints). Asked in words for 14–18 ramps, gpt-5.4-nano gave 7–11 (Oct 8 2026).
+  - `courseJsonSchema(difficulty)` sets the sections' `minItems`/`maxItems` from `DIFFICULTY_STYLE.ramps`, and strict mode enforces them.
+  - `courseFromAi` (called in `openaiDesigner`) lays the sections end to end into segments. The schema has no `difficulty`: the player picked it.
+  - Measured live: about 40 s on Easy and Medium (all downhill), 50–90 s on Hard and Expert; ~1,480 input tokens, 450–720 output tokens, 4–6 s.
+- **Course colours** (user, Oct 2026: an "all pink" AI course came out as the Neon theme).
+  - A course may carry `colors: { sky, ramp, ramp2 }` ("#rrggbb"). The AI sets them when the player names colours or a colourful place.
+  - `render/palette.ts` `courseTheme(course)` derives the whole look with readability rules: grid lines contrast with their surface, the A/D colours show on dark panels, and gates stand out against the sky. Always use `courseTheme`/`themeLabel`, never `THEME_DEFS[course.theme]`, for a course's colours.
+  - The validator keeps `ramp` and `ramp2` at least `MIN_RAMP_CONTRAST` apart (by lightness, which colour-blind players can tell apart), and leaves the key out when there are no colours, so older courses keep their keys.
+- **The input-token estimate is nearly full:** `generateCourse.test.ts` checks characters ÷ 3, now ~2,460 of `BUDGET.maxInputTokens` 2,500. Trim wording before adding anything to the prompt or schema; don't raise the budget without re-checking the $5 maths.
+- **Likes and the Popular list** (Oct 8 2026, migration `20261008120000_course_likes.sql`).
+  - `course_likes` (who liked what, service role only) and `courses.likes` (the count, publicly readable). Only `like_course()`, via `/api/like-course` (`server/likeCourse.ts`), writes them, in one locked step.
+  - One like per `Profile.boardId` per course, undoable. Player ids are cheap to fake, so at most `perIpCourse` (3) players on one network can like the same course, plus a per-network rate limit.
+  - The home screen's Popular list reads `courses` by likes, then newest. Clicking one loads it as the custom course right there.
+  - `LikedCourses` (localStorage `surfduel.likes.v1`) only remembers the button state; the server holds the count. The 👍 shows on the preview and results screens of any course with a share code.
 - **The player picks the difficulty** of an AI course (generator chips). The request carries `difficulty` (old clients default to medium). The model is told it in the user message, and the server overwrites the reply's difficulty with it before validating. A random fallback course uses the picked difficulty too, and travels to rooms as `{ kind: 'random', seed, difficulty }`.
 - Test rows TESTQA and DWLU69 were deleted from `courses` on Oct 6 2026 (user-approved) before launch.
 

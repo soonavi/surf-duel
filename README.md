@@ -23,7 +23,8 @@ On a ramp to your **right**, hold **D**. On a ramp to your **left**, hold **A**.
 ## Features
 
 - **Five hand-made courses** across five themes, from the coached Tutorial to Event Horizon, each with your personal-best ghost and a rival ghost to race.
-- **AI course designer.** Describe a course ("long sweeping ramps over lava, one huge drop") and the OpenAI API designs it in a few seconds. Every course is repaired until it's beatable, gets a flyover preview and a 6-character share code.
+- **AI course designer.** Describe a course ("long sweeping ramps over lava, one huge drop", "all pink, with a big drop and boosters") and pick a difficulty; the OpenAI API designs it in a few seconds, in the colours you ask for. Every course is repaired until it's beatable, gets a flyover preview and a 6-character share code.
+- **👍 Likes and a Popular list.** Thumbs up a shared course after racing it (or on its preview); the most-liked AI courses are one click away on the home screen.
 - **Live multiplayer rooms** for up to 8 players (Supabase Realtime): share a link, ready up, race with live positions and standings, spectate.
 - **Global leaderboards** on every course with a share code: top 10, your place, and **race anyone's ghost**. Runs are checked on the server against the course and the physics.
 - **Generated soundtrack.** Every course has its own synthwave loop that builds as you speed up, or play your own music file; equalizers and the course pulse with the beat.
@@ -144,10 +145,19 @@ How it works:
   5. All of it is rendered with `textContent`, never as HTML, and saved prompts are cleaned again before they're shown.
 - **Spending caps.** The game runs on a small prepaid OpenAI credit, so it can never spend more than that. One Postgres function (`claim_generation`, in `supabase/migrations/`) checks every limit and counts the generation in a single locked step, so simultaneous requests can't slip past a cap: 6 per player per 10 minutes and 40 a day (IPs stored only as a keyed hash), **150 a day across all players**, and **1,800 in total**. Each reply is capped at 1,500 tokens, so with `gpt-5.4-nano` the worst case for all 1,800 is about $4.30. Failed attempts count too. If the database can't be reached, the server refuses to call OpenAI at all.
 - The call (`server/openaiDesigner.ts`) uses the Responses API with **Structured Outputs**: a strict JSON schema (`src/course/aiSchema.ts`) built from the same `LIMITS` as the zod schema, plus a system prompt that explains segment types, safe ranges, difficulty styles and theme moods, and says the player's text (sent as a JSON string) is a description, never instructions. The model comes from `OPENAI_MODEL`; prompts aren't stored on OpenAI's side (`store: false`).
+- The reply lists **one section per ramp** (the ramp, then the drops, gaps, boosters or checkpoints before the next). The schema's `minItems`/`maxItems` come from the picked difficulty (12–16 ramps on Easy up to 14–18 on Hard and Expert), so courses run about 40 s to a minute and a half. Asked in words alone, the model gave about half that.
+- **Colours.** "All pink" or "black and gold" sets the course's own sky and ramp colours (`colors` in the spec). `src/render/palette.ts` shades everything else from them, keeping grid lines, the A/D key colours and the gates readable; the validator keeps the two ramp sides apart in lightness, since they tell you which key to hold.
 - Whatever comes back goes through `validateCourse`, the same repair pass every course gets, so it is always beatable. The playability tests include deliberately extreme AI-style specs (every drop at max, max gaps, every ramp bending the same way, 40 segments) and the bot must finish each one from the start and from every checkpoint.
 - The course is saved in the `courses` table under a fresh code. Anyone can read courses (RLS: select for anon); only the service role in the API can write. If saving fails you still get to race it, just without a code.
 - **Never a dead end:** a timeout, an AI failure, the rate limit, a bad code or no network all show a friendly message with **Race a random course instead**.
 - In a room, AI and shared courses travel as their full spec (plus share code), random ones as their seed, and every client rebuilds the same geometry.
+
+### Likes and Popular
+
+Any course with a share code can be liked from its preview or results screen; liking again takes it back. The home screen's **Popular AI courses** lists the most-liked ones (newest first among equals), and clicking one loads it right there to race.
+
+- `POST /api/like-course` (`api/like-course.ts` → `server/likeCourse.ts`) calls one Postgres function, `like_course` (`supabase/migrations/20261008120000_course_likes.sql`), that checks the limits and sets the like in one locked step: one like per player per course, at most three players on one network per course (player ids are made by the browser, so they're cheap to fake), and a per-network rate limit. IPs are stored only as a keyed hash.
+- `course_likes` (who liked what) can't be read by clients at all; `courses.likes` (the count) is public like the rest of `courses`, and the Popular list reads it directly. Which courses you liked is remembered on your device only, for the button.
 
 ### Leaderboards
 
