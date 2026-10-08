@@ -35,8 +35,8 @@ export const LIMITS = {
   boosterStrength: { min: 100, max: 800 },
   /** Ramps in one turn of a spiral round a tower. */
   spiralRamps: { min: 4, max: 8 },
-  /** Room for 18 AI ramps with up to two pieces (gap, drop, booster, checkpoint) after each. */
-  segments: { max: 56 },
+  /** Room for 18 AI sections: a wall, the ramp, and up to two pieces (gap, drop, booster, checkpoint) after it. */
+  segments: { max: 72 },
   minRamps: 2,
   /** Sum of ramp lengths, gaps, drops and spirals, in units (a minute-long course is ~100k). */
   totalLength: { min: 6000, max: 140000 },

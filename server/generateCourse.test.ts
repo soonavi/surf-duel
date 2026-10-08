@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BUDGET, RATE_LIMIT, handleGenerate, type ClaimLimits, type ClaimResult, type CourseRow, type CourseStore, type GenerateDeps } from './generateCourse.js';
 import { createRng } from '../src/util/rng.js';
 import { COURSE_SYSTEM_PROMPT, PROMPT_MAX_CHARS, courseJsonSchema, courseUserMessage } from '../src/course/aiSchema.js';
-import { DIFFICULTIES } from '../src/course/schema.js';
+import { DIFFICULTIES, type Course } from '../src/course/schema.js';
 
 const GOOD = {
   name: 'Molten Mile',
@@ -50,7 +50,11 @@ class FakeStore implements CourseStore {
   }
 }
 
-function setup(design: GenerateDeps['design'] = async () => GOOD, moderate: GenerateDeps['moderate'] = async (texts) => texts.map(() => false)) {
+function setup(
+  design: GenerateDeps['design'] = async () => GOOD,
+  moderate: GenerateDeps['moderate'] = async (texts) => texts.map(() => false),
+  ensure: GenerateDeps['ensure'] = (course) => ({ course, changes: [], beatable: true }),
+) {
   let t = 1_000_000;
   const store = new FakeStore(() => t);
   const calls: string[] = [];
@@ -69,9 +73,35 @@ function setup(design: GenerateDeps['design'] = async () => GOOD, moderate: Gene
     store,
     hashIp: (ip) => `h:${ip}`,
     random: createRng(1),
+    ensure,
   };
   return { deps, store, calls, difficulties, moderated, advance: (ms: number) => (t += ms) };
 }
+
+describe('handleGenerate: every course is ridden before it is served', () => {
+  it('saves and returns the course as the check left it (simplified until its bots finish)', async () => {
+    const checked: Course[] = [];
+    const { deps, store } = setup(undefined, undefined, (course) => {
+      checked.push(course);
+      return { course: { ...course, segments: course.segments.filter((s) => s.type !== 'drop') }, changes: ['speed reined in'], beatable: true };
+    });
+    const res = await handleGenerate({ prompt: 'lava' }, '1.2.3.4', deps);
+    expect(checked).toHaveLength(1);
+    expect(checked[0]!.segments.some((s) => s.type === 'drop')).toBe(true);
+    expect(res.body).toMatchObject({ ok: true });
+    const served = (res.body as { course: Course }).course;
+    expect(served.segments.some((s) => s.type === 'drop')).toBe(false);
+    expect(store.rows[0]!.spec).toEqual(served);
+  });
+
+  it("refuses a course even the simplest version of which can't be finished, and doesn't save it", async () => {
+    const { deps, store } = setup(undefined, undefined, (course) => ({ course, changes: ['walls and spiral removed'], beatable: false }));
+    const res = await handleGenerate({ prompt: 'lava' }, '1.2.3.4', deps);
+    expect(res.status).toBe(502);
+    expect(res.body).toMatchObject({ ok: false, reason: 'ai-failed' });
+    expect(store.rows).toEqual([]);
+  });
+});
 
 describe('handleGenerate: difficulty', () => {
   it('designs at the difficulty the player picked, whatever the model answers', async () => {

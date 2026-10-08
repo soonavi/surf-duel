@@ -46,14 +46,19 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
   - `limitBySpeed` in the validator gives a ramp its usual slope back when a cautious rider would only crawl along it (below `MIN_CRUISE_SPEED`).
   - It also eases climbs so the cautious rider still has `MIN_CLIMB_SPEED` at the top. Respawns ride at that cautious speed.
   - The layout stretches short ramps to catch fast riders (a 1,750 climb became 7,263). `placeRamp` eases a stretched climb the same way, over its real length; it once stopped the modelled rider dead and crashed the layout. Transfers also never assume a rider slower than walking pace.
-  - `builder.test.ts` lays out 300 seeded random AI-shaped courses (steep climbs, big boosters, every difficulty) and they must all build with finite geometry.
-- **New pieces, hand-made only for now.** The user chose "hand-made first", so the AI isn't offered walls or spirals yet.
-  - **`wall`**: stands across the next ramp, past the fastest rider's landing plus `WALL_SETTLE`. Its window spans `windowSlack` either side of the riding line (420, 340, 260, 200 by difficulty). Off the line, you hit it.
+  - `builder.test.ts` lays out 300 seeded AI-shaped courses (`aiShapedCourses.ts`: walls, spirals, steep climbs, big boosters, every difficulty) and they must all build with finite geometry.
+- **Walls and spirals** (hand-made first; the AI got them on Oct 8 2026, user: "give the AI walls and spirals now").
+  - **`wall`**: stands across the next ramp, past the fastest rider's landing plus `WALL_SETTLE`. Its window spans `windowSlack` either side of the riding line (520, 460, 260, 200 by difficulty). Off the line, you hit it. Easy and medium are wide because a rider who doesn't air-strafe settles ~400 off the line at 3,000+ u/s; air-strafers hold the line.
   - **`spiral`**: one full turn of ramps round a tower, radius `SPIRAL_RADIUS` (5600, kept wide for the flyover camera).
     - Its ramps are nearly level (`SPIRAL_PITCH_DEG`), and you hold toward the tower.
     - Its gaps shrink to what its slowest rider can cross.
     - It drops at least a ramp's height plus `SPIRAL_CLEARANCE` before passing under its own start.
+    - A rider who doesn't air-strafe can't hold its turn much above ~2,500 u/s and slides off the outside: late in a long, fast course a spiral may need moving earlier (see `ensureBeatable`).
   - The tower and the walls are solid; they go in the collision mesh, under `visuals.obstacles`.
+- **Every AI course is ridden before it's served** (`ensureBeatable`, `src/course/verify.ts`; server only, ~1 s, never in `validateCourse`). The layout's guarantees are proven for shipped and random courses, but the AI can combine anything in range: of 64 uniformly random AI-shaped courses, a sixth failed even without walls or spirals.
+  - The bots for the difficulty ride it from the start and every checkpoint. It must finish without deaths, in under `LONGEST_RIDE_SECONDS` (120): a slow course is a dull one.
+  - On failure it simplifies step by step: tame values to the random courses' ranges, rein in drops and boosters, then the first of: walls removed, spiral moved to the start, both, spiral removed, walls and spiral removed. If nothing works, the server answers `ai-failed` and the player is offered a random course.
+  - `playability.test.ts` rides 8 AI-shaped courses per difficulty *as served*. Most must keep their walls and spiral, and at most 2 Hard or Expert ones may come out survivable without air-strafing.
 - A spiral passes over itself, so a respawn finds its place with `TrackPath.relocate`, which uses true distance. The HUD's checkpoint marks do the same. Never search horizontally from the start: that can match the wrong level of a spiral.
 - Ramp colour is semantic: `rampRight` = ramp on your right (hold D), `rampLeft` = hold A.
 - The bot (`course/bot.ts`) faces the *local* track heading (looking ahead on curves makes its strafe brake) and surfs whichever face it's actually on.
@@ -79,16 +84,19 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - **Money (user, Oct 5 2026): "no chance of me being billed any more."** OpenAI runs on $5 of prepaid credit with auto-recharge off, model `gpt-5.4-nano`. `BUDGET` in `server/generateCourse.ts` (150/day, 1,800 lifetime, 1,500 output tokens per call) keeps the worst case under $5; the database enforces it atomically (`claim_generation`) and the server fails closed if it can't claim. Never add a path that calls OpenAI without a successful claim, never add retries, and re-check `BUDGET` (there's a test with the prices) before changing the model.
 - **Malicious prompts (user, Oct 5 2026: "ensure that nothing malicious can be injected").** Layers, all tested: `preparePrompt` (clean, drop markup chars, refuse links/blocked words: before the claim), the free OpenAI moderation check (`server/openaiModerator.ts`, after the claim so it's rate-limited; plain `violence` is allowed, everything else flagged refuses; fails closed), the prompt sent as a JSON string, Structured Outputs, `validateCourse`, and the course name checked by the validator (`cleanName`) and moderated. Any new player-visible text (leaderboard names!) goes through `cleanName`/`sanitizeName`. Render user text with `textContent` only.
 - Course share codes: 6 chars `[A-HJ-NP-Z2-9]` (`course/shareCode.ts`, enforced by a DB check). Room codes stay 4 letters.
-- **AI ramps carry a `pitch`.** Strict mode has no optional properties, so it's `["integer", "null"]`, and null means the usual slope. The prompt asks for mostly level ramps with boosters on Expert, and downhill only on Easy and Medium. Walls and spirals aren't in the AI schema yet.
-- **The AI replies in sections, one per ramp** (the ramp, then up to `AI_MAX_PIECES` drops, gaps, boosters or checkpoints). Asked in words for 14–18 ramps, gpt-5.4-nano gave 7–11 (Oct 8 2026).
+- **AI ramps carry a `pitch`.** Strict mode has no optional properties, so it's `["integer", "null"]`, and null means the usual slope. The prompt asks for mostly level ramps with boosters on Expert, and downhill only on Easy and Medium.
+- **The AI replies in sections** (Oct 8 2026): each has a `ramp` or a `spiral` (the other null), a `wall` flag (a wall across that ramp), and `then`, up to `AI_MAX_PIECES` drops, gaps, boosters or checkpoints. Asked in words for 14–18 ramps, gpt-5.4-nano gave 7–11.
   - `courseJsonSchema(difficulty)` sets the sections' `minItems`/`maxItems` from `DIFFICULTY_STYLE.ramps`, and strict mode enforces them.
-  - `courseFromAi` (called in `openaiDesigner`) lays the sections end to end into segments. The schema has no `difficulty`: the player picked it.
-  - Measured live: about 40 s on Easy and Medium (all downhill), 50–90 s on Hard and Expert; ~1,480 input tokens, 450–720 output tokens, 4–6 s.
+  - `courseFromAi` (called in `openaiDesigner`) lays the sections end to end into segments, the wall just before its ramp. The schema has no `difficulty`: the player picked it.
+  - One section shape, with no `$ref`. With two shapes sharing the pieces through `$defs`, the model stopped using drops, gaps and boosters entirely.
+  - The request line asks Hard and Expert for "a spiral and 2–4 walls" (the system prompt alone was skipped). Others get them when the description wants to go round or through something.
+  - The model still sometimes leaves every section's pieces empty; such courses are ramp-to-ramp but fine.
+  - Measured live: Easy and Medium 34–74 s, Hard and Expert 60–90 s; ~1,490 input tokens, 520–800 output tokens, 5–7 s per request including ~1 s of riding.
 - **Course colours** (user, Oct 2026: an "all pink" AI course came out as the Neon theme).
   - A course may carry `colors: { sky, ramp, ramp2 }` ("#rrggbb"). The AI sets them when the player names colours or a colourful place.
   - `render/palette.ts` `courseTheme(course)` derives the whole look with readability rules: grid lines contrast with their surface, the A/D colours show on dark panels, and gates stand out against the sky. Always use `courseTheme`/`themeLabel`, never `THEME_DEFS[course.theme]`, for a course's colours.
   - The validator keeps `ramp` and `ramp2` at least `MIN_RAMP_CONTRAST` apart (by lightness, which colour-blind players can tell apart), and leaves the key out when there are no colours, so older courses keep their keys.
-- **The input-token estimate is nearly full:** `generateCourse.test.ts` checks characters ÷ 3, now ~2,460 of `BUDGET.maxInputTokens` 2,500. Trim wording before adding anything to the prompt or schema; don't raise the budget without re-checking the $5 maths.
+- **The input-token estimate is nearly full:** `generateCourse.test.ts` checks characters ÷ 3, now ~2,420 of `BUDGET.maxInputTokens` 2,500 (real calls use ~1,490). Schema descriptions only say what the prompt doesn't. Trim wording before adding anything to the prompt or schema; don't raise the budget without re-checking the $5 maths.
 - **Likes and the Popular list** (Oct 8 2026, migration `20261008120000_course_likes.sql`).
   - `course_likes` (who liked what, service role only) and `courses.likes` (the count, publicly readable). Only `like_course()`, via `/api/like-course` (`server/likeCourse.ts`), writes them, in one locked step.
   - One like per `Profile.boardId` per course, undoable. Player ids are cheap to fake, so at most `perIpCourse` (3) players on one network can like the same course, plus a per-network rate limit.

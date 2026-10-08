@@ -12,42 +12,16 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildCourse } from './builder.js';
-import type { BotStyle } from './bot.js';
 import { SHIPPED_COURSES } from './courses/index.js';
+import { aiShapedCourse } from './aiShapedCourses.js';
 import { randomCourse } from './random.js';
-import type { Difficulty } from './schema.js';
 import { simulateRun } from './simulate.js';
 import { needsAirStrafe } from './tuning.js';
+import { CAUTIOUS, ensureBeatable, failuresOn } from './verify.js';
+import { validateCourse } from './validator.js';
 
-type NamedStyle = BotStyle & { name: string };
-
-const CAUTIOUS: readonly NamedStyle[] = [
-  { name: 'cautious', hop: false, airStrafe: false },
-  { name: 'aggressive', hop: true, airStrafe: false },
-];
-const SKILLED: readonly NamedStyle[] = [
-  { name: 'skilled', hop: false, airStrafe: true },
-  { name: 'skilled hopper', hop: true, airStrafe: true },
-];
-
-/** The bots a course of this difficulty must be finishable by. The first one also restarts from every checkpoint. */
-const stylesFor = (difficulty: Difficulty): readonly NamedStyle[] => (needsAirStrafe(difficulty) ? SKILLED : CAUTIOUS);
-
-/** Every way the bots for this course fail to finish cleanly, from the start and from each checkpoint. */
-function failuresOn(spec: unknown, label: string, maxSeconds = 180): string[] {
-  const built = buildCourse(spec);
-  const styles = stylesFor(built.course.difficulty);
-  const failures: string[] = [];
-  for (const style of styles) {
-    const r = simulateRun(built, style, maxSeconds);
-    if (!r.finished || r.deaths > 0) failures.push(`${label} ${style.name}: finished=${r.finished} deaths=${r.deaths}`);
-  }
-  for (let cp = 1; cp < built.checkpoints.length; cp++) {
-    const r = simulateRun(built, styles[0]!, maxSeconds, cp);
-    if (!r.finished || r.deaths > 0) failures.push(`${label} from cp ${cp}: finished=${r.finished} deaths=${r.deaths}`);
-  }
-  return failures;
-}
+/** AI-shaped courses tried per difficulty. */
+const AI_SHAPED_SEEDS = 8;
 
 describe('shipped courses', () => {
   for (const shipped of SHIPPED_COURSES) {
@@ -88,6 +62,40 @@ describe('random courses', () => {
         }
       }
       expect(failures).toEqual([]);
+    }, 300_000);
+  }
+});
+
+/**
+ * Courses shaped like the AI's replies, walls and spirals included, with
+ * every value anywhere in the schema's ranges: whatever the model combines,
+ * the course must be beatable at its difficulty.
+ */
+describe('AI-shaped courses with walls and spirals, as the server serves them', () => {
+  // The server rides every AI course before saving it, simplifying it until its bots can finish
+  // (ensureBeatable). What it serves must then pass the same checks as every other course.
+  for (const difficulty of ['easy', 'medium', 'hard', 'expert'] as const) {
+    it(`${difficulty}: the bots finish every one, from the start and every checkpoint, mostly with its walls and spiral`, () => {
+      const failures: string[] = [];
+      let features = 0;
+      let kept = 0;
+      let softies = 0;
+      for (let seed = 1; seed <= AI_SHAPED_SEEDS; seed++) {
+        const designed = validateCourse(aiShapedCourse(seed, difficulty)).course;
+        const checked = ensureBeatable(designed);
+        if (!checked.beatable) failures.push(`${difficulty} AI-shaped ${seed}: still unbeatable after ${checked.changes.join(', ')}`);
+        failures.push(...failuresOn(checked.course, `${difficulty} AI-shaped ${seed}`, 240));
+        for (const type of ['wall', 'spiral'] as const) {
+          if (!designed.segments.some((s) => s.type === type)) continue;
+          features++;
+          if (checked.course.segments.some((s) => s.type === type)) kept++;
+        }
+        // Simplifying can make a hard course survivable without air-strafing; it must stay rare.
+        if (needsAirStrafe(difficulty) && CAUTIOUS.some((style) => simulateRun(buildCourse(checked.course), style, 240).deaths === 0)) softies++;
+      }
+      expect(failures).toEqual([]);
+      expect(kept / features).toBeGreaterThanOrEqual(0.75);
+      expect(softies).toBeLessThanOrEqual(2);
     }, 300_000);
   }
 });

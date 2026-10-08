@@ -17,6 +17,11 @@
  *  4. every number is clamped by validateCourse, and the one free-text field
  *     (the name) is cleaned, link/word-checked and moderated too.
  *
+ * Then the course is ridden by the game's bots before it's saved
+ * (ensureBeatable), and simplified until they can finish it: the model can
+ * combine walls, spirals and extreme values in ways the layout alone can't
+ * guarantee.
+ *
  * Everything with side effects (the AI, the database) is passed in, so every
  * failure path is unit-tested. The game never dead-ends on a failure here:
  * the client offers a random course instead.
@@ -84,6 +89,8 @@ export interface GenerateDeps {
   store: CourseStore | null;
   hashIp: (ip: string) => string;
   random: () => number;
+  /** Rides the course and simplifies it until its bots can finish (src/course/verify.ts); injected so tests stay fast. */
+  ensure: (course: Course) => { course: Course; changes: string[]; beatable: boolean };
   timeoutMs?: number;
   moderationTimeoutMs?: number;
 }
@@ -209,6 +216,12 @@ export async function handleGenerate(body: unknown, ip: string, deps: GenerateDe
     }
     if (!nameOk) course = { ...course, name: DEFAULT_NAME };
   }
+
+  // Ride it before anyone else does. If even its simplest version can't be finished, don't serve it.
+  const ridden = deps.ensure(course);
+  if (!ridden.beatable) return fail(502, 'ai-failed', "The course designer couldn't make that one.");
+  if (ridden.changes.length > 0) console.info(`[generate-course] simplified: ${ridden.changes.join('; ')}`);
+  course = ridden.course;
 
   // Save it under a fresh share code. If saving fails, the player still gets to race it.
   let code: string | null = null;

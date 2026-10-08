@@ -34,8 +34,8 @@ export interface DifficultyParams {
  * boosters, and keeping it is the skill.
  */
 export const DIFFICULTY: Readonly<Record<Difficulty, DifficultyParams>> = {
-  easy: { pitchDeg: 6, faceWidth: 850, transferReach: 0, transferAirTime: 0, rampsPerCheckpoint: 3, windowSlack: 420 },
-  medium: { pitchDeg: 8, faceWidth: 750, transferReach: 0, transferAirTime: 0, rampsPerCheckpoint: 3, windowSlack: 340 },
+  easy: { pitchDeg: 6, faceWidth: 850, transferReach: 0, transferAirTime: 0, rampsPerCheckpoint: 3, windowSlack: 520 },
+  medium: { pitchDeg: 8, faceWidth: 750, transferReach: 0, transferAirTime: 0, rampsPerCheckpoint: 3, windowSlack: 460 },
   hard: { pitchDeg: 10, faceWidth: 600, transferReach: 0.45, transferAirTime: 1.3, rampsPerCheckpoint: 4, windowSlack: 260 },
   expert: { pitchDeg: 6, faceWidth: 480, transferReach: 0.6, transferAirTime: 1.2, rampsPerCheckpoint: 5, windowSlack: 200 },
 };

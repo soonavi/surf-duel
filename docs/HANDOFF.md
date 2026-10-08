@@ -91,7 +91,20 @@ The user asked to "begin with the thumbs up and popular section", and to tune th
 
 **Not changed:** `LAYOUT_VERSION` stays 5. The shipped courses and the two saved climbing AI courses have byte-identical geometry (fingerprinted before and after).
 
-**Next:** the AI gets walls and spirals, once the user has playtested Spire.
+## Phase 11 (user-requested, Oct 8): walls and spirals for the AI
+
+The user: "give the AI walls and spirals now".
+
+- **Schema.** A section is a `ramp` or a `spiral` (the other null), with a `wall` flag and its `then` pieces. One shape, with no `$ref`: with two shapes sharing the pieces by `$defs`, the model stopped using drops, gaps and boosters.
+- **Request line.** It asks Hard and Expert for "a spiral and 2–4 walls". Other difficulties get them when the description asks.
+- **Ride before serving** (`src/course/verify.ts`, `ensureBeatable`, wired in `server/env.ts`).
+  - Uniformly random AI-shaped courses (`aiShapedCourses.ts`) showed the layout alone wasn't enough: ~1 in 6 failed even with no walls or spirals.
+  - Fixes from that triage: wider Easy and Medium wall windows (520 and 460), since riders who don't air-strafe settle ~400 off the line at speed. A spiral that's too fast moves to the start, because those riders can't hold its turn above ~2,500 u/s. Speed gets reined in on Expert courses full of drops.
+  - After this, 64 of 64 test courses were beatable, keeping 59 of their walls and 51 of 52 spirals.
+- **Live check.** 25 more generations (lifetime 50 → 75; 60 used today out of the 150 a day). Every course came out beatable in 34–74 s with 0 deaths, about 1 s of riding per request, 5–7 s in total. They also met the new 2-minute limit, which tames courses that crawl: one Hard pink course took 165 s before it.
+- **Visually checked**, muted: an all-pink Hard course with a tower and walls renders well.
+
+**Next:** the user's playtest of AI walls and spirals, and of Spire.
 
 ## Phase status
 

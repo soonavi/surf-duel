@@ -6,7 +6,7 @@ import type { Course, Segment } from './schema.js';
 import { BvhWorld, ContactList } from '../physics/collision.js';
 import { DEFAULT_PHYSICS, FLOOR_NORMAL_Y, TICK_DT } from '../physics/constants.js';
 import { createPlayer, stepPlayer } from '../physics/player.js';
-import { createRng } from '../util/rng.js';
+import { aiShapedCourse } from './aiShapedCourses.js';
 
 const ramp = (over: Partial<Extract<Segment, { type: 'ramp' }>> = {}): Segment => ({
   type: 'ramp',
@@ -294,37 +294,18 @@ describe('buildCourse: spirals', () => {
 });
 
 describe('buildCourse: anything the AI might send', () => {
-  // Seeded random courses in the AI's ranges, steep climbs and big boosters included: every one
-  // must lay out with finite geometry (an AI expert course with stretched climbs once crashed it).
-  const DIFFS = ['easy', 'medium', 'hard', 'expert'] as const;
-  const SIDES = ['left', 'right', 'both'] as const;
-
+  // Seeded courses shaped like AI replies (walls, spirals, steep climbs, big boosters, every value
+  // anywhere in range): every one must lay out with finite geometry. An AI expert course with
+  // stretched climbs once crashed it.
   it('lays out 300 random AI-shaped courses without failing', () => {
-    const rng = createRng(20261008);
-    const pick = <T,>(xs: readonly T[]): T => xs[Math.floor(rng() * xs.length)]!;
-    const int = (lo: number, hi: number): number => Math.round(lo + rng() * (hi - lo));
+    const DIFFS = ['easy', 'medium', 'hard', 'expert'] as const;
     for (let n = 0; n < 300; n++) {
-      const segments: Segment[] = [];
-      const ramps = int(10, 18);
-      for (let i = 0; i < ramps; i++) {
-        segments.push({ type: 'ramp', length: int(1500, 9000), angle: int(46, 60), side: pick(SIDES), curve: int(-45, 45), pitch: rng() < 0.3 ? null : int(-8, 12) });
-        for (let k = int(0, 2); k > 0; k--) {
-          segments.push(
-            pick<Segment>([
-              { type: 'drop', height: int(200, 2500) },
-              { type: 'gap', length: int(100, 3000) },
-              { type: 'booster', strength: int(100, 800) },
-              { type: 'checkpoint' },
-            ]),
-          );
-        }
-      }
-      const course = { name: `Fuzz ${n}`, theme: 'neon', difficulty: pick(DIFFS), segments };
+      const spec = aiShapedCourse(20261008 + n, DIFFS[n % 4]!);
       let built: ReturnType<typeof buildCourse>;
       try {
-        built = buildCourse(course);
+        built = buildCourse(spec);
       } catch (err) {
-        throw new Error(`course ${n} (${course.difficulty}) failed to build: ${String(err)}\n${JSON.stringify(course)}`);
+        throw new Error(`course ${n} failed to build: ${String(err)}\n${JSON.stringify(spec)}`);
       }
       const pos = built.collision.attributes.position!.array as ArrayLike<number>;
       for (let i = 0; i < pos.length; i++) if (!Number.isFinite(pos[i])) throw new Error(`course ${n} has non-finite geometry`);

@@ -18,6 +18,7 @@ import { supabaseRunStore } from './supabaseRunStore.js';
 import { openAiDesigner } from './openaiDesigner.js';
 import { openAiModerator } from './openaiModerator.js';
 import { supabaseStore } from './supabaseStore.js';
+import { ensureBeatable } from '../src/course/verify.js';
 
 let cached: { key: string; deps: GenerateDeps } | null = null;
 let cachedDb: { key: string; db: SupabaseClient } | null = null;
@@ -58,6 +59,7 @@ export function generateDeps(): GenerateDeps | null {
     store: db ? supabaseStore(db) : null,
     hashIp: ipHasher(serviceKey ?? apiKey),
     random: Math.random,
+    ensure: ensureBeatable,
   };
   cached = { key: cacheKey, deps };
   return deps;
