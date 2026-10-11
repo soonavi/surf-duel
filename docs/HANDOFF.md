@@ -117,6 +117,14 @@ The user: "the spirals feel good but the walls are too easy. another thing, the 
 - **Tuned on AI-shaped courses.** Walls survive the ride-before-serve check on 5–6 of 8 per difficulty; spirals on all. A live check kept walls on 2 of 3 courses.
 - `LAYOUT_VERSION` is 6: all leaderboards and PBs reset again.
 
+## Phase 13 (user feedback, Oct 11): a gap before each wall, and a real cutout
+
+The user, with a screenshot of a wall's tall slit beside the ramp: "there should be a gap between the ramps and the wall, and there should be a cutout in the wall."
+
+- Walls stand 600 past the ramp's end (was 200, which looked attached).
+- The window is a square cutout with a frame in the gates' colour, sized for riders lined up within `windowSlack` and the fall across the gap. It's as tight as before: physics tests check that a rider `windowSlack` + 50 up or down the face hits the wall. AI walls still survive the ride-before-serve check on 6, 6, 6 and 5 of 8 courses per difficulty.
+- `LAYOUT_VERSION` is 7: leaderboards and PBs reset again.
+
 **Next:** the user's playtest of the new walls and the spiral rule.
 
 ## Phase status

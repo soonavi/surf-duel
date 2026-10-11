@@ -257,20 +257,43 @@ function boosterGeometry(b: BoosterPiece): BufferGeometry[] {
 }
 
 const WALL_THICKNESS = 60;
+/** The window's frame: bars this wide round it, standing this far proud of the wall on both sides. */
+const FRAME_WIDTH = 50;
+const FRAME_PROUD = 15;
+/** The wall's own cut is this much bigger than the frame's opening, so their inner faces never fight. */
+const FRAME_INSET = 2;
+
+/** A box `lateralFrom`–`lateralTo` across the wall (from its `pos`), `bottom`–`top` high, `depth` thick. */
+function wallBox(w: WallPiece, lateralFrom: number, lateralTo: number, bottom: number, top: number, depth: number): BufferGeometry {
+  const center = w.pos.clone().addScaledVector(rightOf(w.heading), (lateralFrom + lateralTo) / 2);
+  center.y = (bottom + top) / 2;
+  return orientedBox(lateralTo - lateralFrom, top - bottom, depth, center, w.heading);
+}
 
 /** Four panels round the window: either side of it full height, and above and below it. */
 function wallGeometry(w: WallPiece): BufferGeometry[] {
-  const r = rightOf(w.heading);
-  const panel = (lateralFrom: number, lateralTo: number, bottom: number, top: number): BufferGeometry => {
-    const center = w.pos.clone().addScaledVector(r, (lateralFrom + lateralTo) / 2);
-    center.y = (bottom + top) / 2;
-    return orientedBox(lateralTo - lateralFrom, top - bottom, WALL_THICKNESS, center, w.heading);
-  };
+  const left = w.windowLeft - FRAME_INSET;
+  const right = w.windowRight + FRAME_INSET;
+  const bottom = w.windowBottom - FRAME_INSET;
+  const top = w.windowTop + FRAME_INSET;
   return [
-    panel(-w.halfWidth, w.windowLeft, w.bottom, w.top),
-    panel(w.windowRight, w.halfWidth, w.bottom, w.top),
-    panel(w.windowLeft, w.windowRight, w.windowTop, w.top),
-    panel(w.windowLeft, w.windowRight, w.bottom, w.windowBottom),
+    wallBox(w, -w.halfWidth, left, w.bottom, w.top, WALL_THICKNESS),
+    wallBox(w, right, w.halfWidth, w.bottom, w.top, WALL_THICKNESS),
+    wallBox(w, left, right, top, w.top, WALL_THICKNESS),
+    wallBox(w, left, right, w.bottom, bottom, WALL_THICKNESS),
+  ];
+}
+
+/** A bright frame round the window, so it reads as a cutout from far off. Visual only: it never narrows the window. */
+function wallFrameGeometry(w: WallPiece): BufferGeometry[] {
+  const f = FRAME_WIDTH;
+  const depth = WALL_THICKNESS + 2 * FRAME_PROUD;
+  const { windowLeft: l, windowRight: r, windowBottom: b, windowTop: t } = w;
+  return [
+    wallBox(w, l - f, l, b - f, t + f, depth),
+    wallBox(w, r, r + f, b - f, t + f, depth),
+    wallBox(w, l, r, t, t + f, depth),
+    wallBox(w, l, r, b - f, b, depth),
   ];
 }
 
@@ -309,6 +332,7 @@ export function buildCourse(input: unknown): BuiltCourse {
         break;
       case 'wall':
         obstacles.push(...wallGeometry(piece));
+        gates.push(...wallFrameGeometry(piece));
         break;
       case 'tower':
         obstacles.push(towerGeometry(piece));

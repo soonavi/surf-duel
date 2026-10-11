@@ -7,6 +7,7 @@ import { BvhWorld, ContactList } from '../physics/collision.js';
 import { DEFAULT_PHYSICS, FLOOR_NORMAL_Y, TICK_DT } from '../physics/constants.js';
 import { createPlayer, stepPlayer } from '../physics/player.js';
 import { aiShapedCourse } from './aiShapedCourses.js';
+import { DIFFICULTY } from './tuning.js';
 
 const ramp = (over: Partial<Extract<Segment, { type: 'ramp' }>> = {}): Segment => ({
   type: 'ramp',
@@ -211,7 +212,8 @@ describe('buildCourse: walls', () => {
   const theWall = (built: ReturnType<typeof buildCourse>) => built.pieces.find((p): p is WallPiece => p.kind === 'wall')!;
   const endOf = (r: RampPiece) => r.points[r.points.length - 1]!;
 
-  it('stands free, just past the end of the ramp after it, clear of every ramp', () => {
+  it('stands free past the end of the ramp after it, with a clear gap, and clear of every ramp', () => {
+    // User, Oct 11 2026: "there should be a gap between the ramps and the wall" (at 200 it looked attached).
     const built = buildCourse(walled);
     const walls = built.pieces.filter((p): p is WallPiece => p.kind === 'wall');
     expect(walls).toHaveLength(1);
@@ -219,18 +221,44 @@ describe('buildCourse: walls', () => {
     expect(r.side).toBe('left');
     const end = endOf(r);
     const past = walls[0]!.pos.clone().sub(end.pos).dot(forwardOf(end.heading));
-    expect(past).toBeGreaterThan(100);
+    expect(past).toBeGreaterThanOrEqual(500);
     // The next ramp starts well beyond it.
     const next = rampsIn(built)[2]!;
     const entry = next.points.find((p) => p.s === 0)!.pos;
     expect(entry.clone().sub(walls[0]!.pos).dot(forwardOf(end.heading))).toBeGreaterThanOrEqual(400);
   });
 
-  it("sets a tight window off the riding line: you have to change line to fit through", () => {
+  it('cuts a square window with wall all round it, not a slit beside the ramp', () => {
+    // User, Oct 11 2026: "there should be a cutout in the wall" (a 190×750 slit read as a crack).
     const wall = theWall(buildCourse(walled));
-    expect(wall.windowRight - wall.windowLeft).toBeLessThan(250);
-    // The riding line (lateral 0) is outside the window.
-    expect(wall.windowLeft > 0 || wall.windowRight < 0).toBe(true);
+    const width = wall.windowRight - wall.windowLeft;
+    const height = wall.windowTop - wall.windowBottom;
+    expect(height / width).toBeGreaterThan(0.8);
+    expect(height / width).toBeLessThan(1.25);
+    expect(wall.windowBottom - wall.bottom).toBeGreaterThan(300);
+    expect(wall.top - wall.windowTop).toBeGreaterThan(300);
+    expect(wall.windowLeft + wall.halfWidth).toBeGreaterThan(300);
+    expect(wall.halfWidth - wall.windowRight).toBeGreaterThan(300);
+  });
+
+  it('frames the window in the gates’ colour, without narrowing it', () => {
+    const built = buildCourse(walled);
+    const wall = theWall(built);
+    const r = rightOf(wall.heading);
+    const pos = built.visuals.gates.getAttribute('position');
+    const p = new Vector3();
+    let near = 0;
+    for (let i = 0; i < pos.count; i++) {
+      p.fromBufferAttribute(pos, i);
+      const d = p.clone().sub(wall.pos);
+      if (Math.abs(d.dot(forwardOf(wall.heading))) > 200) continue;
+      near++;
+      const lateral = d.dot(r);
+      // Nothing of the frame inside the opening.
+      const inside = lateral > wall.windowLeft + 1 && lateral < wall.windowRight - 1 && p.y > wall.windowBottom + 1 && p.y < wall.windowTop - 1;
+      expect(inside).toBe(false);
+    }
+    expect(near).toBeGreaterThan(0);
   });
 
   /** Ride off the end of the walled ramp `fromRidge` units down the face, and say how far past the wall you got. */
@@ -247,7 +275,7 @@ describe('buildCourse: walls', () => {
     const fwd = forwardOf(start.heading);
     player.vel.copy(fwd).multiplyScalar(1500);
     const world = new BvhWorld(built.collision);
-    for (let i = 0; i < 70; i++) stepPlayer(player, { forward: 0, side: -1, jump: false, yaw: start.heading }, DEFAULT_PHYSICS, world, TICK_DT);
+    for (let i = 0; i < 120; i++) stepPlayer(player, { forward: 0, side: -1, jump: false, yaw: start.heading }, DEFAULT_PHYSICS, world, TICK_DT);
     return player.pos.clone().sub(wall.pos).dot(forwardOf(wall.heading));
   }
 
@@ -260,6 +288,13 @@ describe('buildCourse: walls', () => {
     const built = buildCourse(walled);
     const r = built.pieces[theWall(built).ramp] as RampPiece;
     expect(rideOff(r.ride)).toBeLessThan(0);
+  });
+
+  it('stays tight: a little further up or down the face than its line, you hit the wall', () => {
+    const wall = theWall(buildCourse(walled));
+    const slack = DIFFICULTY.hard.windowSlack;
+    expect(rideOff(wall.target - slack - 50)).toBeLessThan(0);
+    expect(rideOff(wall.target + slack + 50)).toBeLessThan(0);
   });
 
   it('alternates its windows low and high on the face', () => {
