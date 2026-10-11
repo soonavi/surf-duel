@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { browserStorage, type KeyValueStorage } from './records.js';
+import { DEFAULT_HELD_ITEM, parseHeldItem, type HeldItemId } from './heldItem.js';
 
 export type MusicChoice = 'generated' | 'file' | 'off';
 export type GraphicsQuality = 'high' | 'low';
@@ -23,6 +24,8 @@ export interface Settings {
   graphics: GraphicsQuality;
   /** Assist mode: steadier on ramps and in the air, for trackpads and new players. */
   assist: boolean;
+  /** What you hold while you surf (cosmetic). */
+  held: HeldItemId;
 }
 
 export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
@@ -35,6 +38,7 @@ export const DEFAULT_SETTINGS: Readonly<Settings> = Object.freeze({
   music: 'generated',
   graphics: 'high',
   assist: false,
+  held: DEFAULT_HELD_ITEM,
 });
 
 export const SETTINGS_LIMITS = {
@@ -57,6 +61,8 @@ const StoredSettings = z
     music: z.enum(['generated', 'file', 'off']),
     graphics: z.enum(['high', 'low']),
     assist: z.boolean(),
+    // An item a later version removed falls back to the default, without losing the other settings.
+    held: z.unknown().transform(parseHeldItem),
   })
   .partial();
 

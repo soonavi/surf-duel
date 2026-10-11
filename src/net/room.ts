@@ -12,6 +12,7 @@
  *   ClockSync converts it.
  */
 import type { Vector3 } from 'three';
+import { parseHeldItem, type HeldItemId } from '../game/heldItem.js';
 import { ClockSync } from './clock.js';
 import { SnapshotBuffer } from './interpolation.js';
 import {
@@ -46,6 +47,8 @@ export class RoomJoinError extends Error {
 export interface RoomProfile {
   id: string;
   name: string;
+  /** What you hold, shown on your ghost to everyone else. */
+  item?: HeldItemId;
 }
 
 export interface RoomPlayer {
@@ -56,6 +59,8 @@ export interface RoomPlayer {
   ready: boolean;
   status: PlayerStatus;
   result: RaceResult | null;
+  /** What they hold ('none' from older clients, which don't say). */
+  item: HeldItemId;
   isHost: boolean;
   isMe: boolean;
 }
@@ -150,6 +155,7 @@ export class Room {
       status: 'lobby',
       result: null,
       room: null,
+      ...(me.item ? { item: me.item } : {}),
     };
   }
 
@@ -279,6 +285,12 @@ export class Room {
 
   setName(name: string): void {
     this.meta.name = sanitizeName(name, this.meta.name);
+    this.publish();
+  }
+
+  setItem(item: HeldItemId): void {
+    if (this.meta.item === item) return;
+    this.meta.item = item;
     this.publish();
   }
 
@@ -435,6 +447,7 @@ export class Room {
         ready: m.ready,
         status: m.status,
         result: m.result,
+        item: m.item === undefined ? 'none' : parseHeldItem(m.item),
         isHost: id === this.hostId,
         isMe: id === this.me.id,
       };

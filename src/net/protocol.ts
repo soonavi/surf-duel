@@ -51,6 +51,8 @@ export const PlayerMeta = z.object({
   status: PlayerStatus,
   result: RaceResult.nullable(),
   room: RoomState.nullable(),
+  /** What they hold (cosmetic; see game/heldItem.ts). Older clients leave it out. */
+  item: z.string().max(24).optional(),
 });
 export type PlayerMeta = z.infer<typeof PlayerMeta>;
 

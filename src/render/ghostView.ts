@@ -1,5 +1,10 @@
 import * as THREE from 'three';
 import { PLAYER_HEIGHT, PLAYER_RADIUS } from '../physics/constants.js';
+import type { HeldItemId } from '../game/heldItem.js';
+import { buildItem, disposeModel } from './itemModels.js';
+
+/** Held items are modelled in metres; a unit is ~2 cm, and they're drawn a bit larger than life to read at a distance. */
+const ITEM_SCALE = 50 * 1.6;
 
 /** Ghosts closer than this to the camera are hidden so they don't fill the screen. */
 const NEAR_HIDE = 90;
@@ -28,8 +33,29 @@ function labelSprite(text: string, color: string): THREE.Sprite {
 }
 
 /**
+ * Unlit copies of a held item's materials, so it shows in the course's unlit
+ * scene, a little see-through like the ghost holding it.
+ */
+function ghostly(model: THREE.Object3D): void {
+  model.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    const from = o.material as THREE.MeshStandardMaterial;
+    o.material = new THREE.MeshBasicMaterial({
+      color: from.color,
+      map: from.map,
+      vertexColors: from.vertexColors,
+      side: from.side,
+      transparent: true,
+      opacity: 0.8,
+      depthWrite: false,
+    });
+    from.dispose();
+  });
+}
+
+/**
  * A translucent runner: capsule body with a nose showing which way it looks,
- * and a name tag. No collision — purely visual. Reused for multiplayer later.
+ * a name tag, and (in rooms) what they hold. No collision — purely visual.
  */
 export class GhostView {
   readonly group = new THREE.Group();
@@ -37,7 +63,9 @@ export class GhostView {
   private readonly materials: THREE.Material[] = [];
   private readonly geometries: THREE.BufferGeometry[] = [];
 
-  constructor(label: string, color: string) {
+  private item: THREE.Object3D | null = null;
+
+  constructor(label: string, color: string, item: HeldItemId = 'none') {
     const bodyMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.38, depthWrite: false });
     const noseMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, depthWrite: false });
     this.materials.push(bodyMat, noseMat);
@@ -50,6 +78,17 @@ export class GhostView {
     const capsuleMesh = new THREE.Mesh(capsule, bodyMat);
     capsuleMesh.position.y = PLAYER_HEIGHT / 2;
     this.body.add(capsuleMesh, new THREE.Mesh(nose, noseMat).translateY(PLAYER_HEIGHT / 2));
+
+    const model = buildItem(item);
+    if (model) {
+      ghostly(model);
+      // In the right hand, at the hip, leaning forward a touch.
+      model.scale.setScalar(ITEM_SCALE);
+      model.position.set(PLAYER_RADIUS + 6, PLAYER_HEIGHT * 0.42, -8);
+      model.rotation.set(-0.35, 0, -0.15);
+      this.body.add(model);
+      this.item = model;
+    }
 
     const tag = labelSprite(label, color);
     tag.position.y = PLAYER_HEIGHT + 34;
@@ -76,5 +115,6 @@ export class GhostView {
       m.dispose();
     }
     for (const g of this.geometries) g.dispose();
+    if (this.item) disposeModel(this.item);
   }
 }

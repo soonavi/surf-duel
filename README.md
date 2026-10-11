@@ -17,6 +17,8 @@ On a ramp to your **right**, hold **D**. On a ramp to your **left**, hold **A**.
 | Space | Jump (hold to bunny-hop) |
 | R | Back to the last checkpoint |
 | Shift + R | Restart the run |
+| F | Inspect what you're holding |
+| Click | Use it (a swing, a squeeze…) |
 | Esc | Pause / release the mouse |
 | ↑ / ↓, Enter | Pick a course / race (start screen) |
 
@@ -28,6 +30,7 @@ On a ramp to your **right**, hold **D**. On a ramp to your **left**, hold **A**.
 - **Live multiplayer rooms** for up to 8 players (Supabase Realtime): share a link, ready up, race with live positions and standings, spectate.
 - **Global leaderboards** on every course with a share code: top 10, your place, and **race anyone's ghost**. Runs are checked on the server against the course and the physics.
 - **Generated soundtrack.** Every course has its own synthwave loop that builds as you speed up, or play your own music file; equalizers and the course pulse with the beat.
+- **Something in your hand.** Ride with a karambit, butterfly knife, bayonet or Bowie knife, as CS surfers do, or a teddy bear, shark plush, rubber duck, ice cream or baguette. **F** inspects it (the karambit spins round your finger), a **click** swings, stabs, squeezes or bonks with it, and everyone in your room sees what you're holding. All built from three.js primitives, with no model files; purely cosmetic.
 - **Polish:** settings (sensitivity, FOV, volumes, graphics), assist mode for trackpads, speed effects, accessibility (colour-blind-safe splits, reduced motion), and a view-only mode for phones.
 
 ## Quick start
@@ -186,7 +189,7 @@ How it works:
 
 How it works (`src/net/`), on Supabase Realtime, one channel per room:
 
-- **Presence** carries each player's name, colour, status and result. The host's presence also carries the room state (course, race id, start time), so late joiners get it instantly and it survives the host leaving — the next-longest member is promoted and re-publishes it. Join order is stamped so it never depends on whose clock is wrong.
+- **Presence** carries each player's name, colour, status, result and what they're holding. The host's presence also carries the room state (course, race id, start time), so late joiners get it instantly and it survives the host leaving — the next-longest member is promoted and re-publishes it. Join order is stamped so it never depends on whose clock is wrong.
 - **Broadcast** carries movement sampled at 20 Hz (position, velocity, yaw), stamped with race time. Remote players are replayed ~100 ms+ in the past with velocity-aware (Hermite) interpolation, extrapolating briefly if packets are late, snapping across respawns.
 - **Synchronised start:** the host announces GO in its own clock; everyone converts it with an NTP-style offset estimated from ping/pong. Measured: both players hit GO within the same millisecond.
 - **Message budget:** Realtime counts every delivered copy, so a room costs ~players² messages per send. Samples are always taken at 20 Hz but batched to fit `DEFAULT_BUDGET` (300 msg/s): one sample per message for 2 players, larger batches as the room grows. The Supabase client is lazy-loaded, so solo players never download it.

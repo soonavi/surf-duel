@@ -84,4 +84,12 @@ export class SceneView {
     this.sky.position.copy(this.camera.position);
     this.renderer.render(this.scene, this.camera);
   }
+
+  /** Draw `scene` over the frame just rendered, on a fresh depth buffer (the view model). */
+  renderOverlay(scene: THREE.Scene, camera: THREE.Camera): void {
+    this.renderer.autoClear = false;
+    this.renderer.clearDepth();
+    this.renderer.render(scene, camera);
+    this.renderer.autoClear = true;
+  }
 }

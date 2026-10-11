@@ -1303,6 +1303,61 @@ kbd {
   margin-top: 6px;
 }
 
+/* What you hold: a tile per item, with its picture. */
+.settings__items {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.item-tile {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 6px 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: #161a26;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.item-tile:hover {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.item-tile[aria-checked='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.item-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.item-tile__picture,
+.item-tile__empty {
+  width: 72px;
+  height: 72px;
+  border-radius: 8px;
+}
+
+.item-tile__empty {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 28px;
+}
+
+.item-tile__name {
+  line-height: 1.2;
+  text-align: center;
+}
+
 /* --- Equalizers ------------------------------------------------------------------------ */
 
 .home__eq {

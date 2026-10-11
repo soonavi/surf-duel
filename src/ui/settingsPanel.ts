@@ -1,11 +1,12 @@
 /**
  * The player-facing settings screen: mouse, field of view, sound (music
  * volume, effects volume, and where the music comes from: generated, your
- * own file, or off), graphics quality, assist mode, and the key list.
+ * own file, or off), graphics quality, assist mode, what you hold, and the key list.
  * It edits the Settings object in place and calls onChange; the App applies
  * and saves. Pure DOM.
  */
 import { SETTINGS_LIMITS, type GraphicsQuality, type MusicChoice, type Settings } from '../game/settings.js';
+import { HELD_ITEMS, type HeldItemId } from '../game/heldItem.js';
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -19,6 +20,8 @@ const KEYS: readonly [string, string][] = [
   ['Mouse', 'steer (never press W: speed comes from the slope)'],
   ['Space', 'jump (hold to bunny-hop)'],
   ['R', 'back to the last checkpoint'],
+  ['F', 'inspect what you are holding'],
+  ['Click', 'use it: a swing, a squeeze…'],
   ['Shift + R', 'restart the run'],
   ['Esc', 'pause / release the mouse'],
   ['Enter', 'race (start screen), race again (results)'],
@@ -35,6 +38,7 @@ export class SettingsUi {
   private readonly syncs: (() => void)[] = [];
   private readonly fileLine: HTMLElement;
   private readonly fileInput: HTMLInputElement;
+  private readonly itemPictures = new Map<HeldItemId, HTMLImageElement>();
 
   constructor(private readonly settings: Settings) {
     this.screen = el('section', undefined, 'overlay');
@@ -80,6 +84,9 @@ export class SettingsUi {
       el('p', 'Generated music is made live for each course, and builds up as you speed up. Your own file plays straight from your computer: it is never uploaded.', 'settings__note'),
     );
 
+    const hand = this.section('In your hand');
+    hand.append(this.items(), el('p', 'Just for looks: it never changes how you ride. Others in your room see it too.', 'settings__note'));
+
     const keys = this.section('Keys');
     const list = el('dl', undefined, 'settings__keys');
     for (const [key, what] of KEYS) list.append(el('dt', key), el('dd', what));
@@ -97,10 +104,18 @@ export class SettingsUi {
     back.addEventListener('click', () => this.onBack?.());
     const actions = el('div', undefined, 'btn-row settings__actions');
     actions.append(back);
-    card.append(title, columns, keys, actions);
+    card.append(title, columns, hand, keys, actions);
     this.screen.append(card);
     this.screen.hidden = true;
     this.refresh(null);
+  }
+
+  /** Pictures of the things you can hold (data URLs), drawn by the view model. */
+  setItemPictures(pictures: ReadonlyMap<HeldItemId, string>): void {
+    for (const [id, img] of this.itemPictures) {
+      const src = pictures.get(id);
+      if (src) img.src = src;
+    }
   }
 
   /** Open the file picker (call from a click: browsers only allow it then). */
@@ -165,6 +180,33 @@ export class SettingsUi {
     if (note) text.append(el('span', note, 'settings__note'));
     row.append(input, text);
     return row;
+  }
+
+  /** A tile for each thing you can hold. */
+  private items(): HTMLElement {
+    const group = el('div', undefined, 'settings__items');
+    group.setAttribute('role', 'radiogroup');
+    group.setAttribute('aria-label', 'In your hand');
+    for (const item of HELD_ITEMS) {
+      const b = el('button', undefined, 'item-tile');
+      b.type = 'button';
+      b.setAttribute('role', 'radio');
+      if (item.id === 'none') b.append(el('span', '∅', 'item-tile__empty'));
+      else {
+        const img = el('img', undefined, 'item-tile__picture');
+        img.alt = '';
+        this.itemPictures.set(item.id, img);
+        b.append(img);
+      }
+      b.append(el('span', item.name, 'item-tile__name'));
+      b.addEventListener('click', () => {
+        this.settings.held = item.id;
+        this.changed('held');
+      });
+      this.syncs.push(() => b.setAttribute('aria-checked', String(this.settings.held === item.id)));
+      group.append(b);
+    }
+    return group;
   }
 
   private choice<T extends string>(label: string, key: 'music' | 'graphics', options: [T, string][]): HTMLElement {

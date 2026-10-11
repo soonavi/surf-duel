@@ -23,9 +23,18 @@ describe('settings', () => {
 
   it('saves and loads every setting', () => {
     const storage = new MemoryStorage();
-    const changed = { ...DEFAULT_SETTINGS, musicVolume: 0.25, sfxVolume: 0, music: 'file' as const, graphics: 'low' as const, assist: true, fov: 90 };
+    const changed = { ...DEFAULT_SETTINGS, musicVolume: 0.25, sfxVolume: 0, music: 'file' as const, graphics: 'low' as const, assist: true, fov: 90, held: 'duck' as const };
     saveSettings(changed, storage);
     expect(loadSettings(storage)).toEqual(changed);
+  });
+
+  it('starts you holding a knife, and keeps the rest when a saved item no longer exists', () => {
+    expect(DEFAULT_SETTINGS.held).toBe('karambit');
+    const storage = new MemoryStorage();
+    storage.setItem('surfduel.settings.v1', JSON.stringify({ fov: 88, held: 'lightsaber' }));
+    const s = loadSettings(storage);
+    expect(s.fov).toBe(88);
+    expect(s.held).toBe('karambit');
   });
 
   it('keeps settings saved by an older version, filling in the new ones', () => {

@@ -127,6 +127,13 @@ Contest entry (Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge, d
 - `BEAT_PULSE` (render/materials.ts) is one shared uniform object for every course material; respect `prefers-reduced-motion` (pulse, equalizers, FOV/roll changes off).
 - Assist mode (`game/assist.ts`) must never raise `maxVelocity`: the leaderboard's `runCheck` assumes the default cap for every run.
 
+## Held items (Oct 11 2026)
+- User: "add the ability for users to be holding something. add some knives like counterstrike and also some creative things like a stuffed animal". Purely cosmetic: physics, runCheck and ghosts never see it.
+- `game/heldItem.ts` (pure, tested): the item list (`HELD_ITEMS`, default the karambit, `parseHeldItem` falls back for ids a later version drops), the clips (F inspects, a click uses) and `HeldItemMotion` (sway behind the mouse, bob, strafe tilt; nothing but clips with reduced motion). Clips start and end at rest (whole turns count as rest); a spin is `inHand`, so the glove keeps still (`handFollow`).
+- `render/itemModels.ts` builds every model from primitives (no model files; keep it that way). `render/viewmodel.ts` draws it as a second pass with its own camera (FOV 55, so it doesn't stretch with the speed FOV), lights and a RoomEnvironment for reflections, on a fresh depth buffer. It also draws the settings tiles' pictures on the game canvas's corner and copies them out at once.
+- In rooms, presence carries `item` (optional: older clients send none and show empty-handed); `GhostView` draws it, unlit, in the ghost's hand.
+- Sounds (`AudioEngine.itemSound`): swish, squeak, squish. Keep them quiet.
+
 ## Flyover camera
 - `render/flyover.ts` follows a smoothed line (height: running max then blur; horizontal: blur), never the raw riding line: the raw line drops near-vertically and zigzags (user, Oct 5 2026: transitions must be smooth). Keep `flyover.test.ts` green: it bounds glide angle, acceleration, turn rate and pitch rate on every course. The glide bound is 0.6, or 1.7× the course's own average descent on steeper (hard) courses. Minute-long courses (100k+ units) get up to 45 s of flyover (`MAX_DURATION_S`); otherwise the camera races round their curves and spirals. The loop seam fades through dark (`flyoverFade`, the `.scene-fade` div).
 - Theme `rampRight.ui` / `rampLeft.ui` are the ramp colours for UI (A/D keys, coach); `line` can be dark on light-surfaced themes.

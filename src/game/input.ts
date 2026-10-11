@@ -4,9 +4,13 @@ const MOUSE_SPIKE_LIMIT = 1500;
 /** Keys whose browser default (scrolling, focus moves, button activation) we suppress while playing. */
 const SUPPRESSED_KEYS = new Set(['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
+/** The "code" a left click is tracked under while the pointer is locked. */
+export const LEFT_CLICK = 'Mouse0';
+
 /**
  * Keyboard + pointer-locked mouse. Keys are tracked by `KeyboardEvent.code`, so
- * WASD stays in the same physical place on AZERTY/QWERTZ keyboards.
+ * WASD stays in the same physical place on AZERTY/QWERTZ keyboards. A left
+ * click while locked counts as the key `LEFT_CLICK`.
  */
 export class Input {
   /** True while the pointer is locked to the game canvas. */
@@ -26,6 +30,8 @@ export class Input {
     window.addEventListener('keyup', this.handleKeyUp);
     window.addEventListener('blur', this.clear);
     document.addEventListener('mousemove', this.handleMouseMove);
+    document.addEventListener('mousedown', this.handleMouseDown);
+    document.addEventListener('mouseup', this.handleMouseUp);
     document.addEventListener('pointerlockchange', this.handleLockChange);
   }
 
@@ -97,6 +103,16 @@ export class Input {
     if (Math.abs(e.movementX) > MOUSE_SPIKE_LIMIT || Math.abs(e.movementY) > MOUSE_SPIKE_LIMIT) return;
     this.dx += e.movementX;
     this.dy += e.movementY;
+  };
+
+  private readonly handleMouseDown = (e: MouseEvent): void => {
+    if (!this.locked || e.button !== 0) return;
+    this.down.add(LEFT_CLICK);
+    this.pressed.add(LEFT_CLICK);
+  };
+
+  private readonly handleMouseUp = (e: MouseEvent): void => {
+    if (e.button === 0) this.down.delete(LEFT_CLICK);
   };
 
   private readonly handleLockChange = (): void => {

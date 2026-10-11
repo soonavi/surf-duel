@@ -125,7 +125,12 @@ The user, with a screenshot of a wall's tall slit beside the ramp: "there should
 - The window is a square cutout with a frame in the gates' colour, sized for riders lined up within `windowSlack` and the fall across the gap. It's as tight as before: physics tests check that a rider `windowSlack` + 50 up or down the face hits the wall. AI walls still survive the ride-before-serve check on 6, 6, 6 and 5 of 8 courses per difficulty.
 - `LAYOUT_VERSION` is 7: leaderboards and PBs reset again.
 
-**Next:** the user's playtest of the new walls and the spiral rule.
+**Held items** (same message: "add the ability for users to be holding something. add some knives like counterstrike and also some creative things like a stuffed animal"):
+- Four knives (karambit, the default; butterfly; bayonet; Bowie) and five fun things (teddy bear, shark plush, rubber duck, ice cream, baguette), built from three.js primitives.
+- Drawn in the corner of the view while racing, with sway and bob. **F** inspects, a **click** uses (with a quiet sound). Picked under Settings → In your hand, with a rendered picture of each.
+- Others in a room see it on your ghost. See CLAUDE.md, "Held items".
+
+**Next:** the user's playtest of the new walls, the spiral rule and the held items.
 
 ## Phase status
 

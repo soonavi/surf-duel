@@ -39,11 +39,11 @@ export class RemotePlayers {
     for (const p of players) {
       if (p.isMe) continue;
       wanted.add(p.id);
-      const key = `${p.name}|${p.color}`;
+      const key = `${p.name}|${p.color}|${p.item}`;
       const existing = this.remotes.get(p.id);
       if (existing && existing.key === key) continue;
       existing?.view.dispose();
-      const view = new GhostView(p.name, p.color);
+      const view = new GhostView(p.name, p.color, p.item);
       this.scene.add(view.group);
       this.remotes.set(p.id, {
         id: p.id,

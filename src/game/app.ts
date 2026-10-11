@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { FixedStepLoop } from './loop.js';
-import { Input } from './input.js';
+import { Input, LEFT_CLICK } from './input.js';
 import { loadSettings, saveSettings, settingsFromOtherWindow, wantsMusicFile, type Settings } from './settings.js';
 import { applyMouseLook, wrapAngle, type ViewAngles } from './view.js';
 import { noclipStep } from './noclip.js';
@@ -61,6 +61,8 @@ import { ParticleBurst } from '../render/particles.js';
 import { speedIntensity } from '../audio/levels.js';
 import { hashString } from '../util/rng.js';
 import { SettingsUi } from '../ui/settingsPanel.js';
+import { HeldItemMotion, heldItem } from './heldItem.js';
+import { Viewmodel } from '../render/viewmodel.js';
 import { drawEqualizer } from '../ui/equalizer.js';
 
 type AppState = 'menu' | 'loading' | 'lobby' | 'countdown' | 'racing' | 'results' | 'spectating' | 'generate' | 'preview' | 'cover';
@@ -219,6 +221,13 @@ export class App {
   private musicFileProblem = '';
   private readonly reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // What you hold (cosmetic): its motion, the view model that draws it, and the view it last saw.
+  private readonly itemMotion: HeldItemMotion;
+  private readonly viewmodel: Viewmodel;
+  private itemYaw = 0;
+  private itemPitch = 0;
+  private itemPictures = false;
+
   // Leaderboards.
   /** How the server finds the loaded course; null for courses without a board (random ones). */
   private boardRef: BoardRef | null = null;
@@ -285,6 +294,9 @@ export class App {
     this.view.setQuality(this.settings.graphics);
     this.fovNow = this.settings.fov;
     this.speedLinesFx = new SpeedLines(root);
+    this.viewmodel = new Viewmodel(this.view);
+    this.viewmodel.setItem(this.settings.held);
+    this.itemMotion = new HeldItemMotion(this.settings.held);
     this.burst = new ParticleBurst(this.view.scene);
     this.input = new Input(this.view.canvas);
     this.overlay = new Overlay(document.body);
@@ -430,6 +442,7 @@ export class App {
     this.courseView = new CourseView(this.built, theme);
     this.view.scene.add(this.courseView.group);
     this.view.applyTheme(theme);
+    this.viewmodel.setTheme(theme);
     this.hud.coach.setRampColors(theme.rampRight.ui, theme.rampLeft.ui);
     this.overlay.setRampColors(theme.rampRight.ui, theme.rampLeft.ui);
     // Every course gets its own tune in its theme's mood; the same course always sounds the same.
@@ -592,12 +605,22 @@ export class App {
     this.audio.setVolumes(this.settings.musicVolume, this.settings.sfxVolume);
     // "My music" with no file picked this visit plays the generated music until one is.
     this.audio.setSource(this.settings.music === 'file' && !this.audio.hasFile ? 'generated' : this.settings.music);
+    if (this.itemMotion.id !== this.settings.held) {
+      this.itemMotion.setItem(this.settings.held);
+      this.viewmodel.setItem(this.settings.held);
+      this.room?.setItem(this.settings.held);
+    }
     if (save) saveSettings(this.settings);
     this.settingsUi?.refresh(this.audio.fileName, this.musicFileProblem);
   }
 
   private openSettings(): void {
     if (this.overlay.screen !== 'settings') this.settingsReturn = this.overlay.screen;
+    if (!this.itemPictures) {
+      // Pictures of what you can hold, drawn once, the first time settings open.
+      this.itemPictures = true;
+      this.settingsUi.setItemPictures(this.viewmodel.pictures(ITEM_PICTURE_SIZE, ITEM_PICTURE_BACKGROUND));
+    }
     this.settingsUi.refresh(this.audio.fileName, this.musicFileProblem);
     this.overlay.show('settings');
   }
@@ -1085,7 +1108,7 @@ export class App {
     this.overlay.setLoadingText('Creating a room…');
     this.overlay.show('loading');
     try {
-      const room = await Room.create({ transport: await roomTransport() }, { id: this.profile.id, name: this.profile.name }, { course: this.currentRef(), courseKey: this.key });
+      const room = await Room.create({ transport: await roomTransport() }, { id: this.profile.id, name: this.profile.name, item: this.settings.held }, { course: this.currentRef(), courseKey: this.key });
       this.enterRoom(room);
     } catch (err) {
       this.state = 'menu';
@@ -1099,7 +1122,7 @@ export class App {
     this.overlay.setLoadingText(`Joining room ${code.toUpperCase()}…`);
     this.overlay.show('loading');
     try {
-      const room = await Room.join({ transport: await roomTransport() }, code, { id: this.profile.id, name: this.profile.name });
+      const room = await Room.join({ transport: await roomTransport() }, code, { id: this.profile.id, name: this.profile.name, item: this.settings.held });
       this.enterRoom(room);
     } catch (err) {
       this.state = 'menu';
@@ -1894,7 +1917,36 @@ export class App {
     this.burst.update(frameDt);
     this.updateSound(frameDt);
     this.view.render();
+    this.renderHeldItem(frameDt);
     this.updateStats(frameDt);
+  }
+
+  /** What you hold, in the corner of your view while you race: F inspects it, a click uses it. */
+  private renderHeldItem(frameDt: number): void {
+    // Presses are always consumed, so one made on another screen never fires later.
+    const inspect = this.input.consumePress('KeyF');
+    const use = this.input.consumePress(LEFT_CLICK);
+    const shown = this.session !== null && (this.state === 'countdown' || this.state === 'racing');
+    const live = shown && !this.paused;
+    if (live && use && this.itemMotion.trigger('use')) {
+      const sound = heldItem(this.itemMotion.id).sound;
+      if (sound) this.audio.itemSound(sound);
+    } else if (live && inspect) this.itemMotion.trigger('inspect');
+    const yawDelta = wrapAngle(this.angles.yaw - this.itemYaw);
+    const pitchDelta = this.angles.pitch - this.itemPitch;
+    this.itemYaw = this.angles.yaw;
+    this.itemPitch = this.angles.pitch;
+    // A respawn or a new race snaps the view round: that's not a flick of the mouse.
+    const turned = live && Math.abs(yawDelta) < VIEW_SNAP && Math.abs(pitchDelta) < VIEW_SNAP;
+    const pose = this.itemMotion.update(live ? frameDt : 0, {
+      yawDelta: turned ? yawDelta : 0,
+      pitchDelta: turned ? pitchDelta : 0,
+      speed: Math.hypot(this.player.vel.x, this.player.vel.z),
+      side: this.coachKeys.d ? 1 : this.coachKeys.a ? -1 : 0,
+      airborne: !this.player.onGround && !this.player.surfing,
+      reducedMotion: this.reducedMotion,
+    });
+    if (shown) this.viewmodel.render(pose, this.itemMotion.handFollow);
   }
 
   /** Music intensity from what's happening; the beat pulse and equalizers from the music. */
@@ -2106,6 +2158,12 @@ export class App {
     this.overlay.setDebugText(lines.join('\n'));
   }
 }
+
+/** Pictures of the held items on the settings screen: their size (CSS px), on the cards' colour. */
+const ITEM_PICTURE_SIZE = 96;
+const ITEM_PICTURE_BACKGROUND = '#161a26';
+/** A turn of the view bigger than this in one frame (radians) is a snap (respawn, new race), not the mouse. */
+const VIEW_SNAP = 0.6;
 
 /** Keep ?course=CODE in the address bar for a shared/AI course, so a refresh comes back to it. */
 function setUrlCourse(code: string | null): void {

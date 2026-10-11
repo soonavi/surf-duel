@@ -12,6 +12,7 @@
  * browsers without Web Audio): it just does nothing.
  */
 import type { ThemeName } from '../course/schema.js';
+import type { ItemSound } from '../game/heldItem.js';
 import { THEME_MOODS, composeSong, stepSeconds, type Mood, type Note, type Song } from './music.js';
 import { bassLevel, busGains, followPulse, mixLevels, settleBars, spectrumBars } from './levels.js';
 
@@ -497,6 +498,60 @@ export class AudioEngine {
     osc.connect(g).connect(this.sfxBus);
     osc.start(t);
     osc.stop(t + 0.4);
+  }
+
+  /** Using what you hold: a blade's swish, a rubber duck's squeak, a plush's soft squish. Kept quiet. */
+  itemSound(sound: ItemSound): void {
+    if (!this.sfxReady) return;
+    const ctx = this.ctx!;
+    const t = ctx.currentTime;
+    const g = ctx.createGain();
+    g.connect(this.sfxBus);
+    if (sound === 'swish') {
+      const src = ctx.createBufferSource();
+      src.buffer = this.noise;
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.Q.value = 3;
+      f.frequency.setValueAtTime(900, t);
+      f.frequency.exponentialRampToValueAtTime(4000, t + 0.09);
+      f.frequency.exponentialRampToValueAtTime(1400, t + 0.2);
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.exponentialRampToValueAtTime(0.35, t + 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      src.connect(f).connect(g);
+      src.start(t, Math.random() * 0.5);
+      src.stop(t + 0.25);
+      return;
+    }
+    const osc = ctx.createOscillator();
+    if (sound === 'squeak') {
+      // Up and back down, with a wobble: air squeezed out of rubber.
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(1300, t);
+      osc.frequency.exponentialRampToValueAtTime(2100, t + 0.06);
+      osc.frequency.exponentialRampToValueAtTime(1500, t + 0.2);
+      const wobble = ctx.createOscillator();
+      wobble.frequency.value = 38;
+      const depth = ctx.createGain();
+      depth.gain.value = 90;
+      wobble.connect(depth).connect(osc.frequency);
+      wobble.start(t);
+      wobble.stop(t + 0.25);
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.exponentialRampToValueAtTime(0.12, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    } else {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(260, t);
+      osc.frequency.exponentialRampToValueAtTime(120, t + 0.14);
+      g.gain.setValueAtTime(0.001, t);
+      g.gain.exponentialRampToValueAtTime(0.25, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    }
+    osc.connect(g);
+    osc.start(t);
+    osc.stop(t + 0.25);
   }
 
   // --- per frame ----------------------------------------------------------------------

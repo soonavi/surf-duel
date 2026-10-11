@@ -63,6 +63,16 @@ describe('Room', () => {
     expect(guest.state.course).toEqual(COURSE.course);
   });
 
+  it('shows everyone what each player holds, and when they change it', async () => {
+    const { opts } = setup();
+    const host = await Room.create(opts(), { id: 'h', name: 'Hana', item: 'duck' }, COURSE);
+    // An older client sends no item at all: its player holds nothing.
+    const guest = await Room.join(opts(), host.code, { id: 'g', name: 'Gus' });
+    for (const r of [host, guest]) expect(r.players.map((p) => p.item)).toEqual(['duck', 'none']);
+    guest.setItem('teddy');
+    expect(host.players.find((p) => p.id === 'g')!.item).toBe('teddy');
+  });
+
   it('waits for the rest of the room when it arrives after our own presence (as on Supabase)', async () => {
     const { opts } = setup(60);
     const host = await Room.create(opts(), { id: 'h', name: 'Hana' }, COURSE);
