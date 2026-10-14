@@ -1,23 +1,25 @@
 /**
- * The item in your hand, drawn over the course like a shooter's view model:
- * its own scene, camera and lights, rendered last on a fresh depth buffer, so
- * it never sinks into a ramp and keeps its size whatever your field of view.
+ * The hand and what it holds, drawn over the course like a shooter's view
+ * model: its own scene, camera and lights, rendered last on a fresh depth
+ * buffer, so it never sinks into a ramp and keeps its size whatever your
+ * field of view.
  */
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { HELD_ITEMS, heldItem, type HeldItemId, type ItemKind, type ItemPose } from '../game/heldItem.js';
-import { buildHand, buildItem, disposeModel } from './itemModels.js';
+import { buildItem, disposeModel, type ItemModel } from './itemModels.js';
+import { buildHand, buildSleeve, type HandRig } from './hand.js';
 import type { SceneView } from './scene.js';
 import type { Theme } from './themes.js';
 
 /** The view model's own vertical field of view: steady while the course's widens with speed. */
 const VIEW_FOV = 55;
 /** Where the grip rests: low on the right. */
-const REST_POSITION = new THREE.Vector3(0.21, -0.2, -0.46);
+const REST_POSITION = new THREE.Vector3(0.2, -0.135, -0.38);
 /** How each kind of thing is held there (radians about x, y, z)... */
 const REST_TURN: Record<ItemKind, [number, number, number]> = {
-  // Blade up, its flat toward you, leaning in toward the middle.
-  knife: [-0.2, -0.15, 0.3],
+  // Blade up and edge forward, turned so you see its flat and your fingers round the grip, leaning in.
+  knife: [-0.15, 0.7, 0.25],
   // Facing you, turned a little toward the middle.
   plush: [-0.08, -0.45, 0.08],
   // In profile, beak toward the middle.
@@ -29,10 +31,14 @@ const REST_TURN: Record<ItemKind, [number, number, number]> = {
 const REST_TURN_FOR: Partial<Record<HeldItemId, [number, number, number]>> = {
   baguette: [-0.75, 0.3, -0.05],
 };
+/** Knives sit in the hand edge forward, their flats to the sides, as you'd really hold one. */
+const TURN_IN_HAND: Record<ItemKind, number> = { knife: Math.PI / 2, plush: 0, toy: 0, food: 0, none: 0 };
 /** ...and how big: chunky things smaller, so none of them hides the course. */
 const REST_SCALE: Record<ItemKind, number> = { knife: 1, plush: 0.72, toy: 0.85, food: 0.85, none: 1 };
 
 const ENVIRONMENT_INTENSITY = 0.45;
+/** The sleeve turns this much of the way with the wrist: a forearm turns less than a hand. */
+const SLEEVE_FOLLOW = 0.45;
 
 /** An angle as the equivalent one in [−π, π). */
 function wrap(a: number): number {
@@ -52,14 +58,16 @@ function addLights(scene: THREE.Scene): THREE.HemisphereLight {
 export class Viewmodel {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(VIEW_FOV, 1, 0.01, 5);
-  /** Rest placement; the glove and the item each follow the pose inside it. */
+  /** Rest placement. Inside it the wrist carries the glove and the item; the sleeve follows part of the way. */
   private readonly rig = new THREE.Group();
-  private readonly arm = new THREE.Group();
+  private readonly sleeve = new THREE.Group();
+  private readonly wrist = new THREE.Group();
+  /** The item, squashed about the grip. */
   private readonly holder = new THREE.Group();
-  private readonly cuff: THREE.MeshStandardMaterial;
+  private readonly hand: HandRig;
   private readonly hemi: THREE.HemisphereLight;
   private readonly environment: THREE.Texture;
-  private model: THREE.Group | null = null;
+  private model: ItemModel | null = null;
   private id: HeldItemId = 'none';
 
   constructor(private readonly view: SceneView) {
@@ -72,11 +80,11 @@ export class Viewmodel {
     // Reflections enough to read as metal, not so much that a blade's colour washes out.
     this.scene.environmentIntensity = ENVIRONMENT_INTENSITY;
     this.hemi = addLights(this.scene);
-    const hand = buildHand();
-    this.cuff = hand.cuff;
-    this.arm.add(hand.group);
+    this.hand = buildHand();
+    this.sleeve.add(buildSleeve());
+    this.wrist.add(this.hand.group, this.holder);
     this.rig.position.copy(REST_POSITION);
-    this.rig.add(this.arm, this.holder);
+    this.rig.add(this.sleeve, this.wrist);
     this.scene.add(this.rig);
   }
 
@@ -84,14 +92,16 @@ export class Viewmodel {
     if (id === this.id) return;
     this.id = id;
     if (this.model) {
-      this.holder.remove(this.model);
-      disposeModel(this.model);
+      this.holder.remove(this.model.root);
+      disposeModel(this.model.root);
     }
     const kind = heldItem(id).kind;
     this.model = buildItem(id);
     if (this.model) {
-      this.model.scale.setScalar(REST_SCALE[kind]);
-      this.holder.add(this.model);
+      this.model.root.scale.setScalar(REST_SCALE[kind]);
+      this.model.root.rotation.y = TURN_IN_HAND[kind];
+      this.holder.add(this.model.root);
+      this.hand.fit(this.model.gripRadius * REST_SCALE[kind]);
     }
     this.rig.rotation.set(...(REST_TURN_FOR[id] ?? REST_TURN[kind]));
   }
@@ -100,24 +110,28 @@ export class Viewmodel {
   setTheme(theme: Theme): void {
     this.hemi.color.set(theme.sky.horizon).lerp(new THREE.Color(0xffffff), 0.55);
     this.hemi.groundColor.set(theme.sky.nadir);
-    this.cuff.color.set(theme.rampLeft.ui);
+    this.hand.cuff.color.set(theme.rampLeft.ui);
   }
 
-  /** Draw the item over the frame just rendered. `handFollow`: how much the glove turns with it (see HeldItemMotion). */
-  render(pose: ItemPose, handFollow: number): void {
-    if (!this.model) return;
+  /** Draw the hand and what it holds over the frame just rendered. */
+  render(pose: ItemPose): void {
+    const model = this.model;
+    if (!model) return;
     const size = this.view.renderer.getSize(new THREE.Vector2());
     const aspect = size.x / Math.max(1, size.y);
     if (Math.abs(this.camera.aspect - aspect) > 1e-6) {
       this.camera.aspect = aspect;
       this.camera.updateProjectionMatrix();
     }
-    this.holder.position.set(pose.x, pose.y, pose.z);
-    this.holder.rotation.set(pose.rx, pose.ry, pose.rz);
+    this.wrist.position.set(pose.x, pose.y, pose.z);
+    this.wrist.rotation.set(pose.rx, pose.ry, pose.rz);
+    this.sleeve.position.copy(this.wrist.position);
+    this.sleeve.rotation.set(SLEEVE_FOLLOW * wrap(pose.rx), SLEEVE_FOLLOW * wrap(pose.ry), SLEEVE_FOLLOW * wrap(pose.rz));
     const s = pose.squash;
     this.holder.scale.set(1 + s / 2, 1 - s, 1 + s / 2);
-    this.arm.position.copy(this.holder.position);
-    this.arm.rotation.set(handFollow * wrap(pose.rx), handFollow * wrap(pose.ry), handFollow * wrap(pose.rz));
+    if (model.spinner) model.spinner.rotation.z = -pose.spin;
+    model.flip?.(pose.flip);
+    this.hand.pose(model.restOpen + pose.open);
     this.view.renderOverlay(this.scene, this.camera);
   }
 
@@ -153,7 +167,7 @@ export class Viewmodel {
     renderer.setClearColor(background, 1);
 
     for (const item of HELD_ITEMS) {
-      const model = buildItem(item.id);
+      const model = buildItem(item.id)?.root;
       if (!model) continue;
       // Knives lie diagonally to fill the square; everything else turns three-quarters to you.
       const turn = new THREE.Group();

@@ -39,17 +39,20 @@ function labelSprite(text: string, color: string): THREE.Sprite {
 function ghostly(model: THREE.Object3D): void {
   model.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
-    const from = o.material as THREE.MeshStandardMaterial;
-    o.material = new THREE.MeshBasicMaterial({
-      color: from.color,
-      map: from.map,
-      vertexColors: from.vertexColors,
-      side: from.side,
-      transparent: true,
-      opacity: 0.8,
-      depthWrite: false,
-    });
-    from.dispose();
+    const unlit = (from: THREE.MeshStandardMaterial): THREE.MeshBasicMaterial => {
+      const m = new THREE.MeshBasicMaterial({
+        color: from.color,
+        map: from.map,
+        vertexColors: from.vertexColors,
+        side: from.side,
+        transparent: true,
+        opacity: 0.8,
+        depthWrite: false,
+      });
+      from.dispose();
+      return m;
+    };
+    o.material = Array.isArray(o.material) ? o.material.map((m) => unlit(m as THREE.MeshStandardMaterial)) : unlit(o.material as THREE.MeshStandardMaterial);
   });
 }
 
@@ -79,7 +82,7 @@ export class GhostView {
     capsuleMesh.position.y = PLAYER_HEIGHT / 2;
     this.body.add(capsuleMesh, new THREE.Mesh(nose, noseMat).translateY(PLAYER_HEIGHT / 2));
 
-    const model = buildItem(item);
+    const model = buildItem(item)?.root;
     if (model) {
       ghostly(model);
       // In the right hand, at the hip, leaning forward a touch.

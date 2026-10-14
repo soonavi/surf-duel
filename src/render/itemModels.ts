@@ -1,187 +1,32 @@
 /**
  * The things you can hold (see game/heldItem.ts), built from three.js
  * primitives: no model files. Every model's origin is where the glove grips
- * it; it stands up along +Y, faces +Z (toward you), and a blade's edge points
- * along +X. Sizes are roughly metres.
+ * it; it stands up along +Y and faces +Z (toward you). Sizes are roughly
+ * metres. The knives are in knives.ts, the glove in hand.ts.
  */
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { HeldItemId } from '../game/heldItem.js';
+import { KNIVES } from './knives.js';
+import { canvasTexture, glossy, mesh, plush, seeded, slab, sphere, standard } from './modelKit.js';
 
-type Builder = () => THREE.Group;
+export { disposeModel } from './modelKit.js';
 
-function standard(color: THREE.ColorRepresentation, roughness: number, metalness = 0, extra: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, roughness, metalness, ...extra });
+/** A built item, with the parts the hand's motion drives. */
+export interface ItemModel {
+  root: THREE.Group;
+  /** Turned about its Z by the pose's spin (a karambit round its ring), if it spins in the hand. */
+  spinner: THREE.Group | null;
+  /** Works a butterfly knife's handles for the pose's flip (0 open, π shut). */
+  flip: ((phase: number) => void) | null;
+  /** How thick its grip is (the fingers wrap round it), and how open the hand stays holding it. */
+  gripRadius: number;
+  restOpen: number;
 }
 
-/** Soft fabric: a sheen catches the light at the edges, like fuzz. */
-function plush(color: THREE.ColorRepresentation, sheen: THREE.ColorRepresentation): THREE.MeshPhysicalMaterial {
-  return new THREE.MeshPhysicalMaterial({ color, roughness: 0.95, sheen: 1, sheenColor: new THREE.Color(sheen), sheenRoughness: 0.5 });
-}
-
-/** Shiny plastic or candy. */
-function glossy(color: THREE.ColorRepresentation, roughness = 0.25): THREE.MeshPhysicalMaterial {
-  return new THREE.MeshPhysicalMaterial({ color, roughness, clearcoat: 1, clearcoatRoughness: 0.15 });
-}
-
-function mesh(geometry: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
-  const m = new THREE.Mesh(geometry, material);
-  m.position.set(x, y, z);
-  return m;
-}
-
-function sphere(r: number, material: THREE.Material, x: number, y: number, z: number, scale: [number, number, number] = [1, 1, 1]): THREE.Mesh {
-  const m = mesh(new THREE.SphereGeometry(r, 24, 16), material, x, y, z);
-  m.scale.set(...scale);
-  return m;
-}
-
-/** A flat outline (in X/Y) extruded to `depth` along Z, centred on Z, with softened edges. */
-function slab(shape: THREE.Shape, depth: number, bevel: number): THREE.ExtrudeGeometry {
-  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 20 });
-  g.translate(0, 0, -depth / 2);
-  g.computeVertexNormals();
-  return g;
-}
-
-/** Colour a geometry's vertices along an axis (from `a0` to `a1`) through the given colours, for a blade finish. */
-function paint(g: THREE.BufferGeometry, axis: 'x' | 'y', a0: number, a1: number, colors: THREE.ColorRepresentation[]): THREE.BufferGeometry {
-  const pos = g.getAttribute('position');
-  const at = (i: number): number => (axis === 'x' ? pos.getX(i) : pos.getY(i));
-  const out = new Float32Array(pos.count * 3);
-  const stops = colors.map((c) => new THREE.Color(c));
-  const c = new THREE.Color();
-  for (let i = 0; i < pos.count; i++) {
-    const t = Math.min(1, Math.max(0, (at(i) - a0) / (a1 - a0))) * (stops.length - 1);
-    const k = Math.min(stops.length - 2, Math.floor(t));
-    c.copy(stops[k]!).lerp(stops[k + 1]!, t - k);
-    out.set([c.r, c.g, c.b], i * 3);
-  }
-  g.setAttribute('color', new THREE.BufferAttribute(out, 3));
-  return g;
-}
-
-/** Brushed steel coloured by the blade's vertex colours. */
-function bladeMaterial(): THREE.MeshStandardMaterial {
-  return standard(0xffffff, 0.38, 0.55, { vertexColors: true });
-}
-
-// ---------------------------------------------------------------------------
-// Knives
-
-function karambit(): THREE.Group {
-  const g = new THREE.Group();
-  // A claw: the spine bulges up and over, the edge is the inside of the curve.
-  const blade = new THREE.Shape();
-  blade.moveTo(-0.013, 0.058);
-  blade.bezierCurveTo(-0.022, 0.12, 0.03, 0.185, 0.105, 0.112);
-  blade.bezierCurveTo(0.06, 0.13, 0.02, 0.105, 0.013, 0.058);
-  blade.lineTo(-0.013, 0.058);
-  // The fade: gold at the base, through violet, to pink at the tip.
-  g.add(mesh(paint(slab(blade, 0.003, 0.0018), 'x', -0.01, 0.1, ['#ffd25a', '#9b5cff', '#ff4fa3']), bladeMaterial()));
-
-  const handle = new THREE.Shape();
-  handle.moveTo(-0.015, 0.06);
-  handle.quadraticCurveTo(-0.021, 0, -0.012, -0.058);
-  handle.lineTo(0.015, -0.058);
-  handle.quadraticCurveTo(0.008, 0, 0.015, 0.06);
-  handle.lineTo(-0.015, 0.06);
-  const grip = standard('#1b1f2a', 0.6);
-  g.add(mesh(slab(handle, 0.02, 0.004), grip));
-  // The finger ring at the end, and a steel bolster where the blade meets the handle.
-  const ring = mesh(new THREE.TorusGeometry(0.021, 0.0065, 12, 32), standard('#c9ced6', 0.25, 0.9), 0, -0.083, 0);
-  g.add(ring);
-  g.add(mesh(new RoundedBoxGeometry(0.032, 0.01, 0.024, 2, 0.003), standard('#c9ced6', 0.25, 0.9), 0, 0.058, 0));
-  return g;
-}
-
-function butterfly(): THREE.Group {
-  const g = new THREE.Group();
-  // Spear point.
-  const blade = new THREE.Shape();
-  blade.moveTo(-0.011, 0.062);
-  blade.lineTo(-0.011, 0.15);
-  blade.quadraticCurveTo(-0.008, 0.172, 0.001, 0.19);
-  blade.quadraticCurveTo(0.01, 0.17, 0.011, 0.14);
-  blade.lineTo(0.011, 0.062);
-  blade.lineTo(-0.011, 0.062);
-  // Doppler: deep blue, violet, black.
-  g.add(mesh(paint(slab(blade, 0.003, 0.0016), 'y', 0.065, 0.19, ['#2b1b6e', '#7a3cff', '#1a0b2e', '#4f7dff']), bladeMaterial()));
-
-  // Two skeleton handles sandwich the tang.
-  const half = new THREE.Shape();
-  half.moveTo(-0.012, -0.065);
-  half.lineTo(0.012, -0.065);
-  half.lineTo(0.012, 0.062);
-  half.lineTo(-0.012, 0.062);
-  half.lineTo(-0.012, -0.065);
-  for (const y of [-0.045, -0.012, 0.021]) {
-    const hole = new THREE.Path();
-    hole.absellipse(0, y + 0.012, 0.0055, 0.013, 0, Math.PI * 2, false, 0);
-    half.holes.push(hole);
-  }
-  const steel = standard('#9aa3b2', 0.3, 0.9);
-  const handleGeo = slab(half, 0.004, 0.0012);
-  g.add(mesh(handleGeo, steel, 0, 0, 0.0055), mesh(handleGeo.clone(), steel, 0, 0, -0.0055));
-  // Pivot pins and the latch.
-  const pin = new THREE.CylinderGeometry(0.0035, 0.0035, 0.018, 12).rotateX(Math.PI / 2);
-  const brass = standard('#d6a646', 0.3, 0.9);
-  g.add(mesh(pin, brass, -0.006, 0.055, 0), mesh(pin.clone(), brass, 0.006, 0.055, 0));
-  g.add(mesh(new RoundedBoxGeometry(0.02, 0.012, 0.016, 2, 0.003), brass, 0, -0.07, 0));
-  return g;
-}
-
-function bayonet(): THREE.Group {
-  const g = new THREE.Group();
-  // A long clip point with saw teeth along the spine.
-  const blade = new THREE.Shape();
-  blade.moveTo(0.015, 0.062);
-  blade.lineTo(0.015, 0.2);
-  blade.quadraticCurveTo(0.012, 0.225, -0.002, 0.245);
-  blade.lineTo(-0.014, 0.205);
-  blade.lineTo(-0.015, 0.175);
-  for (let y = 0.17; y > 0.095; y -= 0.01) {
-    blade.lineTo(-0.019, y - 0.004);
-    blade.lineTo(-0.015, y - 0.01);
-  }
-  blade.lineTo(-0.015, 0.062);
-  blade.lineTo(0.015, 0.062);
-  // Tiger tooth: warm gold.
-  g.add(mesh(paint(slab(blade, 0.0035, 0.0016), 'y', 0.06, 0.245, ['#b8741a', '#ffcf5a', '#e08a1e', '#ffe08a']), bladeMaterial()));
-
-  const black = standard('#1d2026', 0.55);
-  // Grooved rubber grip, then a guard with a muzzle ring.
-  g.add(mesh(new THREE.CylinderGeometry(0.0155, 0.0165, 0.11, 20), black, 0, 0, 0));
-  for (let y = -0.04; y <= 0.041; y += 0.016) g.add(mesh(new THREE.TorusGeometry(0.0163, 0.0022, 8, 24).rotateX(Math.PI / 2), black, 0, y, 0));
-  const steel = standard('#59606d', 0.35, 0.85);
-  g.add(mesh(new RoundedBoxGeometry(0.06, 0.012, 0.022, 2, 0.003), steel, -0.006, 0.058, 0));
-  g.add(mesh(new THREE.TorusGeometry(0.011, 0.0035, 10, 24), steel, -0.04, 0.058, 0));
-  g.add(mesh(new RoundedBoxGeometry(0.034, 0.016, 0.03, 2, 0.004), steel, 0, -0.062, 0));
-  return g;
-}
-
-function bowie(): THREE.Group {
-  const g = new THREE.Group();
-  // Broad, with the classic clipped point.
-  const blade = new THREE.Shape();
-  blade.moveTo(0.022, 0.06);
-  blade.lineTo(0.024, 0.16);
-  blade.quadraticCurveTo(0.02, 0.2, 0.0, 0.222);
-  blade.quadraticCurveTo(-0.008, 0.2, -0.018, 0.185);
-  blade.lineTo(-0.02, 0.06);
-  blade.lineTo(0.022, 0.06);
-  // Crimson.
-  g.add(mesh(paint(slab(blade, 0.004, 0.0018), 'y', 0.06, 0.222, ['#5a0b10', '#c8202c', '#7a0f18', '#e8424d']), bladeMaterial()));
-
-  const brass = standard('#cfa04a', 0.3, 0.9);
-  g.add(mesh(new THREE.CapsuleGeometry(0.009, 0.06, 6, 12).rotateZ(Math.PI / 2), brass, 0, 0.056, 0));
-  // Wooden handle, brass pommel.
-  const wood = standard('#6b3d1f', 0.6);
-  const handle = mesh(new THREE.CapsuleGeometry(0.017, 0.08, 8, 16), wood, 0, -0.005, 0);
-  handle.scale.set(1, 1, 0.75);
-  g.add(handle);
-  g.add(sphere(0.016, brass, 0, -0.06, 0, [1.1, 0.8, 0.9]));
-  return g;
+/** A model that just sits in the hand. */
+function held(root: THREE.Group, gripRadius: number, restOpen: number): ItemModel {
+  return { root, spinner: null, flip: null, gripRadius, restOpen };
 }
 
 // ---------------------------------------------------------------------------
@@ -287,11 +132,7 @@ function duck(): THREE.Group {
 
 /** A waffle pattern for the cone. */
 function waffleTexture(): THREE.Texture {
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
+  const t = canvasTexture(128, 128, (ctx) => {
     ctx.fillStyle = '#d9a35f';
     ctx.fillRect(0, 0, 128, 128);
     ctx.strokeStyle = '#a8692c';
@@ -304,9 +145,7 @@ function waffleTexture(): THREE.Texture {
       ctx.lineTo(i, 128);
       ctx.stroke();
     }
-  }
-  const t = new THREE.CanvasTexture(canvas);
-  t.colorSpace = THREE.SRGBColorSpace;
+  });
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(3, 1);
   return t;
@@ -324,8 +163,7 @@ function icecream(): THREE.Group {
   g.add(mesh(new THREE.TorusGeometry(0.034, 0.01, 10, 28).rotateX(Math.PI / 2), mint, 0, 0.16, 0));
   // Sprinkles over the top scoop, always in the same places.
   const colors = ['#ff4f6d', '#ffd23f', '#4fd1ff', '#ffffff', '#9b6bff'];
-  let seed = 7;
-  const rand = (): number => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const rand = seeded(7);
   const sprinkle = new THREE.CapsuleGeometry(0.0022, 0.008, 3, 6);
   for (let i = 0; i < 28; i++) {
     const u = rand() * Math.PI * 2;
@@ -360,60 +198,20 @@ function baguette(): THREE.Group {
   return g;
 }
 
-const BUILDERS: Record<Exclude<HeldItemId, 'none'>, Builder> = {
-  karambit,
-  butterfly,
-  bayonet,
-  bowie,
-  teddy,
-  shark,
-  duck,
-  icecream,
-  baguette,
+const BUILDERS: Record<Exclude<HeldItemId, 'none'>, () => ItemModel> = {
+  ...KNIVES,
+  // Soft and chunky things: the teddy by a leg, the shark round its belly, the rest round the base.
+  teddy: () => held(teddy(), 0.036, 0.05),
+  shark: () => held(shark(), 0.032, 0.08),
+  duck: () => held(duck(), 0.032, 0.1),
+  icecream: () => held(icecream(), 0.014, 0.03),
+  baguette: () => held(baguette(), 0.028, 0.03),
 };
 
 /** The model for an item, or null for an empty hand. */
-export function buildItem(id: HeldItemId): THREE.Group | null {
+export function buildItem(id: HeldItemId): ItemModel | null {
   if (id === 'none') return null;
-  const g = BUILDERS[id]();
-  g.name = `item:${id}`;
-  return g;
-}
-
-/**
- * A gloved fist round the origin and the sleeve it comes out of (down and back
- * toward the corner of the view). The cuff takes the course's colour.
- */
-export function buildHand(): { group: THREE.Group; cuff: THREE.MeshStandardMaterial } {
-  const g = new THREE.Group();
-  const glove = standard('#2a2e37', 0.7);
-  const fist = mesh(new RoundedBoxGeometry(0.058, 0.07, 0.06, 3, 0.02), glove, 0.004, 0, 0.002);
-  g.add(fist);
-  // Knuckles in a row across the front of the fist, and a thumb wrapped over.
-  for (let i = 0; i < 4; i++) g.add(sphere(0.0115, glove, -0.026, 0.024 - i * 0.016, 0.012, [0.9, 0.85, 1.1]));
-  const thumb = mesh(new THREE.CapsuleGeometry(0.011, 0.03, 4, 10), glove, -0.016, 0.026, 0.026);
-  thumb.rotation.set(0.3, 0, 1.2);
-  g.add(thumb);
-  const sleeve = standard('#323848', 0.85);
-  const arm = mesh(new THREE.CylinderGeometry(0.034, 0.046, 0.34, 20), sleeve, 0.03, -0.19, 0.09);
-  arm.rotation.set(-0.5, 0, 0.25);
-  g.add(arm);
-  const cuff = standard('#3ee6ff', 0.5, 0.1);
-  const band = mesh(new THREE.CylinderGeometry(0.036, 0.037, 0.022, 20), cuff, 0.012, -0.045, 0.024);
-  band.rotation.copy(arm.rotation);
-  g.add(band);
-  return { group: g, cuff };
-}
-
-/** Free a model's GPU resources (geometries, materials, textures). */
-export function disposeModel(root: THREE.Object3D): void {
-  root.traverse((o) => {
-    if (!(o instanceof THREE.Mesh)) return;
-    o.geometry.dispose();
-    const materials = Array.isArray(o.material) ? o.material : [o.material];
-    for (const m of materials) {
-      for (const value of Object.values(m)) if (value instanceof THREE.Texture) value.dispose();
-      m.dispose();
-    }
-  });
+  const model = BUILDERS[id]();
+  model.root.name = `item:${id}`;
+  return model;
 }

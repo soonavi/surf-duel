@@ -16,7 +16,7 @@ import {
 const still: MotionInput = { yawDelta: 0, pitchDelta: 0, speed: 0, side: 0, airborne: false, reducedMotion: false };
 const FRAME = 1 / 60;
 
-const ANGLES = new Set<keyof ItemPose>(['rx', 'ry', 'rz']);
+const ANGLES = new Set<keyof ItemPose>(['rx', 'ry', 'rz', 'spin', 'flip']);
 
 /** How far a pose is from rest; a whole turn counts as no turn at all (a spin ends where it began). */
 function offRest(p: ItemPose): number {
@@ -91,6 +91,50 @@ describe('clips', () => {
   });
 });
 
+/** The largest value a channel reaches in a clip (sampled every frame). */
+function peak(name: keyof typeof CLIPS, channel: keyof ItemPose, sign = 1): number {
+  const c = CLIPS[name];
+  let most = -Infinity;
+  for (let t = 0; t <= c.duration; t += FRAME / 2) most = Math.max(most, sign * clipPose(c, t)[channel]);
+  return most;
+}
+
+describe('inspects move the hand, like a real one', () => {
+  // User, Oct 14 2026: "the hand doesnt move and needs to". The glove now follows the wrist
+  // channels in every clip, so a wrist can't turn further than a wrist can: spins and flips
+  // happen in the hand (the spin and flip channels) instead.
+  it('never turns the wrist further than a wrist turns', () => {
+    for (const name of Object.keys(CLIPS) as (keyof typeof CLIPS)[]) {
+      for (const ch of ['rx', 'ry', 'rz'] as const) {
+        expect(peak(name, ch), `${name} ${ch}`).toBeLessThanOrEqual(1.7);
+        expect(peak(name, ch, -1), `${name} ${ch}`).toBeLessThanOrEqual(1.7);
+      }
+    }
+  });
+
+  it('spins the karambit twice round your finger, opening the hand to let it go round', () => {
+    const inspect = heldItem('karambit').inspect;
+    expect(peak(inspect, 'spin')).toBeGreaterThanOrEqual(4 * Math.PI - 1e-9);
+    expect(peak(inspect, 'open')).toBeGreaterThan(0.3);
+    // The wrist moves too: it isn't a spin on a statue.
+    expect(Math.max(peak(inspect, 'rz'), peak(inspect, 'rz', -1))).toBeGreaterThan(0.2);
+  });
+
+  it('flips the butterfly knife shut and open again, more than once', () => {
+    expect(peak(heldItem('butterfly').inspect, 'flip')).toBeGreaterThanOrEqual(4 * Math.PI - 1e-9);
+  });
+
+  it('turns the hand to show a knife off, both sides', () => {
+    const show = heldItem('bayonet').inspect;
+    expect(peak(show, 'ry')).toBeGreaterThan(0.8);
+    expect(peak(show, 'ry', -1)).toBeGreaterThan(0.2);
+  });
+
+  it('squeezes a plush with the fingers', () => {
+    expect(peak(heldItem('teddy').inspect, 'open', -1)).toBeGreaterThan(0.1);
+  });
+});
+
 describe('HeldItemMotion', () => {
   it('rests still when nothing happens', () => {
     expect(offRest(run(new HeldItemMotion('karambit'), 1))).toBeLessThan(0.01);
@@ -158,19 +202,6 @@ describe('HeldItemMotion', () => {
     for (let i = 0; i < 120; i++) moving = Math.max(moving, offRest(m.update(FRAME, { ...still, speed: 2500 })));
     expect(moving).toBeGreaterThan(0.001);
     expect(moving).toBeLessThan(0.05);
-  });
-
-  it('spins the item in your hand: the glove stays put for a spin, and follows a swing', () => {
-    const m = new HeldItemMotion('karambit');
-    expect(m.handFollow).toBe(1);
-    m.trigger('inspect');
-    run(m, 0.6);
-    expect(m.handFollow).toBeLessThan(0.05);
-    run(m, 2);
-    expect(m.handFollow).toBeGreaterThan(0.95);
-    m.trigger('use');
-    run(m, 0.1);
-    expect(m.handFollow).toBeGreaterThan(0.95);
   });
 
   it('switching items drops whatever was playing', () => {

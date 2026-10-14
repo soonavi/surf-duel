@@ -1946,7 +1946,7 @@ export class App {
       airborne: !this.player.onGround && !this.player.surfing,
       reducedMotion: this.reducedMotion,
     });
-    if (shown) this.viewmodel.render(pose, this.itemMotion.handFollow);
+    if (shown) this.viewmodel.render(pose);
   }
 
   /** Music intensity from what's happening; the beat pulse and equalizers from the music. */
