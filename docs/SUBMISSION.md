@@ -6,9 +6,9 @@
 
 **Play:** https://surf-duel-dun.vercel.app · **Code:** https://github.com/soonavi/surf-duel
 
-## Description for the submission form (≤ 500 characters: this one is 473)
+## Description for the submission form (≤ 500 characters: this one is 488)
 
-Surf Duel is a browser racing game built on "surf", the Counter-Strike movement trick: hold A or D into steep ramps and turn gravity into speed. Race up to 8 players live, chase leaderboard ghosts, or describe any course and OpenAI designs it in seconds. Hardest part: making every AI course beatable, so a bot test-rides each one first. Most fun: tuning the physics until it felt like real surf. I learned bots make great playtesters. Next: ramp gaps, rings and more maps.
+Surf Duel is my take on "surf", the Counter-Strike trick where you lean into steep ramps and let gravity fling you forward. Race friends live (up to eight of you), chase other players' ghosts, or type a course idea and watch OpenAI build it in seconds. The best part was tweaking the physics until it finally felt right. The hardest was making sure every AI course could be beaten, so a bot test-rides each one before you get it. Next up: more maps, rings to fly through and gaps to jump.
 
 ## Longer project description
 
