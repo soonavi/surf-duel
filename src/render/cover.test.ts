@@ -36,6 +36,21 @@ describe('coverShot', () => {
     expect(d).toBeLessThan(1200);
   });
 
+  it('shows a duel: a rival just ahead on the same ramp, in view', () => {
+    const cam = new PerspectiveCamera(shot.fov, COVER_WIDTH / COVER_HEIGHT, 4, 100_000);
+    cam.position.copy(shot.camera);
+    cam.lookAt(shot.target);
+    cam.updateMatrixWorld();
+    const ndc = shot.rival.rider.clone().project(cam);
+    expect(Math.abs(ndc.x)).toBeLessThan(0.9);
+    expect(Math.abs(ndc.y)).toBeLessThan(0.9);
+    const ahead = shot.rival.rider.clone().sub(shot.rider).setY(0);
+    const travel = new Vector3(Math.sin(-shot.riderYaw), 0, -Math.cos(shot.riderYaw));
+    expect(ahead.dot(travel)).toBeGreaterThan(300);
+    expect(ahead.length()).toBeLessThan(1500);
+    expect(shot.rival.trail.length).toBeGreaterThan(5);
+  });
+
   it('looks along the course, not back up it', () => {
     const view = shot.target.clone().sub(shot.camera).setY(0).normalize();
     const travel = new Vector3(Math.sin(-shot.riderYaw), 0, -Math.cos(shot.riderYaw));

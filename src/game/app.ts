@@ -1972,9 +1972,9 @@ export class App {
   }
 
   /**
-   * /?capture=cover: a 1600×900 shot for the submission's cover image (a
+   * /?capture=cover: a 1800×1200 (3:2) shot for the submission's cover image (a
    * rider mid-surf on Speed Demon, title over it). Take a screenshot of the
-   * top-left 1600×900, or press P to download it as a PNG.
+   * top-left 1800×1200, or press P to download it as a PNG.
    */
   captureCover(): void {
     this.selectCourse('speed-demon');
@@ -1983,7 +1983,7 @@ export class App {
     this.hud.setVisible(false);
     BEAT_PULSE.value = 0;
     const shot = coverShot(this.built);
-    this.view.scene.add(buildCoverRider(shot, '#3ee6ff'));
+    this.view.scene.add(buildCoverRider(shot, '#3ee6ff'), buildCoverRider(shot.rival, '#ff4fd8'));
     this.view.setFixedSize(COVER_WIDTH, COVER_HEIGHT);
     this.view.setFov(shot.fov);
 
@@ -1999,7 +1999,7 @@ export class App {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyP') this.saveCover();
     });
-    console.info('[surf-duel] Cover mode: press P to save surf-duel-cover.png (1600×900).');
+    console.info('[surf-duel] Cover mode: press P to save surf-duel-cover.png (1800×1200).');
   }
 
   private saveCover(): void {

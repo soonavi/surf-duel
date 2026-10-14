@@ -155,7 +155,7 @@ The user: "please polish the new knife models and inspect animations, the hand d
 2. **Phase 7 sign-off.** Ask whether anything else from the playtest needs fixing.
 3. **Submission checklist.** The user does these; the agent can help.
    - Description: copy from `docs/SUBMISSION.md` (145 words).
-   - Cover image: open https://surf-duel-dun.vercel.app/?capture=cover and press **P** to download `surf-duel-cover.png` (1600×900).
+   - Cover image: open https://surf-duel-dun.vercel.app/?capture=cover and press **P** to download `surf-duel-cover.png` (1800×1200, 3:2; also saved as `docs/cover.png`).
    - Seed the leaderboards by racing a few courses on the live site, so judges don't see empty boards.
    - Test a two-player room (a second browser window works).
 4. **After the contest.** Pause the Supabase project `surf-duel` (`olpbsvuyawxgybutkswf`, $10/month). Keep its spend cap on until then. OpenAI is prepaid ($5, auto-recharge off), so it can't overspend.

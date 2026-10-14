@@ -6,7 +6,11 @@
 
 **Play:** https://surf-duel-dun.vercel.app · **Code:** https://github.com/soonavi/surf-duel
 
-## Project description
+## Description for the submission form (≤ 500 characters: this one is 473)
+
+Surf Duel is a browser racing game built on "surf", the Counter-Strike movement trick: hold A or D into steep ramps and turn gravity into speed. Race up to 8 players live, chase leaderboard ghosts, or describe any course and OpenAI designs it in seconds. Hardest part: making every AI course beatable, so a bot test-rides each one first. Most fun: tuning the physics until it felt like real surf. I learned bots make great playtesters. Next: ramp gaps, rings and more maps.
+
+## Longer project description
 
 Surf Duel is a browser racing game built on "surf", the cult movement trick from Source-engine games: you slide along steep angled ramps, holding the key toward the ramp and steering with the mouse, turning gravity into blistering speed.
 
@@ -18,7 +22,7 @@ Built with TypeScript, Three.js, Supabase Realtime and Postgres, Vercel function
 
 ## Cover image
 
-Open `/?capture=cover` on the deployed site (or `npm run dev`) and press **P**: it downloads `surf-duel-cover.png`, 1600×900.
+`docs/cover.png`: 1800×1200 (3:2, as the form asks), a rider chasing a rival down Speed Demon. To make it again, open `/?capture=cover` on the deployed site (or `npm run dev`) and press **P**: it downloads `surf-duel-cover.png`.
 
 ## A two-minute tour for judges
 

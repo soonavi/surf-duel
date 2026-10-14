@@ -36,14 +36,14 @@ body {
   height: 100%;
 }
 
-/* The cover capture's title, over the fixed 1600×900 render. */
+/* The cover capture's title, over the fixed 1800×1200 render. */
 .cover-title {
   position: fixed;
   top: 0;
   left: 0;
   z-index: 3;
-  width: 1600px;
-  height: 900px;
+  width: 1800px;
+  height: 1200px;
   pointer-events: none;
 }
 

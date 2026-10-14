@@ -280,4 +280,4 @@ Dev builds also have **B** (autopilot: the bot surfs the course for you) and **N
 
 ### Cover image
 
-`/?capture=cover` renders a fixed 1600×900 shot (a rider mid-surf on Speed Demon, title over it) for the submission cover. Press **P** to download it as `surf-duel-cover.png`, or screenshot the top-left 1600×900 of the window.
+`/?capture=cover` renders a fixed 1800×1200 (3:2) shot (a rider mid-surf on Speed Demon, title over it) for the submission cover. Press **P** to download it as `surf-duel-cover.png`, or screenshot the top-left 1800×1200 of the window.

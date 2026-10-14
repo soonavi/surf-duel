@@ -1,6 +1,7 @@
 /**
  * The cover image (/?capture=cover): a rider mid-surf on Speed Demon, from
- * a low chase camera on the open side of the ramp, with a glowing trail.
+ * a low chase camera on the open side of the ramp, with a glowing trail, and
+ * a rival in pink just ahead (it's a duel).
  * coverShot() picks the moment from a real bot run (pure, so it's tested
  * and always the same shot); buildCoverRider() makes the three.js objects.
  */
@@ -13,8 +14,9 @@ import { BvhWorld } from '../physics/collision.js';
 import { DEFAULT_PHYSICS, PLAYER_HEIGHT, PLAYER_RADIUS, TICK_DT, TICK_RATE } from '../physics/constants.js';
 import { createPlayer, stepPlayer } from '../physics/player.js';
 
-export const COVER_WIDTH = 1600;
-export const COVER_HEIGHT = 900;
+/** 3:2 and at least 1200 wide, as the contest's submission form asks. */
+export const COVER_WIDTH = 1800;
+export const COVER_HEIGHT = 1200;
 
 export interface CoverShot {
   /** Feet position. */
@@ -29,9 +31,13 @@ export interface CoverShot {
   fov: number;
   /** A slight tilt (radians) for drama. */
   roll: number;
+  /** The rival a moment ahead on the same run. */
+  rival: { rider: THREE.Vector3; riderYaw: number; trail: THREE.Vector3[] };
 }
 
 const TRAIL_TICKS = 70;
+/** The rival is where the rider will be this many ticks later. */
+const RIVAL_LEAD_TICKS = 22;
 
 export function coverShot(built: BuiltCourse): CoverShot {
   const world = new BvhWorld(built.collision);
@@ -71,7 +77,11 @@ export function coverShot(built: BuiltCourse): CoverShot {
   const history = frames.map((f) => f.pos);
 
   const rider = best.pos.clone();
-  const trail = history.slice(Math.max(0, pick - TRAIL_TICKS), pick + 1).filter((_, i, all) => i % 3 === 0 || i === all.length - 1);
+  const trailTo = (end: number): THREE.Vector3[] =>
+    history.slice(Math.max(0, end - TRAIL_TICKS), end + 1).filter((_, i, all) => i % 3 === 0 || i === all.length - 1);
+  const trail = trailTo(pick);
+  const lead = Math.min(frames.length - 1, pick + RIVAL_LEAD_TICKS);
+  const rival = { rider: frames[lead]!.pos.clone(), riderYaw: frames[lead]!.yaw, trail: trailTo(lead).slice(-Math.floor((RIVAL_LEAD_TICKS - 4) / 3)) };
 
   // Chase camera: behind, low, out on the open side of the ramp (where the face's normal points).
   const fwd = forwardOf(best.yaw, new THREE.Vector3());
@@ -82,11 +92,11 @@ export function coverShot(built: BuiltCourse): CoverShot {
   // Look past the rider and down the course, so the ramps ahead fill the frame instead of sky.
   const target = rider.clone().addScaledVector(fwd, 1500).addScaledVector(right, -open * 120);
   target.y -= 420;
-  return { rider, riderYaw: best.yaw, surfing: best.surfing, speed: best.speed, trail, camera, target, fov: 80, roll: -open * 0.07 };
+  return { rider, riderYaw: best.yaw, surfing: best.surfing, speed: best.speed, trail, camera, target, fov: 80, roll: -open * 0.07, rival };
 }
 
 /** A solid, glowing rider leaning into the ramp, and a neon trail of where it has been. */
-export function buildCoverRider(shot: CoverShot, color: THREE.ColorRepresentation): THREE.Group {
+export function buildCoverRider(shot: Pick<CoverShot, 'rider' | 'riderYaw' | 'trail'>, color: THREE.ColorRepresentation): THREE.Group {
   const group = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.CapsuleGeometry(PLAYER_RADIUS * 0.9, PLAYER_HEIGHT - 2 * PLAYER_RADIUS, 6, 16),
@@ -127,24 +137,26 @@ export function drawCoverTitle(g: CanvasRenderingContext2D): void {
   g.fillStyle = shade;
   g.fillRect(0, 0, w, h);
 
-  const x = 84;
+  // Laid out for 1600 wide, scaled to the canvas.
+  const k = w / 1600;
+  const x = 84 * k;
   g.save();
-  g.font = 'italic 900 168px system-ui, "Segoe UI", Roboto, sans-serif';
-  (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = '10px';
-  const ink = g.createLinearGradient(x, 0, x + 900, 0);
+  g.font = `italic 900 ${Math.round(168 * k)}px system-ui, "Segoe UI", Roboto, sans-serif`;
+  (g as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = `${Math.round(10 * k)}px`;
+  const ink = g.createLinearGradient(x, 0, x + 900 * k, 0);
   ink.addColorStop(0, '#3ee6ff');
   ink.addColorStop(1, '#ff4fd8');
   g.shadowColor = 'rgba(255, 79, 216, 0.55)';
-  g.shadowBlur = 40;
+  g.shadowBlur = 40 * k;
   g.fillStyle = ink;
-  g.fillText('SURF DUEL', x, h - 150);
+  g.fillText('SURF DUEL', x, h - 150 * k);
   g.restore();
 
   g.save();
-  g.font = '600 40px system-ui, "Segoe UI", Roboto, sans-serif';
+  g.font = `600 ${Math.round(40 * k)}px system-ui, "Segoe UI", Roboto, sans-serif`;
   g.fillStyle = 'rgba(243, 240, 255, 0.92)';
   g.shadowColor = 'rgba(0, 0, 0, 0.7)';
-  g.shadowBlur = 12;
-  g.fillText('Surf AI-built courses. Race your friends live.', x + 8, h - 88);
+  g.shadowBlur = 12 * k;
+  g.fillText('Surf AI-built courses. Race your friends live.', x + 8 * k, h - 88 * k);
   g.restore();
 }
