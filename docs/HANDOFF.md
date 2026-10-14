@@ -130,7 +130,16 @@ The user, with a screenshot of a wall's tall slit beside the ramp: "there should
 - Drawn in the corner of the view while racing, with sway and bob. **F** inspects, a **click** uses (with a quiet sound). Picked under Settings → In your hand, with a rendered picture of each.
 - Others in a room see it on your ghost. See CLAUDE.md, "Held items".
 
-**Next:** the user's playtest of the new walls, the spiral rule and the held items.
+## Phase 14 (user, Oct 14): a hand that moves, and richer map generation
+
+The user: "please polish the new knife models and inspect animations, the hand doesnt move and needs to. please then do more research into surf maps, and increase the complexity of the map generation overall."
+
+- **Hand and knives** (commit d284d97): a glove with jointed fingers and thumb that wrap the grip and move with the wrist in every clip. Spins and flips happen in the hand (the karambit twirls; the butterfly knife's handles swing on their pins). Blades are rebuilt with a real grind and painted finishes. See CLAUDE.md, "Held items".
+- **Research** (sources in the chat): a glossary of surf features (flares/jumps, curves, slingshot lines, drains, chutes, rings, gaps in ramps), the Momentum Mod surf docs (ramp physics), and guides on staged vs linear maps and tiers.
+- **Map generation:** flares and S-bends as ramp fields; random courses rebuilt as staged surf maps using every piece and ridden before use; AI courses get flares before big jumps and S-bends on long gentle ramps (`craft.ts`). Shipped and stored courses build exactly as before (checked by geometry fingerprints), so leaderboards stand.
+- Measured: 30 of 32 random designs ride as designed (the other two get simplified); courses take 40–70 s; checking one takes 0.4–0.9 s.
+
+**Next:** the user's playtest of the new walls, the spiral rule, the hand and knives, and random/AI courses with flares and S-bends.
 
 ## Phase status
 

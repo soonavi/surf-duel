@@ -22,6 +22,7 @@ import {
   AIR_STRAFE_REACH,
   MIN_CLIMB_SPEED,
   DIFFICULTY,
+  FLARE_MAX_LENGTH,
   PLAN_GRAVITY,
   SPIRAL_GAP_DEG,
   SPIRAL_PITCH_DEG,
@@ -30,7 +31,10 @@ import {
   WALK_SPEED,
   afterBooster,
   afterFall,
+  afterFlare,
   afterRamp,
+  flareLength,
+  flareLift,
   rampPitchDeg,
   type SpeedRange,
 } from './tuning.js';
@@ -345,6 +349,14 @@ function fallAfter(v: number, vy: number, x: number): number {
   return vy * t + 0.5 * PLAN_GRAVITY * t * t;
 }
 
+/** The highest a rider launched rising (vy < 0) climbs within `x` of the lip, at speed v. */
+function riseWithin(v: number, vy: number, x: number): number {
+  if (vy >= 0) return 0;
+  const apexTime = -vy / PLAN_GRAVITY;
+  const t = Math.min(apexTime, x / Math.max(v, 1));
+  return -(vy * t + 0.5 * PLAN_GRAVITY * t * t);
+}
+
 interface Cursor {
   pos: Vector3;
   heading: number;
@@ -357,6 +369,8 @@ interface Cursor {
   exitPitch: number;
   /** A wall stands just past the end of the ramp just left: what follows keeps clear of it. */
   wallBehind: boolean;
+  /** The ramp just left ended in a flare: riders leave it rising, and what follows reaches up for them. */
+  flared: boolean;
 }
 
 /**
@@ -428,6 +442,7 @@ export function planCourse(course: Course): CourseLayout {
     floorY: -PAD_THICKNESS,
     exitPitch: 0,
     wallBehind: false,
+    flared: false,
   };
   let pendingGap = 0;
   let pendingDrop = 0;
@@ -451,7 +466,17 @@ export function planCourse(course: Course): CourseLayout {
     if (cursor.wallBehind) pendingGap = Math.max(pendingGap, WALL_GATE_AFTER + WALL_CLEARANCE - LEAD_FROM_RAMP);
   };
 
-  const transition = (minDrop: number, minAirTime = 0): { drop: number; front: number; fastLanding: number; airTime: number } => {
+  /**
+   * `slope`: tan of the next piece's downhill pitch. Off a flare, riders sail
+   * on high above it, and the next ramp falling away beneath them carries
+   * their landing far further than its entry's height suggests.
+   */
+  const transition = (
+    minDrop: number,
+    minAirTime = 0,
+    slope = 0,
+    exact = false,
+  ): { drop: number; front: number; fastLanding: number; airTime: number; slowAirTime: number } => {
     clearWall();
     const fromPad = cursor.from === 'pad';
     // Leaving a climb you're still rising (negative downward speed): more time in the air.
@@ -470,10 +495,27 @@ export function planCourse(course: Course): CourseLayout {
     // from a ramp there's a short lead so the exit and entry never overlap.
     const front = pendingGap + (fromPad ? 0 : LEAD_FROM_RAMP);
     const t = (-vyHi + Math.sqrt(vyHi * vyHi + 2 * PLAN_GRAVITY * drop)) / PLAN_GRAVITY;
+    let tLand = t;
+    let vLand = vHi;
+    if ((cursor.flared || exact) && !fromPad) {
+      // Off a flare, how far you fly grows with the square of your speed: plan for the speed cap, not the
+      // model's fast rider (a bot leaving one at 3,100 u/s sailed clean past a ramp stretched for 2,700).
+      // And where its arc meets the riding line, which drops `slope` per unit beyond the front:
+      // ½g·t² + (vy − v·slope)·t − (drop − front·slope) = 0. (Onto a flared ramp too: fast riders mustn't
+      // come down where it bends up, so it's stretched by where they really land.)
+      vLand = Math.max(vHi, DEFAULT_PHYSICS.maxVelocity);
+      const vy = vLand * sinExit;
+      const front0 = pendingGap + LEAD_FROM_RAMP;
+      const b = vy - vLand * slope;
+      const c = drop - front0 * slope;
+      tLand = Math.max(t, (-b + Math.sqrt(Math.max(0, b * b + 2 * PLAN_GRAVITY * c))) / PLAN_GRAVITY);
+    }
+    // Off a flare a slow rider, launched less steeply, comes down well before a fast one.
+    const tSlow = (-vyLo + Math.sqrt(vyLo * vyLo + 2 * PLAN_GRAVITY * drop)) / PLAN_GRAVITY;
     pendingGap = 0;
     pendingDrop = 0;
     cursor.speed = afterFall(cursor.speed, drop);
-    return { drop, front, fastLanding: vHi * t, airTime: t };
+    return { drop, front, fastLanding: vLand * tLand, airTime: t, slowAirTime: tSlow };
   };
 
   /** Path samples for the flight from the cursor to `to` (exclusive of both ends). */
@@ -530,10 +572,13 @@ export function planCourse(course: Course): CourseLayout {
       : arc !== null && prev !== null
         ? diff.transferAirTime
         : 0;
-    const { drop, front, fastLanding, airTime: flight } = transition(Math.max(minDrop, arc?.minDrop ?? 0), airTime);
+    const offFlare = cursor.flared;
+    const flaring = !arc && !pendingWall && (seg.flare ?? 0) > 0;
+    const { drop, front, fastLanding, airTime: flight, slowAirTime } = transition(Math.max(minDrop, arc?.minDrop ?? 0), airTime, Math.max(0, tanPitch), flaring);
+    // A flared ramp is long enough for fast riders to land and ride before it bends up.
     const length = arc
       ? arc.radius * arc.span
-      : Math.min(MAX_RAMP_LENGTH, Math.max(seg.length, fastLanding - front + MIN_RIDE, pendingWall ? wallRunUp(fastLanding, front, flight) : 0));
+      : Math.min(MAX_RAMP_LENGTH, Math.max(seg.length, fastLanding - front + MIN_RIDE + (flaring ? FLARE_MAX_LENGTH : 0), pendingWall ? wallRunUp(fastLanding, front, flight) : 0));
     if (pitchDeg < 0 && length > seg.length) {
       // A climb stretched to catch fast riders climbs further than the validator planned for: ease
       // it, like the validator does, until a cautious rider still has MIN_CLIMB_SPEED at the top
@@ -545,7 +590,9 @@ export function planCourse(course: Course): CourseLayout {
         tanPitch = Math.tan(MathUtils.degToRad(pitchDeg));
       }
     }
-    const shift = transfer ? transferSide(prev.side, transfers++) * Math.min(MAX_TRANSFER_SHIFT, Math.max(missFace, reachIn(flight))) : 0;
+    // Sized for the time a slow rider spends in the air: off a flare, far less than a fast one, who's launched higher.
+    const strafeTime = offFlare ? slowAirTime : flight;
+    const shift = transfer ? transferSide(prev.side, transfers++) * Math.min(MAX_TRANSFER_SHIFT, Math.max(missFace, reachIn(strafeTime))) : 0;
 
     const heading0 = arc ? arc.h0 + arc.dir * arc.start : cursor.heading;
     const entry = arc
@@ -589,6 +636,13 @@ export function planCourse(course: Course): CourseLayout {
     // A ramp with a wall past it runs straight: on a bend, a fast rider can't hold the line its
     // window needs (they're flung over the ridge or slide down the face).
     const curveRad = arc ? arc.dir * arc.span : pendingWall ? 0 : MathUtils.degToRad(seg.curve);
+    // An S-bend swerves out and back over the curving stretch; a flare bends the end of the ramp up.
+    // (Neither on a walled ramp, nor round a spiral.)
+    const swerveDeg = arc || pendingWall ? 0 : (seg.swerve ?? 0);
+    const flareDeg = arc || pendingWall ? 0 : (seg.flare ?? 0);
+    const flareRun = flareDeg > 0 ? flareLength(length) : 0;
+    const lift = (s: number): number => (flareRun > 0 ? flareLift(s - (length - flareRun), flareRun, pitchDeg, flareDeg) : 0);
+    const flared = lift(length) > 0;
     if (arc) {
       const sections = Math.max(2, Math.ceil(length / SECTION_SPACING));
       for (let i = 0; i <= sections; i++) {
@@ -600,12 +654,17 @@ export function planCourse(course: Course): CourseLayout {
       }
     } else {
       const straight = Math.min(length * MAX_STRAIGHT_FRACTION, Math.max(0, fastLanding - front + LANDING_STRAIGHT_MARGIN));
+      const swerveRad = MathUtils.degToRad(swerveDeg);
+      const bent = (s: number): number => Math.min(1, Math.max(0, (s - straight) / (length - straight)));
       const headingAt = (s: number): number =>
-        cursor.heading + curveRad * Math.min(1, Math.max(0, (s - straight) / (length - straight)));
+        swerveRad === 0 ? cursor.heading + curveRad * bent(s) : cursor.heading + curveRad * bent(s) + swerveRad * Math.sin(Math.PI * bent(s));
+      // Fine enough that no section turns (or, in a flare, bends up) more than MAX_SECTION_TURN_DEG.
+      const turning = Math.abs(seg.curve) + Math.PI * Math.abs(swerveDeg);
       const sections = Math.max(
         2,
         Math.ceil(length / SECTION_SPACING),
-        Math.ceil(Math.abs(seg.curve) / MAX_SECTION_TURN_DEG / (1 - straight / length)),
+        Math.ceil(turning / MAX_SECTION_TURN_DEG / (1 - straight / length)),
+        flared ? Math.ceil((flareDeg + pitchDeg) / MAX_SECTION_TURN_DEG / (flareRun / length)) : 0,
       );
       const ds = length / sections;
       const p = entry.clone();
@@ -614,7 +673,7 @@ export function planCourse(course: Course): CourseLayout {
         points.push({ pos: p.clone(), heading: headingAt(s), s });
         if (i < sections) {
           p.addScaledVector(forwardOf(headingAt(s + ds / 2), f), ds);
-          p.y = entry.y - (s + ds) * tanPitch;
+          p.y = flared ? entry.y - (s + ds) * tanPitch + lift(s + ds) : entry.y - (s + ds) * tanPitch;
         }
       }
     }
@@ -655,7 +714,8 @@ export function planCourse(course: Course): CourseLayout {
     }
 
     const last = points[points.length - 1]!;
-    const exitSpeed = afterRamp(cursor.speed, length, pitchDeg);
+    // A flare's climb costs speed; you leave it rising at the flare's angle.
+    const exitSpeed = flared ? afterFlare(afterRamp(cursor.speed, length, pitchDeg), lift(length)) : afterRamp(cursor.speed, length, pitchDeg);
     cursor.wallBehind = pendingWall;
     if (pendingWall) {
       const shape = { side: seg.side, faceWidth, ride, theta, peakAboveRide, height };
@@ -669,7 +729,8 @@ export function planCourse(course: Course): CourseLayout {
     cursor.prevRamp = { side: seg.side, tanTheta: Math.tan(theta), faceWidth };
     cursor.speed = exitSpeed;
     cursor.floorY = floorAt(last);
-    cursor.exitPitch = MathUtils.degToRad(pitchDeg);
+    cursor.exitPitch = flared ? -MathUtils.degToRad(flareDeg) : MathUtils.degToRad(pitchDeg);
+    cursor.flared = flared;
   };
 
   /** One ramp of the course, with a checkpoint gate before it if it's been a while. */
@@ -758,7 +819,10 @@ export function planCourse(course: Course): CourseLayout {
     const clearOfWall = cursor.wallBehind ? WALL_GATE_AFTER + BOOSTER.depth : 0;
     const along = pendingGap + BOOSTER.offset + clearOfWall;
     const fall = pendingDrop + fallAfter(vLo, vyLo, along);
-    const top = cursor.pos.y + BOOSTER.margin;
+    // Off a flare, riders are still rising when they reach it: it reaches up for the highest of them.
+    const vHi = Math.max(cursor.speed.hi, vLo);
+    const rise = cursor.flared && !fromPad ? Math.max(riseWithin(vLo, vyLo, along), riseWithin(vHi, vHi * Math.sin(cursor.exitPitch), along)) : 0;
+    const top = cursor.pos.y + BOOSTER.margin + rise;
     const bottom = cursor.pos.y - fall - BOOSTER.margin;
     const center = cursor.pos.clone().addScaledVector(forwardOf(cursor.heading, f), along);
     center.y = (top + bottom) / 2;

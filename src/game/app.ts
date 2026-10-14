@@ -1510,10 +1510,17 @@ export class App {
   /** The never-dead-end fallback: a procedurally generated course. */
   private useRandomCourse(): void {
     if (this.state !== 'generate') return;
-    this.generateRequest++;
-    this.generator.clearStatus();
+    const request = ++this.generateRequest;
+    // A random course is ridden before you get it (about a second): show that first, then build it.
+    this.generator.setBusy('Building a random course and test-riding it…');
     const seed = Math.floor(Math.random() * 1_000_000_000);
-    this.useCustom({ course: randomCourse(seed, { difficulty: this.generator.difficulty }), source: 'random', code: null, prompt: null, seed });
+    const difficulty = this.generator.difficulty;
+    window.setTimeout(() => {
+      if (request !== this.generateRequest || this.state !== 'generate') return;
+      const course = randomCourse(seed, { difficulty });
+      this.generator.clearStatus();
+      this.useCustom({ course, source: 'random', code: null, prompt: null, seed });
+    }, 50);
   }
 
   private useCustom(custom: CustomCourse): void {

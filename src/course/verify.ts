@@ -115,8 +115,22 @@ export function reinInSpeed(course: Course): Course {
 
 const without = (type: 'wall' | 'spiral') => (course: Course): Course => ({ ...course, segments: course.segments.filter((s) => s.type !== type) });
 
-/** Each step builds on the one before. */
+/** No flares or S-bends: the craft details go before anything a player asked for. */
+export function plainRamps(course: Course): Course {
+  const segments = course.segments.map((s): Segment => {
+    if (s.type !== 'ramp') return s;
+    const { flare: _flare, swerve: _swerve, ...rest } = s;
+    return rest;
+  });
+  return { ...course, segments };
+}
+
+/**
+ * Each step builds on the one before. The craft details go first: an AI course
+ * without them is just what the model designed, which usually rides as it is.
+ */
 const STAGES: readonly { change: string; apply: (course: Course) => Course }[] = [
+  { change: 'flares and S-bends smoothed out', apply: plainRamps },
   { change: "values tamed to the difficulty's usual ranges", apply: tameCourse },
   { change: 'speed reined in', apply: reinInSpeed },
 ];

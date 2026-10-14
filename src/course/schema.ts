@@ -30,6 +30,10 @@ export const LIMITS = {
   rampCurve: { min: -45, max: 45 },
   /** Degrees a ramp runs downhill along its length; negative climbs. */
   rampPitch: { min: -8, max: 12 },
+  /** Degrees the end of a ramp kicks up (a flare), launching you into the air. */
+  rampFlare: { min: 0, max: 30 },
+  /** Degrees a ramp swerves out and back (an S-bend), on top of its curve. */
+  rampSwerve: { min: -40, max: 40 },
   dropHeight: { min: 200, max: 2500 },
   gapLength: { min: 100, max: 3000 },
   boosterStrength: { min: 100, max: 800 },
@@ -54,12 +58,15 @@ export const LIMITS = {
  * off to the side of the last, so you must air-strafe across.
  */
 export const DIFFICULTY_STYLE: Readonly<
-  Record<Difficulty, { angle: readonly [number, number]; maxCurve: number; length: readonly [number, number]; ramps: readonly [number, number] }>
+  Record<
+    Difficulty,
+    { angle: readonly [number, number]; maxCurve: number; maxFlare: number; maxSwerve: number; length: readonly [number, number]; ramps: readonly [number, number] }
+  >
 > = {
-  easy: { angle: [46, 52], maxCurve: 15, length: [3000, 6000], ramps: [12, 16] },
-  medium: { angle: [50, 56], maxCurve: 30, length: [2500, 6000], ramps: [14, 18] },
-  hard: { angle: [54, 60], maxCurve: 45, length: [2000, 4500], ramps: [14, 18] },
-  expert: { angle: [56, 60], maxCurve: 45, length: [1500, 3500], ramps: [14, 18] },
+  easy: { angle: [46, 52], maxCurve: 15, maxFlare: 10, maxSwerve: 8, length: [3000, 6000], ramps: [12, 16] },
+  medium: { angle: [50, 56], maxCurve: 30, maxFlare: 14, maxSwerve: 14, length: [2500, 6000], ramps: [14, 18] },
+  hard: { angle: [54, 60], maxCurve: 45, maxFlare: 20, maxSwerve: 22, length: [2000, 4500], ramps: [14, 18] },
+  expert: { angle: [56, 60], maxCurve: 45, maxFlare: 24, maxSwerve: 26, length: [1500, 3500], ramps: [14, 18] },
 };
 
 export const RampSegment = z.object({
@@ -74,6 +81,13 @@ export const RampSegment = z.object({
    * out (or null, as the AI sends it), the difficulty's usual slope.
    */
   pitch: z.number().min(LIMITS.rampPitch.min).max(LIMITS.rampPitch.max).nullable().optional(),
+  /**
+   * A flare: the end of the ramp curves up this many degrees and launches you
+   * (surf maps' "jump" ramps). Left out for none. Never on a walled ramp.
+   */
+  flare: z.number().min(LIMITS.rampFlare.min).max(LIMITS.rampFlare.max).optional(),
+  /** An S-bend: the ramp swerves this many degrees one way and back, on top of its curve. Left out for none. */
+  swerve: z.number().min(LIMITS.rampSwerve.min).max(LIMITS.rampSwerve.max).optional(),
 });
 
 export const DropSegment = z.object({

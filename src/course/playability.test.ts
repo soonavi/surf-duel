@@ -14,11 +14,12 @@ import { describe, expect, it } from 'vitest';
 import { buildCourse } from './builder.js';
 import { SHIPPED_COURSES } from './courses/index.js';
 import { aiShapedCourse } from './aiShapedCourses.js';
-import { randomCourse } from './random.js';
+import { designRandomCourse, randomCourse } from './random.js';
 import { simulateRun } from './simulate.js';
 import { needsAirStrafe } from './tuning.js';
 import { CAUTIOUS, ensureBeatable, failuresOn } from './verify.js';
 import { validateCourse } from './validator.js';
+import { DIFFICULTIES } from './schema.js';
 
 /** AI-shaped courses tried per difficulty. */
 const AI_SHAPED_SEEDS = 8;
@@ -43,25 +44,27 @@ describe('shipped courses', () => {
   }
 });
 
-describe('random courses', () => {
-  it('every seed builds a course its bots finish without dying, from the start and every checkpoint', () => {
-    const failures: string[] = [];
-    for (let seed = 1; seed <= 40; seed++) failures.push(...failuresOn(randomCourse(seed), `seed ${seed}`));
-    expect(failures).toEqual([]);
-  }, 300_000);
+/** Random courses tried per difficulty (each is ridden twice: once by randomCourse itself, once here). */
+const RANDOM_SEEDS = 6;
 
-  for (const difficulty of ['hard', 'expert'] as const) {
-    it(`every ${difficulty} seed is finished by the skilled bot, and kills a rider who never air-strafes`, () => {
+describe('random courses (staged, every kind of piece; ridden before use)', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`${difficulty}: every seed is finished from the start and every checkpoint, mostly just as designed`, () => {
       const failures: string[] = [];
-      for (let seed = 1; seed <= 25; seed++) {
+      let asDesigned = 0;
+      for (let seed = 1; seed <= RANDOM_SEEDS; seed++) {
         const spec = randomCourse(seed, { difficulty });
         failures.push(...failuresOn(spec, `${difficulty} seed ${seed}`));
-        for (const style of CAUTIOUS) {
-          const r = simulateRun(buildCourse(spec), style, 180);
-          if (r.deaths === 0) failures.push(`${difficulty} seed ${seed}: the ${style.name} bot never died`);
+        if (JSON.stringify(spec) === JSON.stringify(designRandomCourse(seed, { difficulty }))) asDesigned++;
+        // Hard and expert must still need air-strafing.
+        if (needsAirStrafe(difficulty)) {
+          for (const style of CAUTIOUS) {
+            if (simulateRun(buildCourse(spec), style, 180).deaths === 0) failures.push(`${difficulty} seed ${seed}: the ${style.name} bot never died`);
+          }
         }
       }
       expect(failures).toEqual([]);
+      expect(asDesigned).toBeGreaterThanOrEqual(RANDOM_SEEDS - 2);
     }, 300_000);
   }
 });

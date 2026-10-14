@@ -306,6 +306,64 @@ describe('buildCourse: walls', () => {
   });
 });
 
+describe('buildCourse: flares and S-bends', () => {
+  // Surf-map research, Oct 14 2026: "jump" ramps whose end curves up, and ramps that bend one way and back.
+  const flared = spec([ramp({ length: 7000 }), ramp({ side: 'left', length: 5000, flare: 18 }), { type: 'gap', length: 1200 }, ramp({ length: 6000 }), ramp({ side: 'left' })], { difficulty: 'hard' });
+
+  it('bends the end of a flared ramp up, so you leave it climbing', () => {
+    const r = rampsIn(buildCourse(flared))[1]!;
+    const pts = r.points;
+    const end = pts[pts.length - 1]!;
+    const before = pts[pts.length - 2]!;
+    const run = Math.hypot(end.pos.x - before.pos.x, end.pos.z - before.pos.z);
+    // Rising at the lip (near the 18° it ends at), where an unflared ramp would still be running downhill.
+    expect((end.pos.y - before.pos.y) / run).toBeGreaterThan(Math.tan((12 * Math.PI) / 180));
+    // Well above where its straight slope (hard's usual 10°) would have run it.
+    const start = r.points.find((q) => q.s === 0)!.pos.y;
+    expect(end.pos.y - (start - r.length * Math.tan((10 * Math.PI) / 180))).toBeGreaterThan(150);
+  });
+
+  it('is long enough for fast riders to land and ride before it bends up', () => {
+    const plain = rampsIn(buildCourse({ ...flared, segments: flared.segments.map((s, i) => (i === 1 ? ramp({ side: 'left', length: 5000 }) : s)) }))[1]!;
+    expect(rampsIn(buildCourse(flared))[1]!.length).toBeGreaterThan(plain.length);
+  });
+
+  it('launches a rider off its lip, rising', () => {
+    const built = buildCourse(flared);
+    const r = rampsIn(built)[1]!;
+    const start = rideAt(r, r.length - 2200);
+    const player = createPlayer(start.pos.clone().add(new Vector3(0, 2, 0)));
+    player.vel.copy(forwardOf(start.heading)).multiplyScalar(2200);
+    const world = new BvhWorld(built.collision);
+    let rising = 0;
+    for (let i = 0; i < 160; i++) {
+      stepPlayer(player, { forward: 0, side: -1, jump: false, yaw: start.heading }, DEFAULT_PHYSICS, world, TICK_DT);
+      if (!player.surfing && !player.onGround) rising = Math.max(rising, player.vel.y);
+    }
+    expect(rising).toBeGreaterThan(300);
+  });
+
+  it('swerves one way and back, then carries on where its curve points', () => {
+    const swerved = spec([ramp({ length: 7000, swerve: 20, curve: 10 }), ramp({ side: 'left' })], { difficulty: 'hard' });
+    const r = rampsIn(buildCourse(swerved))[0]!;
+    const pts = r.points.filter((p) => p.s >= 0);
+    const h0 = pts[0]!.heading;
+    const headings = pts.map((p) => p.heading - h0);
+    expect(Math.max(...headings)).toBeGreaterThan((25 * Math.PI) / 180);
+    expect(Math.min(...headings)).toBeGreaterThanOrEqual(-1e-9);
+    expect(headings[headings.length - 1]!).toBeCloseTo((10 * Math.PI) / 180, 6);
+    // Gentle enough to ride: no two sections turn more than the layout allows.
+    for (let i = 1; i < pts.length; i++) expect(Math.abs(pts[i]!.heading - pts[i - 1]!.heading)).toBeLessThanOrEqual((2.01 * Math.PI) / 180);
+  });
+
+  it('keeps every flared and swerved face surfable', () => {
+    const { visuals } = buildCourse(spec([ramp({ swerve: -25, flare: 20 }), ramp({ side: 'left', flare: 20, pitch: 0 }), ramp({ side: 'both', swerve: 25 })], { difficulty: 'expert' }));
+    for (const geo of [visuals.rampRight, visuals.rampLeft]) {
+      for (const n of triangleNormals(geo)) if (n.y > 0.05) expect(n.y).toBeLessThan(FLOOR_NORMAL_Y);
+    }
+  });
+});
+
 describe('buildCourse: spirals', () => {
   const spiralled = spec(
     [ramp({ length: 6000 }), { type: 'booster', strength: 600 }, { type: 'spiral', turn: 'left', ramps: 6, angle: 58 }, ramp({ side: 'right' })],

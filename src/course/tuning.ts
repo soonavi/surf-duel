@@ -61,6 +61,40 @@ export function spiralArcLength(ramps: number, last = false): number {
   return SPIRAL_RADIUS * span;
 }
 
+/**
+ * A flare (surf maps' "jump" ramp): the last stretch of a ramp bends up, from
+ * its slope to `flare` degrees above level, along a steady curve, and you
+ * leave it rising. It bends over at most this far...
+ */
+export const FLARE_MAX_LENGTH = 1200;
+/** ...or this fraction of the ramp, if that's less. */
+const FLARE_FRACTION = 0.4;
+
+export function flareLength(rampLength: number): number {
+  return Math.min(FLARE_MAX_LENGTH, rampLength * FLARE_FRACTION);
+}
+
+/**
+ * How far above the ramp's straight slope the riding line is, `u` into a
+ * flare `length` long that bends a `pitchDeg` slope (downhill; negative
+ * climbs) up to `flareDeg` above level. 0 for a flare that wouldn't bend up.
+ */
+export function flareLift(u: number, length: number, pitchDeg: number, flareDeg: number): number {
+  const p = (pitchDeg * Math.PI) / 180;
+  const turn = (flareDeg * Math.PI) / 180 + p;
+  if (u <= 0 || length <= 0 || turn <= 0) return 0;
+  const k = turn / length;
+  const x = Math.min(u, length);
+  // The slope's angle climbs steadily from −p: the height is ∫ tan, less the straight slope's.
+  return (Math.log(Math.cos(p)) - Math.log(Math.cos(k * x - p))) / k + x * Math.tan(p);
+}
+
+/** Speeds leaving a flare that lifts the end of a ramp `lift` above its straight slope: riders pay for the climb. */
+export function afterFlare(speed: SpeedRange, lift: number): SpeedRange {
+  const cost = 2 * PLAN_GRAVITY * Math.max(0, lift);
+  return { lo: Math.sqrt(Math.max(0, speed.lo * speed.lo - cost)), hi: Math.sqrt(Math.max(0, speed.hi * speed.hi - cost)) };
+}
+
 /** Riders must still be doing at least this at the top of a climb (a cautious one, and on respawning there). */
 export const MIN_CLIMB_SPEED = 600;
 /** Slower than this, a ramp flatter than MIN_CRUISE_PITCH only crawls you along: it gets its usual downhill slope back. */

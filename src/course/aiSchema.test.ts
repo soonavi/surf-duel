@@ -148,7 +148,8 @@ describe('courseJsonSchema (OpenAI Structured Outputs, strict mode)', () => {
     const spec = courseFromAi(EXAMPLE) as Json;
     expect((spec.segments as Json[]).slice(0, 9)).toEqual([
       { type: 'ramp', ...ramp('right') },
-      { type: 'ramp', ...ramp('left', { curve: 30, pitch: 4 }) },
+      // Before a big drop, a flare to launch you over it (craft.ts).
+      { type: 'ramp', ...ramp('left', { curve: 30, pitch: 4 }), flare: 16 },
       { type: 'checkpoint' },
       { type: 'drop', height: 1800 },
       // A wall stands across the ramp it's set on, so it comes just before it.

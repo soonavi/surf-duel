@@ -11,6 +11,7 @@
 import { DIFFICULTY_STYLE, LIMITS, RAMP_SIDES, THEMES, type Difficulty } from './schema.js';
 import { cleanText, containsBlocked, containsLink } from '../util/text.js';
 import { needsAirStrafe } from './tuning.js';
+import { addSurfCraft } from './craft.js';
 
 /** Longest prompt a player can send (characters). */
 export const PROMPT_MAX_CHARS = 200;
@@ -144,7 +145,8 @@ export function courseFromAi(raw: unknown): unknown {
     if (isObject(spiral)) segments.push({ type: 'spiral', ...spiral });
     if (Array.isArray(then)) segments.push(...then);
   }
-  return { ...rest, segments };
+  // Flares before big jumps, S-bends on long gentle ramps (craft.ts).
+  return { ...rest, segments: addSurfCraft(segments) };
 }
 
 /** Name of the schema in the API request. */

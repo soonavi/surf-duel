@@ -6,6 +6,7 @@
 import {
   Course,
   DIFFICULTIES,
+  DIFFICULTY_STYLE,
   LIMITS,
   MIN_RAMP_CONTRAST,
   RAMP_SIDES,
@@ -21,6 +22,7 @@ import { cleanName as cleanPublicName } from '../util/text.js';
 import { normalizeHex, separate } from '../util/color.js';
 import {
   DIFFICULTY,
+  FLARE_MAX_LENGTH,
   MIN_CLIMB_SPEED,
   MIN_CRUISE_PITCH,
   MIN_CRUISE_SPEED,
@@ -30,7 +32,9 @@ import {
   START_SPEED,
   afterBooster,
   afterFall,
+  afterFlare,
   afterRamp,
+  flareLift,
   maxGapLength,
   needsAirStrafe,
   rampPitchDeg,
@@ -140,6 +144,15 @@ function sanitizeSegment(raw: unknown, index: number, lastSide: RampSide | null,
       };
       // No slope given (or null, as the AI sends it): the difficulty's usual one.
       if (raw.pitch !== undefined && raw.pitch !== null) ramp.pitch = r.number(raw.pitch, LIMITS.rampPitch, 0, `${label} pitch`);
+      // A flare or an S-bend only when there is one (so older courses keep their keys).
+      if (raw.flare !== undefined && raw.flare !== null) {
+        const flare = r.number(raw.flare, LIMITS.rampFlare, 0, `${label} flare`);
+        if (flare > 0) ramp.flare = flare;
+      }
+      if (raw.swerve !== undefined && raw.swerve !== null) {
+        const swerve = r.number(raw.swerve, LIMITS.rampSwerve, 0, `${label} swerve`);
+        if (swerve !== 0) ramp.swerve = swerve;
+      }
       return ramp;
     }
     case 'wall':
@@ -281,6 +294,28 @@ function fitTotalLength(segments: Segment[], r: Repairer): void {
   }
 }
 
+/** Flares and S-bends within the difficulty's limits, and never on a walled ramp: you line up straight for its window. */
+function limitCraft(segments: Segment[], difficulty: Difficulty, r: Repairer): void {
+  const style = DIFFICULTY_STYLE[difficulty];
+  segments.forEach((s, i) => {
+    if (s.type !== 'ramp') return;
+    if (segments[i - 1]?.type === 'wall') {
+      if (s.flare !== undefined || s.swerve !== undefined) r.note('a walled ramp runs straight: its flare and swerve removed');
+      delete s.flare;
+      delete s.swerve;
+      return;
+    }
+    if (s.flare !== undefined && s.flare > style.maxFlare) {
+      r.note(`a ${s.flare}° flare eased to ${style.maxFlare}° for ${difficulty}`);
+      s.flare = style.maxFlare;
+    }
+    if (s.swerve !== undefined && Math.abs(s.swerve) > style.maxSwerve) {
+      r.note(`a ${s.swerve}° swerve eased to ${style.maxSwerve}° for ${difficulty}`);
+      s.swerve = Math.sign(s.swerve) * style.maxSwerve;
+    }
+  });
+}
+
 function limitHeadingDrift(segments: Segment[], r: Repairer): void {
   let heading = 0;
   for (const s of segments) {
@@ -325,6 +360,19 @@ function limitBySpeed(segments: Segment[], difficulty: Difficulty, r: Repairer):
           }
         }
         speed = afterRamp(speed, s.length, rampPitchDeg(s, difficulty));
+        if (s.flare !== undefined) {
+          // A flare climbs: ease it until riders here still leave it with MIN_CLIMB_SPEED (at its longest).
+          const pitch = rampPitchDeg(s, difficulty);
+          const lift = (flare: number): number => flareLift(FLARE_MAX_LENGTH, FLARE_MAX_LENGTH, pitch, flare);
+          let flare = s.flare;
+          while (flare > 0 && afterFlare(speed, lift(flare)).lo < MIN_CLIMB_SPEED) flare = Math.max(0, flare - 2);
+          if (flare !== s.flare) {
+            r.note(`a ${s.flare}° flare eased to ${flare}°: riders here are too slow to climb it`);
+            if (flare > 0) s.flare = flare;
+            else delete s.flare;
+          }
+          if (s.flare !== undefined) speed = afterFlare(speed, lift(s.flare));
+        }
         break;
       }
       case 'spiral':
@@ -400,6 +448,7 @@ export function validateCourse(input: unknown): ValidationResult {
       segments = fixStructure(segments, r);
     }
     ensureMinRamps(segments, r);
+    limitCraft(segments, difficulty, r);
     limitHeadingDrift(segments, r);
     fitTotalLength(segments, r);
     ensureMinRamps(segments, r);

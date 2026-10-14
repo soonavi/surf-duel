@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Course, LIMITS, MIN_RAMP_CONTRAST, type Segment } from './schema.js';
+import { Course, DIFFICULTY_STYLE, LIMITS, MIN_RAMP_CONTRAST, type Segment } from './schema.js';
 import { validateCourse } from './validator.js';
 import { courseKey } from './courseKey.js';
 import { contrast } from '../util/color.js';
@@ -197,6 +197,40 @@ describe('validateCourse', () => {
       expect(repairs).toHaveLength(3);
       expect(repairs.join(' ')).toMatch(/downhill/);
     }
+  });
+
+  describe('flares and S-bends (Oct 14 2026: surf-map research)', () => {
+    it("keeps a ramp's flare and swerve within its difficulty's limits, and leaves the keys out when there are none", () => {
+      const hard = (segments: unknown[]) => validateCourse({ ...valid(), difficulty: 'hard', segments });
+      const { course } = hard([ramp({ length: 6000, flare: 14, swerve: -20 }), { type: 'gap', length: 900 }, ramp({ side: 'left', flare: 0, swerve: null as unknown as number })]);
+      const [a, b] = rampsOf(course);
+      expect(a).toMatchObject({ flare: 14, swerve: -20 });
+      expect(b).not.toHaveProperty('flare');
+      expect(b).not.toHaveProperty('swerve');
+      const wild = hard([ramp({ flare: 80, swerve: 300 }), ramp({ side: 'left', flare: -10 })]);
+      const [c, d] = rampsOf(wild.course);
+      expect(c!.flare).toBe(DIFFICULTY_STYLE.hard.maxFlare);
+      expect(c!.swerve).toBe(DIFFICULTY_STYLE.hard.maxSwerve);
+      expect(d).not.toHaveProperty('flare');
+      expect(wild.repairs.length).toBeGreaterThan(0);
+    });
+
+    it('gentler on easy than on expert', () => {
+      expect(DIFFICULTY_STYLE.easy.maxFlare).toBeLessThan(DIFFICULTY_STYLE.expert.maxFlare);
+      expect(DIFFICULTY_STYLE.easy.maxSwerve).toBeLessThan(DIFFICULTY_STYLE.expert.maxSwerve);
+    });
+
+    it('never flares or swerves a walled ramp: you line up straight for its window', () => {
+      const { course } = validateCourse({ ...valid(), difficulty: 'hard', segments: [ramp(), { type: 'wall' }, ramp({ side: 'left', flare: 12, swerve: 15 }), ramp()] });
+      expect(rampsOf(course)[1]).not.toHaveProperty('flare');
+      expect(rampsOf(course)[1]).not.toHaveProperty('swerve');
+    });
+
+    it('eases a flare riders here are too slow to climb', () => {
+      // Straight off the start pad at walking pace, a big kick would stop you dead.
+      const { course } = validateCourse({ ...valid(), difficulty: 'expert', segments: [ramp({ length: 1500, pitch: 0, flare: 22 }), ramp({ side: 'left' })] });
+      expect(rampsOf(course)[0]!.flare ?? 0).toBeLessThan(22);
+    });
   });
 
   it('keeps walls only where a ramp follows, one per ramp', () => {
