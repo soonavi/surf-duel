@@ -1,10 +1,10 @@
 # Handoff: where Surf Duel stands
 
-Written Oct 6 2026, updated Oct 8 (Phase 10 below). Read this first, then [CLAUDE.md](../CLAUDE.md) (rules, conventions, money and security constraints) and, if needed, [SPEC.md](SPEC.md).
+Written Oct 6 2026, updated through Oct 22 (Phase 15 below). Read this first, then [CLAUDE.md](../CLAUDE.md) (rules, conventions, money and security constraints) and, if needed, [SPEC.md](SPEC.md).
 
 ## In one paragraph
 
-Surf Duel is a browser first-person surf racing game, entered in the Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge (**deadline Oct 30 2026, 11:59 PM PT**). All eight phases of the spec are built. It's deployed at https://surf-duel-dun.vercel.app from the public repo https://github.com/soonavi/surf-duel. Every push to `main` deploys to production automatically. The working tree is clean, and everything is pushed and live. The last commit was `b089bee` (audio fixes), deployed as `dpl_JAPNtv6uTEDzEyUjYttogJgcett1`, READY.
+Surf Duel is a browser first-person surf racing game, entered in the Handshake AI Skills Studio x OpenAI Multiplayer Game Challenge (**deadline Oct 30 2026, 11:59 PM PT**). All eight phases of the spec are built. It's deployed at https://surf-duel-dun.vercel.app from the public repo https://github.com/soonavi/surf-duel. Every push to `main` deploys to production automatically; check `git status` and `git log origin/main..` for anything not yet pushed.
 
 ## What happened last
 
@@ -140,6 +140,16 @@ The user: "please polish the new knife models and inspect animations, the hand d
 - Measured: 30 of 32 random designs ride as designed (the other two get simplified); courses take 40–70 s; checking one takes 0.4–0.9 s.
 
 **Next:** the user's playtest of the new walls, the spiral rule, the hand and knives, and random/AI courses with flares and S-bends.
+
+## Phase 15 (user, Oct 22): a last audit, and a better hand
+
+The user: "do one last audit of the site to ensure there is nothing wrong, as well as work on the model of the hands a little bit because they are still a little boxy and undeveloped."
+
+**Audit.** All checks pass (584 tests, typecheck, build, `check:api`). Production was on the latest commit, READY, with no runtime errors in 7 days; the Supabase advisors list only the intended service-only tables. On the live site: the home screen, Popular list, top times, a share link (`/?course=ZCGTBM`), creating a room, the phone layout (no sideways scroll) and the three APIs' bad-request answers all worked. The database showed real use that day (an AI course and three leaderboard runs). Fixed:
+- A leftover "Phase 7 · Polish" label in the home screen's corner, overlapping the Race friends panel.
+- The room lobby's "Race the dev ghost" button (developer wording on a player screen) is now "Race a ghost", under "Waiting for friends?".
+
+**Hand.** Rebuilt from lofts (`loft` in `modelKit.ts`): a palm that wraps the grip (heel lower, as in a hammer grip), fingers with knuckles, waists and fuller pads, longer so the tips curl round to the thumb, lighter fingertips, a thumb on a fleshy base, a back panel and a knuckle guard, a cuff with a strap in the course's colour, and a jacket sleeve pinned to the cuff. Also fixed: a half-open hand (the karambit spin opens it to 0.6) swung its fingers the long way round, through the back of the hand.
 
 ## Phase status
 

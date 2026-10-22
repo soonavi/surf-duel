@@ -128,6 +128,121 @@ export function bladeGeometry(
   return merged;
 }
 
+/**
+ * One cross-section of a loft: its centre, which way is across it and which
+ * way is up through it, and its half-sizes (up and down can differ, so a
+ * palm can be domed on the back and flatter underneath).
+ */
+export interface LoftRing {
+  at: THREE.Vector3;
+  across: THREE.Vector3;
+  up: THREE.Vector3;
+  width: number;
+  top: number;
+  bottom: number;
+}
+
+/** Catmull–Rom through four values. */
+function catmull(a: number, b: number, c: number, d: number, t: number): number {
+  const t2 = t * t;
+  return 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (3 * b - a - 3 * c + d) * t2 * t);
+}
+
+/**
+ * A smooth tube through `rings` (a curve through their centres, sizes eased
+ * between them), with rounded caps `caps[0]` and `caps[1]` long at its ends
+ * (0 leaves an end open). Cross-sections are superellipses: `squareness` 2 is
+ * an ellipse, more is squarer. UVs run round it (u) and along it (v).
+ */
+export function loft(rings: LoftRing[], opts: { caps?: [number, number]; around?: number; steps?: number; squareness?: number } = {}): THREE.BufferGeometry {
+  const around = opts.around ?? 24;
+  const steps = opts.steps ?? 6;
+  const exponent = 2 / (opts.squareness ?? 2.2);
+  const [capStart, capEnd] = opts.caps ?? [0, 0];
+  const n = rings.length;
+  const ring = (i: number) => rings[Math.max(0, Math.min(n - 1, i))]!;
+  const vec = (i: number, k: 'at' | 'across' | 'up', t: number, out: THREE.Vector3) =>
+    out.set(
+      catmull(ring(i - 1)[k].x, ring(i)[k].x, ring(i + 1)[k].x, ring(i + 2)[k].x, t),
+      catmull(ring(i - 1)[k].y, ring(i)[k].y, ring(i + 1)[k].y, ring(i + 2)[k].y, t),
+      catmull(ring(i - 1)[k].z, ring(i)[k].z, ring(i + 1)[k].z, ring(i + 2)[k].z, t),
+    );
+  const num = (i: number, k: 'width' | 'top' | 'bottom', t: number) => catmull(ring(i - 1)[k], ring(i)[k], ring(i + 1)[k], ring(i + 2)[k], t);
+
+  // The sections along it: eased between the rings, then shrinking round each cap.
+  type Row = { at: THREE.Vector3; across: THREE.Vector3; up: THREE.Vector3; width: number; top: number; bottom: number };
+  const rows: Row[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    for (let s = 0; s < steps || (i === n - 2 && s === steps); s++) {
+      const t = s / steps;
+      const up = vec(i, 'up', t, new THREE.Vector3()).normalize();
+      const across = vec(i, 'across', t, new THREE.Vector3());
+      across.addScaledVector(up, -across.dot(up)).normalize();
+      rows.push({ at: vec(i, 'at', t, new THREE.Vector3()), across, up, width: num(i, 'width', t), top: num(i, 'top', t), bottom: num(i, 'bottom', t) });
+    }
+  }
+  const capRows = (end: Row, next: Row, length: number): Row[] => {
+    if (length <= 0) return [];
+    const out = end.at.clone().sub(next.at).normalize();
+    const caps: Row[] = [];
+    for (let j = 1; j <= 5; j++) {
+      const b = (j / 5) * (Math.PI / 2);
+      const c = j === 5 ? 0 : Math.cos(b);
+      caps.push({ ...end, at: end.at.clone().addScaledVector(out, Math.sin(b) * length), width: end.width * c, top: end.top * c, bottom: end.bottom * c });
+    }
+    return caps;
+  };
+  const all = [...capRows(rows[0]!, rows[1]!, capStart).reverse(), ...rows, ...capRows(rows[rows.length - 1]!, rows[rows.length - 2]!, capEnd)];
+
+  const pos: number[] = [];
+  const uv: number[] = [];
+  const index: number[] = [];
+  const p = new THREE.Vector3();
+  // Wind the faces outward whichever way round the rings' axes are.
+  const along = rows[rows.length - 1]!.at.clone().sub(rows[0]!.at);
+  const flip = p.crossVectors(rows[0]!.across, rows[0]!.up).dot(along) > 0;
+  all.forEach((r, row) => {
+    for (let k = 0; k <= around; k++) {
+      const a = (k / around) * Math.PI * 2;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      const x = r.width * Math.sign(c) * Math.abs(c) ** exponent;
+      const y = (s >= 0 ? r.top : r.bottom) * Math.sign(s) * Math.abs(s) ** exponent;
+      p.copy(r.at).addScaledVector(r.across, x).addScaledVector(r.up, y);
+      pos.push(p.x, p.y, p.z);
+      uv.push(k / around, row / (all.length - 1));
+      if (row > 0 && k > 0) {
+        const a0 = (row - 1) * (around + 1) + k - 1;
+        const b0 = row * (around + 1) + k - 1;
+        if (flip) index.push(a0, a0 + 1, b0, b0, a0 + 1, b0 + 1);
+        else index.push(a0, b0, a0 + 1, b0, b0 + 1, a0 + 1);
+      }
+    }
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(index);
+  geo.computeVertexNormals();
+  // Smooth across the seam where each ring closes, and point the caps' tips straight out.
+  const normals = geo.getAttribute('normal') as THREE.BufferAttribute;
+  const m = new THREE.Vector3();
+  for (let row = 0; row < all.length; row++) {
+    const first = row * (around + 1);
+    const last = first + around;
+    m.fromBufferAttribute(normals, first).add(p.fromBufferAttribute(normals, last)).normalize();
+    normals.setXYZ(first, m.x, m.y, m.z);
+    normals.setXYZ(last, m.x, m.y, m.z);
+  }
+  const tip = (row: number, from: number) => {
+    m.copy(all[row]!.at).sub(all[from]!.at).normalize();
+    for (let k = 0; k <= around; k++) normals.setXYZ(row * (around + 1) + k, m.x, m.y, m.z);
+  };
+  if (capStart > 0) tip(0, 1);
+  if (capEnd > 0) tip(all.length - 1, all.length - 2);
+  return geo;
+}
+
 /** A canvas texture `w`×`h`, drawn by `draw`, in sRGB. */
 export function canvasTexture(w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');

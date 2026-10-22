@@ -354,7 +354,6 @@ export class Overlay {
           </div>
 
           <p class="message home__message" role="status" aria-live="polite"></p>
-          <p class="phase-tag">Phase 7 · Polish</p>
         </div>
       </section>
 
@@ -749,9 +748,9 @@ export class Overlay {
 
     const solo = el('div', undefined, 'lobby__solo');
     solo.append(
-      el('span', 'Testing alone?', 'lobby__solo-label'),
+      el('span', 'Waiting for friends?', 'lobby__solo-label'),
       button('Open a second tab', 'btn btn--ghost btn--small', () => this.onLobbySecondTab?.()),
-      button('Race the dev ghost', 'btn btn--ghost btn--small', () => this.onLobbyPractice?.()),
+      button('Race a ghost', 'btn btn--ghost btn--small', () => this.onLobbyPractice?.()),
     );
 
     l.append(header, body, el('p', '', 'results__note lobby__warning'), actions, solo, el('p', '', 'message'));

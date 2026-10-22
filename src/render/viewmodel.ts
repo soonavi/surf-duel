@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { HELD_ITEMS, heldItem, type HeldItemId, type ItemKind, type ItemPose } from '../game/heldItem.js';
 import { buildItem, disposeModel, type ItemModel } from './itemModels.js';
-import { buildHand, buildSleeve, type HandRig } from './hand.js';
+import { buildHand, type HandRig } from './hand.js';
 import type { SceneView } from './scene.js';
 import type { Theme } from './themes.js';
 
@@ -37,8 +37,10 @@ const TURN_IN_HAND: Record<ItemKind, number> = { knife: Math.PI / 2, plush: 0, t
 const REST_SCALE: Record<ItemKind, number> = { knife: 1, plush: 0.72, toy: 0.85, food: 0.85, none: 1 };
 
 const ENVIRONMENT_INTENSITY = 0.45;
-/** The sleeve turns this much of the way with the wrist: a forearm turns less than a hand. */
+/** The elbow turns this much of the way with the wrist: a forearm turns less than a hand. */
 const SLEEVE_FOLLOW = 0.45;
+/** How far up the forearm the elbow is, from the sleeve's opening. */
+const FOREARM_LENGTH = 0.3;
 
 /** An angle as the equivalent one in [−π, π). */
 function wrap(a: number): number {
@@ -58,7 +60,7 @@ function addLights(scene: THREE.Scene): THREE.HemisphereLight {
 export class Viewmodel {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(VIEW_FOV, 1, 0.01, 5);
-  /** Rest placement. Inside it the wrist carries the glove and the item; the sleeve follows part of the way. */
+  /** Rest placement. Inside it the wrist carries the glove and the item; the sleeve runs from the glove's cuff to the elbow. */
   private readonly rig = new THREE.Group();
   private readonly sleeve = new THREE.Group();
   private readonly wrist = new THREE.Group();
@@ -69,6 +71,9 @@ export class Viewmodel {
   private readonly environment: THREE.Texture;
   private model: ItemModel | null = null;
   private id: HeldItemId = 'none';
+  private readonly cuffAt = new THREE.Vector3();
+  private readonly elbowAt = new THREE.Vector3();
+  private readonly elbowTurn = new THREE.Euler();
 
   constructor(private readonly view: SceneView) {
     const pmrem = new THREE.PMREMGenerator(view.renderer);
@@ -81,7 +86,7 @@ export class Viewmodel {
     this.scene.environmentIntensity = ENVIRONMENT_INTENSITY;
     this.hemi = addLights(this.scene);
     this.hand = buildHand();
-    this.sleeve.add(buildSleeve());
+    this.sleeve.add(this.hand.sleeve);
     this.wrist.add(this.hand.group, this.holder);
     this.rig.position.copy(REST_POSITION);
     this.rig.add(this.sleeve, this.wrist);
@@ -125,8 +130,14 @@ export class Viewmodel {
     }
     this.wrist.position.set(pose.x, pose.y, pose.z);
     this.wrist.rotation.set(pose.rx, pose.ry, pose.rz);
-    this.sleeve.position.copy(this.wrist.position);
-    this.sleeve.rotation.set(SLEEVE_FOLLOW * wrap(pose.rx), SLEEVE_FOLLOW * wrap(pose.ry), SLEEVE_FOLLOW * wrap(pose.rz));
+    // The sleeve's opening stays round the glove's cuff, and the sleeve runs from there to an
+    // elbow that turns only part of the way with the hand.
+    this.wrist.updateMatrix();
+    const cuff = this.cuffAt.copy(this.hand.wristPoint).applyMatrix4(this.wrist.matrix);
+    this.elbowTurn.set(SLEEVE_FOLLOW * wrap(pose.rx), SLEEVE_FOLLOW * wrap(pose.ry), SLEEVE_FOLLOW * wrap(pose.rz));
+    const elbow = this.elbowAt.copy(this.hand.wristPoint).addScaledVector(this.hand.forearm, FOREARM_LENGTH).applyEuler(this.elbowTurn).add(this.wrist.position);
+    this.sleeve.position.copy(cuff);
+    this.sleeve.quaternion.setFromUnitVectors(this.hand.forearm, elbow.sub(cuff).normalize());
     const s = pose.squash;
     this.holder.scale.set(1 + s / 2, 1 - s, 1 + s / 2);
     if (model.spinner) model.spinner.rotation.z = -pose.spin;
