@@ -294,7 +294,10 @@ function fitTotalLength(segments: Segment[], r: Repairer): void {
   }
 }
 
-/** Flares and S-bends within the difficulty's limits, and never on a walled ramp: you line up straight for its window. */
+/**
+ * Flares and S-bends within the difficulty's limits, and never on a walled ramp: you line up
+ * straight for its window. A walled ramp has one face, too: its window is turned to the face.
+ */
 function limitCraft(segments: Segment[], difficulty: Difficulty, r: Repairer): void {
   const style = DIFFICULTY_STYLE[difficulty];
   segments.forEach((s, i) => {
@@ -303,6 +306,11 @@ function limitCraft(segments: Segment[], difficulty: Difficulty, r: Repairer): v
       if (s.flare !== undefined || s.swerve !== undefined) r.note('a walled ramp runs straight: its flare and swerve removed');
       delete s.flare;
       delete s.swerve;
+      if (s.side === 'both') {
+        // The other side from the ramp before it, as sides usually alternate.
+        s.side = lastRampSide(segments.slice(0, i)) === 'right' ? 'left' : 'right';
+        r.note(`a walled two-sided ridge given one face (${s.side}): its window is turned to the face`);
+      }
       return;
     }
     if (s.flare !== undefined && s.flare > style.maxFlare) {

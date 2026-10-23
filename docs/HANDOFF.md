@@ -151,6 +151,23 @@ The user: "do one last audit of the site to ensure there is nothing wrong, as we
 
 **Hand.** Rebuilt from lofts (`loft` in `modelKit.ts`): a palm that wraps the grip (heel lower, as in a hammer grip), fingers with knuckles, waists and fuller pads, longer so the tips curl round to the thumb, lighter fingertips, a thumb on a fleshy base, a back panel and a knuckle guard, a cuff with a strap in the course's colour, and a jacket sleeve pinned to the cuff. Also fixed: a half-open hand (the karambit spin opens it to 0.6) swung its fingers the long way round, through the back of the hand.
 
+## Phase 16 (user, Oct 22): wall windows clear of the ramp
+
+The user, with a screenshot of Spire's low window tucked behind a ramp: "there should be a reasonable gap between the holes in the walls and the ramp, currently the user has to surf on the right side of the ramp if they want to pass this".
+
+- **Cause.** Riders leave a face level with it, and each window was centred where they fly. So from the ramp, the face's edge cut diagonally through every square window. Ray casts from the rider's eye found 28–45% of every window hidden, low and high, on every difficulty, from any line. The visible part sat to one side, so you aimed there.
+- **The user chose option B of three:** a small lip, rather than a big launch with a visible strip of wall (A) or no launch (C).
+  - Each walled ramp ends in a 400-long lip, the gentlest that shows the whole window as you line up. In practice that's mostly 5°, up to ~16° on climbs and slow walls.
+  - The window is a square turned to the face's angle; its lower edge sits on the lip's edge line.
+  - The low window sits just far enough below the riding line that staying on it hits the wall: `windowSlack` + 40, so 0.50–0.55 of the face instead of 0.56.
+  - Walled two-sided ridges become one-sided.
+  - See CLAUDE.md, "Walls and spirals".
+- **What it cost, and how it was kept down.** At 15°, the speed-cap rider flew ~8,000 past the wall; the ramps after walls stretched to 14,000, and bots died on them. Spire's climb after its second wall went from 3,500 to 9,287. AI-style medium courses kept only 3 of 8 walls.
+  - Lips are now only as steep as each wall needs.
+  - Landings off a lip are planned for a rider 25% faster than the speed model's fast one, not the speed cap.
+  - AI-style courses again keep at least 75% of their walls and spirals on every difficulty (`playability.test.ts`'s bar; medium and hard 80%). Measured on every shipped wall and 96 random and AI-style courses: no window hides any part behind its ramp.
+- `LAYOUT_VERSION` is 8: leaderboards and PBs reset again (user-approved). Re-seed the boards before Oct 30.
+
 ## Phase status
 
 | Phase | State |

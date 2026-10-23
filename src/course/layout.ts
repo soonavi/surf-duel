@@ -11,11 +11,11 @@
  *    if needed.
  *
  * Each ramp runs at its own slope (level and climbing ones too). A wall
- * stands across the ramp after it with a window round the riding line, and a
- * spiral lays one full turn of ramps on a circle round a tower.
+ * stands past the end of a ramp, which ends in a lip that launches you through
+ * its window, and a spiral lays one full turn of ramps on a circle round a tower.
  */
 import { MathUtils, Vector3 } from 'three';
-import { DEFAULT_PHYSICS, PLAYER_HEIGHT, PLAYER_RADIUS } from '../physics/constants.js';
+import { DEFAULT_PHYSICS, EYE_HEIGHT, PLAYER_HEIGHT, PLAYER_RADIUS } from '../physics/constants.js';
 import type { Course, RampSegment, RampSide, Segment, SpiralSegment } from './schema.js';
 import { TrackPath } from './path.js';
 import {
@@ -99,7 +99,6 @@ export interface GatePiece {
   depth: number;
 }
 
-/** A wall standing across a ramp, with a window round the riding line: stay on your line or hit it. */
 /**
  * A free-standing wall just past the end of a ramp, with a small window set
  * off the riding line (user, Oct 8 2026: walls were "too easy", and they
@@ -110,16 +109,22 @@ export interface WallPiece {
   kind: 'wall';
   /** Index (into pieces) of the ramp it stands past the end of. */
   ramp: number;
-  /** Where the riding line, carried on, crosses the wall (a rider's feet), and the ramp's end heading. */
+  /** Where the riding line, carried on, crosses the wall (at the height of the ramp's lip), and the ramp's end heading. */
   pos: Vector3;
   heading: number;
-  /** The window's centre, as a distance down the face from the ramp's ridge (0 on a two-sided ridge). */
+  /** The window's line: a distance down the face from the ramp's ridge. */
   target: number;
-  /** The window: across the wall from `pos` (positive is to the right), and between these heights. */
-  windowLeft: number;
-  windowRight: number;
-  windowBottom: number;
-  windowTop: number;
+  /** The angle (degrees above level) of the lip the ramp ends in, launching riders through the window. */
+  launchDeg: number;
+  /**
+   * The window: a square `windowHalf` from its centre to each side, centred `windowAcross` across
+   * the wall from `pos` (positive is to the right) at height `windowY`, and turned `windowTilt`
+   * (radians, anticlockwise as you face it) so its sides run along the face and square to it.
+   */
+  windowAcross: number;
+  windowY: number;
+  windowHalf: number;
+  windowTilt: number;
   /** The whole wall: half its width, and its bottom and top heights. */
   halfWidth: number;
   bottom: number;
@@ -231,17 +236,32 @@ const WALL_RUNOUT = 900;
  */
 const WALL_LINEUP_TIME = 0.9;
 const FASTEST_RIDER = DEFAULT_PHYSICS.maxVelocity * 1.2;
-/** Windows sit low on the face (this fraction of its width from the ridge) or high, a little above the riding line. */
-const WINDOW_LOW = 0.56;
+/**
+ * A walled ramp ends in a short lip that bends up to between these angles above level, so riders
+ * leave it rising and its window stands on the lip's edge, not behind it (user, Oct 22 2026: "there
+ * should be a reasonable gap between the holes in the walls and the ramp"). Flying straight off a
+ * face you're level with it, so from the ramp every window you could fly through hid partly behind
+ * its edge. Each lip is the gentlest of these that lifts its slowest rider's window clear.
+ */
+const WALL_KICK_MIN_DEG = 5;
+const WALL_KICK_MAX_DEG = 20;
+const WALL_KICK_STEP_DEG = 0.5;
+/** How far along the ramp its lip bends up. */
+const WALL_KICK_LENGTH = 400;
+/** Off a wall's lip, landings are planned for a rider this much faster than the speed model's fast one (a bot once beat it by 15%). */
+const LIP_FAST = 1.25;
+/** Windows sit low on the face, just far enough below the riding line that staying on it hits the wall... */
+const WINDOW_OFF_LINE = 40;
+/** ...or high, a little above the riding line (at least this fraction of the face's width from the ridge). */
 const WINDOW_HIGH_MIN = 0.12;
-/** On a two-sided ridge riders ride this far down either face (the bot does too); its window is centred on the ridge. */
+/** On a two-sided ridge riders ride this far down either face (the bot does too). */
 export const RIDGE_RIDE = 120;
-/** At speed, riders who don't air-strafe ride this much below their line... */
+/** At speed, riders who don't air-strafe ride this much below their line. */
 const CAUTIOUS_SAG = 60;
-/** ...and sag this much further down a two-sided ridge's face. */
-const CAUTIOUS_RIDGE_SAG = 150;
-/** The window reaches this far beyond the feet and heads of the riders it's for. */
+/** The window reaches this far beyond the riders it's for... */
 const WINDOW_MARGIN = 40;
+/** ...and this far below its slowest one, whose speed is already a pessimistic guess (so its lip can stay gentler). */
+const WINDOW_FLOOR_MARGIN = 20;
 /** The wall reaches this far beyond the ramp's faces, below its base and above the riding line. */
 const WALL_REACH = 1400;
 const WALL_BELOW = 800;
@@ -263,22 +283,78 @@ export function rightOf(heading: number, out = new Vector3()): Vector3 {
   return out.set(Math.cos(heading), 0, -Math.sin(heading));
 }
 
-/** How long a ramp with a wall past its end must be, to give every rider time to line up for its window. */
+/** How long a ramp with a wall past its end must be, to give every rider time to line up for its window before its lip. */
 function wallRunUp(fastLanding: number, front: number, flight: number): number {
-  return Math.max(fastLanding - front + WALL_SETTLE + WALL_RUNOUT, FASTEST_RIDER * (flight + WALL_LINEUP_TIME) - front);
+  return Math.max(fastLanding - front + WALL_SETTLE + WALL_RUNOUT, FASTEST_RIDER * (flight + WALL_LINEUP_TIME) - front) + WALL_KICK_LENGTH;
+}
+
+/** How high (negative: how far below) a rider leaving a ramp `launchDeg` above level at speed v is when they reach its wall. */
+function riseAtWall(v: number, launchDeg: number): number {
+  const k = MathUtils.degToRad(launchDeg);
+  return -fallAfter(v * Math.cos(k), -v * Math.sin(k), WALL_GATE_AFTER);
+}
+
+/**
+ * How far the bottom of a wall's window is above the line of the lip's edge, square to the face:
+ * its slowest rider's height off the lip, less the bottom of their capsule and the window's margin.
+ */
+function windowFloor(theta: number, slowest: number, launchDeg: number): number {
+  const cos = Math.cos(theta);
+  return (riseAtWall(slowest, launchDeg) + PLAYER_RADIUS) * cos - PLAYER_RADIUS - WINDOW_FLOOR_MARGIN;
+}
+
+/**
+ * How far above the line of the lip's edge (square to the face) a ramp `pitchDeg` downhill hides
+ * its wall from you, from anywhere on it before its lip, which rises `lift` above its slope. From far
+ * back you see past the lip along the slope carried on (on a climb, that's above the edge); from the
+ * lip's foot, past its edge, which can be higher than your eyes.
+ */
+function wallShadow(theta: number, pitchDeg: number, lift: number): number {
+  const along = Math.max(0, lift - EYE_HEIGHT) / WALL_KICK_LENGTH - Math.tan(MathUtils.degToRad(pitchDeg));
+  return WALL_GATE_AFTER * along * Math.cos(theta);
+}
+
+/** A point on a wall (across from its `pos`, and height) in its window's frame: along the window's sides, from its centre. */
+export function windowFrame(w: WallPiece, across: number, y: number): { u: number; v: number } {
+  const dx = across - w.windowAcross;
+  const dy = y - w.windowY;
+  const c = Math.cos(w.windowTilt);
+  const s = Math.sin(w.windowTilt);
+  return { u: dx * c + dy * s, v: dy * c - dx * s };
+}
+
+/** Whether a point on a wall (across from its `pos`, and height) is in its window, at least `inset` inside its edges. */
+export function inWindow(w: WallPiece, across: number, y: number, inset = 0): boolean {
+  const { u, v } = windowFrame(w, across, y);
+  return Math.abs(u) < w.windowHalf - inset && Math.abs(v) < w.windowHalf - inset;
+}
+
+/** The window's corners (across from the wall's `pos`, and height), `grow` beyond its edges, in order round it. */
+export function windowCorners(w: WallPiece, grow = 0): [number, number][] {
+  const h = w.windowHalf + grow;
+  const c = Math.cos(w.windowTilt);
+  const s = Math.sin(w.windowTilt);
+  return [
+    [-h, -h],
+    [h, -h],
+    [h, h],
+    [-h, h],
+  ].map(([u, v]) => [w.windowAcross + u! * c - v! * s, w.windowY + u! * s + v! * c]);
 }
 
 /**
  * The wall past the end of ramp `ramp`, across a clear gap. Its window is for
  * riders who leave the face within `w` of a point on it: low down it, or high
- * just above the riding line (alternating), or round the ridge of a two-sided
- * ramp. Riders fly on from where they leave the face, falling a little on the
- * way (slow ones more), so that's where they cross the wall.
+ * just above the riding line (alternating). Riders fly on from where they
+ * leave the face, rising off its lip and falling a little on the way (slow
+ * ones more), so that's where they cross the wall.
  *
  * The window is a square cutout (user, Oct 11 2026: a tall slit read as a
- * crack beside the ramp, not a hole in the wall). On a face, a rider's height
- * follows their place across it, so the square's top and bottom are what keep
- * it tight: further up the face you hit the top, further down, the bottom.
+ * crack beside the ramp, not a hole in the wall), turned so its sides run
+ * along the face and square to it: upright, its lower corner on the ridge's
+ * side hid behind the ramp. On a face, a rider's height follows their place
+ * across it, so it's the ends along the face that keep it tight: further up
+ * the face than its line you hit one, further down, the other.
  */
 function wallPast(
   ramp: number,
@@ -288,55 +364,56 @@ function wallPast(
   index: number,
   /** Built for riders who don't air-strafe (easy, medium): at speed they skim the face and can't climb much. */
   cautious: boolean,
-  /** The slowest rider's speed leaving the ramp, and the sine of its slope (how fast they're already falling). */
-  exit: { slowest: number; sinPitch: number },
+  /** The slowest rider's speed leaving the ramp, and the angle they leave it at (degrees above level: its lip's). */
+  exit: { slowest: number; launchDeg: number },
 ): WallPiece {
   const { side, faceWidth, ride, theta, peakAboveRide, height } = shape;
-  const tanTheta = Math.tan(theta);
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
   const pos = end.pos.clone().addScaledVector(forwardOf(end.heading), WALL_GATE_AFTER);
   pos.y = end.pos.y;
-  const dropSlow = fallAfter(exit.slowest, exit.slowest * exit.sinPitch, WALL_GATE_AFTER);
-  const dropFast = fallAfter(FASTEST_RIDER, FASTEST_RIDER * exit.sinPitch, WALL_GATE_AFTER);
-  let target: number;
-  /** Where the riders it's for cross the wall: across it from `pos`, and their lowest feet and highest heads. */
-  let across: number;
-  let halfAcross: number;
-  let low: number;
-  let high: number;
-  if (side === 'both') {
-    target = 0;
-    const reach = RIDGE_RIDE + w + (cautious ? CAUTIOUS_RIDGE_SAG : 0);
-    across = 0;
-    halfAcross = reach;
-    low = end.pos.y - reach * tanTheta - dropSlow - WINDOW_MARGIN;
-    high = end.pos.y - dropFast + PLAYER_HEIGHT + WINDOW_MARGIN;
-  } else {
-    // High windows sit half a window above the riding line: riding within ~70 of the ridge tips you over it.
-    // (For cautious riders, "high" is tight round the riding line itself: they can't climb much at speed.)
-    const highUp = cautious ? ride + CAUTIOUS_SAG : Math.max(WINDOW_HIGH_MIN * faceWidth, ride - w / 2);
-    target = index % 2 === 0 ? WINDOW_LOW * faceWidth : highUp;
-    // The face runs away from the ridge: to the left of a right-hand ramp, to the right of a left-hand one.
-    across = (side === 'right' ? 1 : -1) * (ride - target);
-    halfAcross = w;
-    // Feet at the target, allowing for an average fall; the fastest and slowest riders line up a touch lower or higher.
-    const feet = end.pos.y + (ride - target) * tanTheta - (dropSlow + dropFast) / 2;
-    // Within w of the target (less the rider's own width), plus a margin.
-    const reach = (w - PLAYER_RADIUS) * tanTheta + WINDOW_MARGIN;
-    low = feet - reach;
-    high = feet + reach + PLAYER_HEIGHT;
-  }
-  const half = Math.max(halfAcross, (high - low) / 2);
-  const middle = (low + high) / 2;
+  // High windows sit half a window above the riding line: riding within ~70 of the ridge tips you over it.
+  // (For cautious riders, "high" is tight round the riding line itself: they can't climb much at speed.)
+  const highUp = cautious ? ride + CAUTIOUS_SAG : Math.max(WINDOW_HIGH_MIN * faceWidth, ride - w / 2);
+  const target = index % 2 === 0 ? ride + w + WINDOW_OFF_LINE : highUp;
+  // The face runs away from the ridge: to the left of a right-hand ramp, to the right of a left-hand one.
+  // (A two-sided ridge never has a wall: the validator gives a walled ramp one face.)
+  const sideSign = side === 'left' ? -1 : 1;
+  // Where the target's line crosses the wall before riders rise or fall: level with the lip's edge.
+  const across = sideSign * (ride - target);
+  const y = end.pos.y + (ride - target) * Math.tan(theta);
+  // In the window's frame `a` runs up the face (toward the ridge) and `b` square to it, away from it. A
+  // rider `d` further up the face than the target who has risen `r` has their feet at a = d/cosθ + r·sinθ,
+  // b = r·cosθ. Their capsule reaches PLAYER_RADIUS round its spine, which runs from PLAYER_RADIUS above
+  // their feet to PLAYER_RADIUS below the top of their head.
+  const riseSlow = riseAtWall(exit.slowest, exit.launchDeg);
+  const riseFast = riseAtWall(FASTEST_RIDER, exit.launchDeg);
+  // Rising higher looks like leaving further up the face, so along it the window is for an average rise:
+  // the fastest and slowest riders line up a touch lower or higher. (Allowing for both would let you
+  // through from your usual line.) Square to the face, it has room for everyone.
+  const rise = (riseSlow + riseFast) / 2;
+  const spineTop = PLAYER_HEIGHT - PLAYER_RADIUS;
+  // Within w of the target (less the rider's own width), plus a margin.
+  const reach = (w - PLAYER_RADIUS) / cos;
+  const aMin = -reach + (rise + PLAYER_RADIUS) * sin - PLAYER_RADIUS - WINDOW_MARGIN;
+  const aMax = reach + (rise + spineTop) * sin + PLAYER_RADIUS + WINDOW_MARGIN;
+  const bMin = windowFloor(theta, exit.slowest, exit.launchDeg);
+  const bMax = (riseFast + spineTop) * cos + PLAYER_RADIUS + WINDOW_MARGIN;
+  const half = Math.max(aMax - aMin, bMax - bMin) / 2;
+  // Any room to spare goes above the riders: the window's lower edge stays as close over the lip as it can.
+  const a = (aMin + aMax) / 2;
+  const b = bMin + half;
   return {
     kind: 'wall',
     ramp,
     pos,
     heading: end.heading,
     target,
-    windowLeft: across - half,
-    windowRight: across + half,
-    windowBottom: middle - half,
-    windowTop: middle + half,
+    launchDeg: exit.launchDeg,
+    windowAcross: across + sideSign * (a * cos - b * sin),
+    windowY: y + a * sin + b * cos,
+    windowHalf: half,
+    windowTilt: sideSign * theta,
     halfWidth: faceWidth + WALL_REACH,
     bottom: end.pos.y + peakAboveRide - height - WALL_BELOW,
     top: end.pos.y + peakAboveRide + WALL_ABOVE,
@@ -503,7 +580,10 @@ export function planCourse(course: Course): CourseLayout {
       // And where its arc meets the riding line, which drops `slope` per unit beyond the front:
       // ½g·t² + (vy − v·slope)·t − (drop − front·slope) = 0. (Onto a flared ramp too: fast riders mustn't
       // come down where it bends up, so it's stretched by where they really land.)
-      vLand = Math.max(vHi, DEFAULT_PHYSICS.maxVelocity);
+      // Off a wall's lip, though, plan for a rider a little faster than the model's fast one: at the cap, a
+      // lip near the start stretched the next ramp by 3,800, and riders who landed early on it carried the
+      // extra speed into the rest of the course.
+      vLand = cursor.wallBehind ? Math.min(DEFAULT_PHYSICS.maxVelocity, vHi * LIP_FAST) : Math.max(vHi, DEFAULT_PHYSICS.maxVelocity);
       const vy = vLand * sinExit;
       const front0 = pendingGap + LEAD_FROM_RAMP;
       const b = vy - vLand * slope;
@@ -639,8 +719,19 @@ export function planCourse(course: Course): CourseLayout {
     // An S-bend swerves out and back over the curving stretch; a flare bends the end of the ramp up.
     // (Neither on a walled ramp, nor round a spiral.)
     const swerveDeg = arc || pendingWall ? 0 : (seg.swerve ?? 0);
-    const flareDeg = arc || pendingWall ? 0 : (seg.flare ?? 0);
-    const flareRun = flareDeg > 0 ? flareLength(length) : 0;
+    // A walled ramp ends in a short lip instead: the gentlest that lifts its slowest rider's window
+    // clear of the ramp, so you see all of it as you line up.
+    let kickDeg = 0;
+    if (pendingWall && !arc) {
+      const before = afterRamp(cursor.speed, length, pitchDeg);
+      for (kickDeg = WALL_KICK_MIN_DEG; kickDeg < WALL_KICK_MAX_DEG; kickDeg += WALL_KICK_STEP_DEG) {
+        const kick = flareLift(WALL_KICK_LENGTH, WALL_KICK_LENGTH, pitchDeg, kickDeg);
+        const slowest = Math.max(WALK_SPEED, afterFlare(before, kick).lo);
+        if (windowFloor(theta, slowest, kickDeg) >= wallShadow(theta, pitchDeg, kick)) break;
+      }
+    }
+    const flareDeg = arc ? 0 : pendingWall ? kickDeg : (seg.flare ?? 0);
+    const flareRun = flareDeg <= 0 ? 0 : pendingWall ? WALL_KICK_LENGTH : flareLength(length);
     const lift = (s: number): number => (flareRun > 0 ? flareLift(s - (length - flareRun), flareRun, pitchDeg, flareDeg) : 0);
     const flared = lift(length) > 0;
     if (arc) {
@@ -719,7 +810,7 @@ export function planCourse(course: Course): CourseLayout {
     cursor.wallBehind = pendingWall;
     if (pendingWall) {
       const shape = { side: seg.side, faceWidth, ride, theta, peakAboveRide, height };
-      const exit = { slowest: Math.max(WALK_SPEED, exitSpeed.lo), sinPitch: Math.sin(MathUtils.degToRad(pitchDeg)) };
+      const exit = { slowest: Math.max(WALK_SPEED, exitSpeed.lo), launchDeg: flared ? flareDeg : -pitchDeg };
       pieces.push(wallPast(pieceIndex, last, shape, diff.windowSlack, walls++, diff.transferReach === 0, exit));
       pendingWall = false;
     }

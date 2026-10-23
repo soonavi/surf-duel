@@ -3,7 +3,7 @@
  * Deterministic: the same input always yields the same course. Never throws on
  * bad input (the validator repairs it first).
  */
-import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, CylinderGeometry, MathUtils, Vector3 } from 'three';
+import { Box3, BoxGeometry, BufferAttribute, BufferGeometry, CylinderGeometry, ExtrudeGeometry, MathUtils, Matrix4, Path, Shape, Vector2, Vector3 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Course, Segment } from './schema.js';
 import { validateCourse } from './validator.js';
@@ -14,6 +14,7 @@ import {
   forwardOf,
   planCourse,
   rightOf,
+  windowCorners,
   type BoosterPiece,
   type GatePiece,
   type PadPiece,
@@ -263,38 +264,37 @@ const FRAME_PROUD = 15;
 /** The wall's own cut is this much bigger than the frame's opening, so their inner faces never fight. */
 const FRAME_INSET = 2;
 
-/** A box `lateralFrom`–`lateralTo` across the wall (from its `pos`), `bottom`–`top` high, `depth` thick. */
-function wallBox(w: WallPiece, lateralFrom: number, lateralTo: number, bottom: number, top: number, depth: number): BufferGeometry {
-  const center = w.pos.clone().addScaledVector(rightOf(w.heading), (lateralFrom + lateralTo) / 2);
-  center.y = (bottom + top) / 2;
-  return orientedBox(lateralTo - lateralFrom, top - bottom, depth, center, w.heading);
+/**
+ * A slab `depth` thick standing in the wall's plane: `outline` with `hole` cut through it, both
+ * drawn as [across the wall from its `pos`, height] (positive across is to the right).
+ */
+function wallSlab(w: WallPiece, outline: [number, number][], hole: [number, number][], depth: number): BufferGeometry {
+  const shape = new Shape(outline.map(([x, y]) => new Vector2(x, y)));
+  shape.holes.push(new Path(hole.map(([x, y]) => new Vector2(x, y))));
+  const g = new ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+  // Across the wall to its right, up, and back toward the ramp; centred on the wall's plane.
+  const right = rightOf(w.heading);
+  const back = forwardOf(w.heading).negate();
+  const origin = new Vector3(w.pos.x, 0, w.pos.z).addScaledVector(back, -depth / 2);
+  g.applyMatrix4(new Matrix4().makeBasis(right, new Vector3(0, 1, 0), back).setPosition(origin));
+  return g;
 }
 
-/** Four panels round the window: either side of it full height, and above and below it. */
+/** The wall, with its window cut through it. */
 function wallGeometry(w: WallPiece): BufferGeometry[] {
-  const left = w.windowLeft - FRAME_INSET;
-  const right = w.windowRight + FRAME_INSET;
-  const bottom = w.windowBottom - FRAME_INSET;
-  const top = w.windowTop + FRAME_INSET;
-  return [
-    wallBox(w, -w.halfWidth, left, w.bottom, w.top, WALL_THICKNESS),
-    wallBox(w, right, w.halfWidth, w.bottom, w.top, WALL_THICKNESS),
-    wallBox(w, left, right, top, w.top, WALL_THICKNESS),
-    wallBox(w, left, right, w.bottom, bottom, WALL_THICKNESS),
+  const { halfWidth: h, bottom, top } = w;
+  const outline: [number, number][] = [
+    [-h, bottom],
+    [h, bottom],
+    [h, top],
+    [-h, top],
   ];
+  return [wallSlab(w, outline, windowCorners(w, FRAME_INSET), WALL_THICKNESS)];
 }
 
 /** A bright frame round the window, so it reads as a cutout from far off. Visual only: it never narrows the window. */
 function wallFrameGeometry(w: WallPiece): BufferGeometry[] {
-  const f = FRAME_WIDTH;
-  const depth = WALL_THICKNESS + 2 * FRAME_PROUD;
-  const { windowLeft: l, windowRight: r, windowBottom: b, windowTop: t } = w;
-  return [
-    wallBox(w, l - f, l, b - f, t + f, depth),
-    wallBox(w, r, r + f, b - f, t + f, depth),
-    wallBox(w, l, r, t, t + f, depth),
-    wallBox(w, l, r, b - f, b, depth),
-  ];
+  return [wallSlab(w, windowCorners(w, FRAME_WIDTH), windowCorners(w), WALL_THICKNESS + 2 * FRAME_PROUD)];
 }
 
 function towerGeometry(t: TowerPiece): BufferGeometry {

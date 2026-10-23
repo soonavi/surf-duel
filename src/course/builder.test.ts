@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { BufferGeometry, Vector3 } from 'three';
+import { BufferGeometry, DoubleSide, Ray, Vector3 } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { MeshBVH } from 'three-mesh-bvh';
 import { buildCourse, type PadPiece, type RampPiece, type TowerPiece, type WallPiece } from './builder.js';
-import { forwardOf, rightOf } from './layout.js';
-import type { Course, Segment } from './schema.js';
+import { forwardOf, inWindow, rightOf, windowCorners } from './layout.js';
+import { DIFFICULTIES, type Course, type Segment } from './schema.js';
 import { BvhWorld, ContactList } from '../physics/collision.js';
-import { DEFAULT_PHYSICS, FLOOR_NORMAL_Y, TICK_DT } from '../physics/constants.js';
+import { DEFAULT_PHYSICS, EYE_HEIGHT, FLOOR_NORMAL_Y, TICK_DT } from '../physics/constants.js';
 import { createPlayer, stepPlayer } from '../physics/player.js';
 import { aiShapedCourse } from './aiShapedCourses.js';
 import { DIFFICULTY } from './tuning.js';
@@ -228,17 +230,30 @@ describe('buildCourse: walls', () => {
     expect(entry.clone().sub(walls[0]!.pos).dot(forwardOf(end.heading))).toBeGreaterThanOrEqual(400);
   });
 
-  it('cuts a square window with wall all round it, not a slit beside the ramp', () => {
+  it('ends the ramp before it in a lip, 5–20° above level, that launches you through', () => {
+    const built = buildCourse(walled);
+    const wall = theWall(built);
+    const pts = (built.pieces[wall.ramp] as RampPiece).points;
+    const [before, end] = [pts[pts.length - 2]!, pts[pts.length - 1]!];
+    const rise = (end.pos.y - before.pos.y) / Math.hypot(end.pos.x - before.pos.x, end.pos.z - before.pos.z);
+    expect(wall.launchDeg).toBeGreaterThanOrEqual(5);
+    expect(wall.launchDeg).toBeLessThanOrEqual(20);
+    expect(rise).toBeGreaterThan(Math.tan(((wall.launchDeg - 2) * Math.PI) / 180));
+  });
+
+  it('cuts a square window turned to the face, with wall all round it', () => {
     // User, Oct 11 2026: "there should be a cutout in the wall" (a 190×750 slit read as a crack).
-    const wall = theWall(buildCourse(walled));
-    const width = wall.windowRight - wall.windowLeft;
-    const height = wall.windowTop - wall.windowBottom;
-    expect(height / width).toBeGreaterThan(0.8);
-    expect(height / width).toBeLessThan(1.25);
-    expect(wall.windowBottom - wall.bottom).toBeGreaterThan(300);
-    expect(wall.top - wall.windowTop).toBeGreaterThan(300);
-    expect(wall.windowLeft + wall.halfWidth).toBeGreaterThan(300);
-    expect(wall.halfWidth - wall.windowRight).toBeGreaterThan(300);
+    const built = buildCourse(walled);
+    const wall = theWall(built);
+    const r = built.pieces[wall.ramp] as RampPiece;
+    // Its sides run along the face and square to it (a left-hand ramp's face falls away to the right).
+    expect(wall.windowTilt).toBeCloseTo((-r.angleDeg * Math.PI) / 180, 6);
+    for (const [across, y] of windowCorners(wall)) {
+      expect(y - wall.bottom).toBeGreaterThan(300);
+      expect(wall.top - y).toBeGreaterThan(300);
+      expect(across + wall.halfWidth).toBeGreaterThan(300);
+      expect(wall.halfWidth - across).toBeGreaterThan(300);
+    }
   });
 
   it('frames the window in the gates’ colour, without narrowing it', () => {
@@ -253,12 +268,46 @@ describe('buildCourse: walls', () => {
       const d = p.clone().sub(wall.pos);
       if (Math.abs(d.dot(forwardOf(wall.heading))) > 200) continue;
       near++;
-      const lateral = d.dot(r);
       // Nothing of the frame inside the opening.
-      const inside = lateral > wall.windowLeft + 1 && lateral < wall.windowRight - 1 && p.y > wall.windowBottom + 1 && p.y < wall.windowTop - 1;
-      expect(inside).toBe(false);
+      expect(inWindow(wall, d.dot(r), p.y, 1)).toBe(false);
     }
     expect(near).toBeGreaterThan(0);
+  });
+
+  it('shows you the whole window above the ramp’s edge as you line up, on every difficulty', () => {
+    // User, Oct 22 2026: "there should be a reasonable gap between the holes in the walls and the ramp".
+    // Flying straight off a face you're level with it, so the ramp hid ~40% of every window.
+    for (const difficulty of DIFFICULTIES) {
+      const built = buildCourse(spec([ramp({ length: 6000 }), { type: 'wall' }, ramp({ side: 'left', length: 6000 }), { type: 'wall' }, ramp({ length: 6000 }), ramp({ side: 'left' })], { difficulty }));
+      const ramps = new MeshBVH(mergeGeometries([built.visuals.rampLeft, built.visuals.rampRight])!);
+      for (const wall of built.pieces.filter((p): p is WallPiece => p.kind === 'wall')) {
+        const r = built.pieces[wall.ramp] as RampPiece;
+        const tan = Math.tan((r.angleDeg * Math.PI) / 180);
+        const sideSign = r.side === 'right' ? 1 : -1;
+        const [c, s] = [Math.cos(wall.windowTilt), Math.sin(wall.windowTilt)];
+        // From the window's own line and from the usual one, at the foot of the lip and further back.
+        for (const fromRidge of [wall.target, r.ride]) {
+          for (const back of [0, 600, 1500]) {
+            const at = rideAt(r, r.length - 400 - back);
+            const eye = at.pos.clone().addScaledVector(rightOf(at.heading), r.centerOffset - sideSign * fromRidge);
+            eye.y += (r.ride - fromRidge) * tan + EYE_HEIGHT;
+            let hidden = 0;
+            const h = wall.windowHalf * 0.98;
+            for (let i = 0; i <= 10; i++) {
+              for (let j = 0; j <= 10; j++) {
+                const [u, v] = [-h + (2 * h * i) / 10, -h + (2 * h * j) / 10];
+                const p = wall.pos.clone().addScaledVector(rightOf(wall.heading), wall.windowAcross + u * c - v * s);
+                p.y = wall.windowY + u * s + v * c;
+                const dir = p.clone().sub(eye);
+                const far = dir.length();
+                if (ramps.raycastFirst(new Ray(eye, dir.normalize()), DoubleSide, 0, far - 1)) hidden++;
+              }
+            }
+            expect(hidden, `${difficulty}, window at ${wall.target.toFixed(0)}, from ${fromRidge.toFixed(0)}, ${back} back`).toBe(0);
+          }
+        }
+      }
+    }
   });
 
   /** Ride off the end of the walled ramp `fromRidge` units down the face, and say how far past the wall you got. */

@@ -87,8 +87,8 @@ describe('ensureBeatable', () => {
   }, 120_000);
 
   it('simplifies an AI-shaped course its bots can not finish, only as far as it must', () => {
-    // Its spiral comes late in a long, fast medium course: the cautious rider slides off the outside.
-    const fast = validateCourse(aiShapedCourse(7, 'medium')).course;
+    // Its spiral comes halfway through a long, fast medium course: the cautious rider slides off the outside.
+    const fast = validateCourse(aiShapedCourse(14, 'medium')).course;
     expect(failuresOn(fast, 'as designed', 180, true)).not.toEqual([]);
     const out = ensureBeatable(fast);
     expect(out.beatable).toBe(true);

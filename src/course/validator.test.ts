@@ -226,6 +226,13 @@ describe('validateCourse', () => {
       expect(rampsOf(course)[1]).not.toHaveProperty('swerve');
     });
 
+    it('gives a walled two-sided ridge one face, the other side from the ramp before it', () => {
+      // Its window is turned to the face you ride (user, Oct 22 2026: holes hid behind the ramp).
+      const { course, repairs } = validateCourse({ ...valid(), difficulty: 'hard', segments: [ramp({ side: 'right' }), { type: 'wall' }, ramp({ side: 'both' }), ramp({ side: 'both' })] });
+      expect(rampsOf(course).map((r) => r.side)).toEqual(['right', 'left', 'both']);
+      expect(repairs.some((n) => /one face/.test(n))).toBe(true);
+    });
+
     it('eases a flare riders here are too slow to climb', () => {
       // Straight off the start pad at walking pace, a big kick would stop you dead.
       const { course } = validateCourse({ ...valid(), difficulty: 'expert', segments: [ramp({ length: 1500, pitch: 0, flare: 22 }), ramp({ side: 'left' })] });
